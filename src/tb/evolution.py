@@ -1,7 +1,7 @@
 """Evolution operators between Tensor Brain concept windows."""
 
-import math
 from abc import ABC, abstractmethod
+from typing import Literal
 
 import torch
 from jaxtyping import Float
@@ -9,8 +9,18 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 
-def _reset_matrix(parameter: Float[Tensor, "rows columns"]) -> None:
-    nn.init.kaiming_uniform_(parameter, a=math.sqrt(5))
+def _reset_matrix(
+    parameter: Float[Tensor, "rows columns"],
+    *,
+    activation: Literal["sigmoid", "relu", "linear"],
+) -> None:
+    """Initialize a matrix for the activation used immediately downstream."""
+
+    if activation in ("sigmoid", "linear"):
+        gain = 0.5 if activation == "sigmoid" else 1.0
+        nn.init.xavier_uniform_(parameter, gain=gain)
+    else:
+        nn.init.kaiming_uniform_(parameter, nonlinearity="relu")
 
 
 class Evolution(nn.Module, ABC):
@@ -32,7 +42,51 @@ class Evolution(nn.Module, ABC):
         """Return the next pre-CBS and optional persistent context."""
 
 
-class QTBEvolution(Evolution):
+class _FeedForwardEvolution(Evolution):
+    """Shared implementation for explicitly named feed-forward variants."""
+
+    hidden_activation: Literal["sigmoid", "relu"]
+
+    def __init__(
+        self,
+        state_dim: int,
+        hidden_dim: int,
+        *,
+        hidden_activation: Literal["sigmoid", "relu"],
+    ) -> None:
+        super().__init__()
+        self.state_dim = state_dim
+        self.hidden_dim = hidden_dim
+        self.hidden_activation = hidden_activation
+        self.V = nn.Parameter(torch.empty(hidden_dim, state_dim))
+        self.v0 = nn.Parameter(torch.zeros(hidden_dim))
+        self.W = nn.Parameter(torch.empty(state_dim, hidden_dim))
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        _reset_matrix(self.V, activation=self.hidden_activation)
+        _reset_matrix(self.W, activation="linear")
+        nn.init.zeros_(self.v0)
+
+    def _activate_hidden(self, values: Tensor) -> Tensor:
+        if self.hidden_activation == "sigmoid":
+            return torch.sigmoid(values)
+        return F.relu(values)
+
+    def forward(
+        self,
+        q: Float[Tensor, "*batch state"],
+        context: Float[Tensor, "*batch context"] | None = None,
+    ) -> tuple[Float[Tensor, "*batch state"], None]:
+        if context is not None:
+            raise ValueError("feed-forward evolution has no persistent context")
+        gamma = torch.sigmoid(q)
+        h = self._activate_hidden(F.linear(gamma, self.V, self.v0))
+        q_next = F.linear(h, self.W)
+        return q_next, None
+
+
+class QTBEvolution(_FeedForwardEvolution):
     r"""One-hidden-layer evolution from QTB Algorithm 1.
 
     .. math::
@@ -42,30 +96,19 @@ class QTBEvolution(Evolution):
     """
 
     def __init__(self, state_dim: int, hidden_dim: int) -> None:
-        super().__init__()
-        self.state_dim = state_dim
-        self.hidden_dim = hidden_dim
-        self.V = nn.Parameter(torch.empty(hidden_dim, state_dim))
-        self.v0 = nn.Parameter(torch.zeros(hidden_dim))
-        self.W = nn.Parameter(torch.empty(state_dim, hidden_dim))
-        self.reset_parameters()
+        super().__init__(state_dim, hidden_dim, hidden_activation="sigmoid")
 
-    def reset_parameters(self) -> None:
-        _reset_matrix(self.V)
-        _reset_matrix(self.W)
-        nn.init.zeros_(self.v0)
 
-    def forward(
-        self,
-        q: Float[Tensor, "*batch state"],
-        context: Float[Tensor, "*batch context"] | None = None,
-    ) -> tuple[Float[Tensor, "*batch state"], None]:
-        if context is not None:
-            raise ValueError("QTBEvolution has no persistent context")
-        gamma = torch.sigmoid(q)
-        h = torch.sigmoid(F.linear(gamma, self.V, self.v0))
-        q_next = F.linear(h, self.W)
-        return q_next, None
+class ReLUEvolution(_FeedForwardEvolution):
+    r"""ReLU hidden evolution with the same CBS and unrestricted ``q`` boundary.
+
+    This is an experimental extension, not the paper equation.  The input remains
+    ``gamma = sigmoid(q)`` and the output remains a linear pre-CBS ``q_next`` so
+    that only the hidden evolution nonlinearity changes.
+    """
+
+    def __init__(self, state_dim: int, hidden_dim: int) -> None:
+        super().__init__(state_dim, hidden_dim, hidden_activation="relu")
 
 
 class OriginalTBDynamicContext(Evolution):
@@ -89,9 +132,9 @@ class OriginalTBDynamicContext(Evolution):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        _reset_matrix(self.V)
-        _reset_matrix(self.B)
-        _reset_matrix(self.W)
+        _reset_matrix(self.V, activation="sigmoid")
+        _reset_matrix(self.B, activation="sigmoid")
+        _reset_matrix(self.W, activation="linear")
 
     def forward(
         self,

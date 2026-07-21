@@ -90,8 +90,7 @@ A[i, k] ~ Normal(mean=0, variance=1 / state_dim)
 Each index column therefore has expected squared norm one, regardless of the number of
 indices. This is more natural for `A` than applying Kaiming initialization in its stored
 `[state_dim, num_indices]` orientation: `A` is used both as the effective readout `A.T` and as
-generative feedback, rather than as a one-way ReLU layer. The evolution matrices retain the
-paper's Kaiming-uniform initialization.
+generative feedback, rather than as a one-way ReLU layer.
 
 ## Evolution implementations
 
@@ -102,6 +101,13 @@ h = sigmoid(v0 + V @ sigmoid(q))
 q_next = W @ h
 ```
 
+`QTBEvolution` is the paper-facing sigmoid variant and uses Xavier initialization for its
+sigmoid hidden layer and linear output. `ReLUEvolution` is an explicit experimental variant:
+it keeps `gamma = sigmoid(q)` and the unrestricted pre-CBS output, but uses ReLU in the hidden
+layer and Kaiming initialization for the matrix feeding that ReLU. Keeping these as named
+evolution classes makes activation and initialization a controlled experimental variable
+without changing the meaning of `gamma` or the direct `A` feedback path.
+
 `OriginalTBDynamicContext` implements the original recurrence
 
 ```text
@@ -111,6 +117,40 @@ q_next = W @ sigmoid(h_next)
 
 `VanillaRNNDynamicContext` is included only as a conventional control. It is not an exact
 implementation of the original TB recurrence.
+
+### Future evolution backends
+
+xLSTM and Mamba2 are well-motivated experimental alternatives behind the evolution boundary:
+both provide persistent state mechanisms that can be compared with the original TB dynamic
+context on long concept-window sequences. They are not paper-faithful TB implementations and
+should preserve the same public contract, `q_next, context_next = evolution(q, context)`, while
+leaving `gamma = sigmoid(q)`, measurement, attention, and direct index feedback unchanged.
+Their value is a controlled question about memory capacity and temporal credit assignment, not
+an assumption that newer sequence models automatically improve Tensor Brain.
+
+### Evolution overfitting diagnostic
+
+`experiments/evolution_overfit.py` contains a four-example XOR problem. Direct index scoring is
+linear in `sigmoid(q)` and cannot solve XOR; the evolution operator must create the nonlinear
+decision boundary before the index layer decodes the label. The original recurrent, sigmoid
+feed-forward, and ReLU feed-forward variants all serve as controlled overfitting baselines. This
+diagnostic establishes representational and optimization viability, not generalization or a
+claim that one activation is universally better.
+
+## Bottom-up index scoring extensions
+
+The default score path remains the paper equation
+
+```text
+scores = a0[candidates] + A[:, candidates].T @ sigmoid(q)
+```
+
+It is scientifically reasonable to add a learned bottom-up adapter between `gamma` and the
+index scores, for example `scores = a0 + A.T @ phi(gamma)`, as an explicit extension. The
+top-down path should remain direct: the selected index still injects `A[:, outcome]` into `q`.
+This creates a deliberate asymmetry (learned processing may enrich scoring, while symbolic
+feedback retains the original index embedding) and should be evaluated against the direct-score
+baseline.
 
 ## Index vocabulary
 

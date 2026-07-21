@@ -4,6 +4,7 @@ from tb.evolution import (
     Evolution,
     OriginalTBDynamicContext,
     QTBEvolution,
+    ReLUEvolution,
     VanillaRNNDynamicContext,
 )
 from tb.model import TensorBrain
@@ -14,6 +15,7 @@ __all__ = [
     "IndexVocabulary",
     "OriginalTBDynamicContext",
     "QTBEvolution",
+    "ReLUEvolution",
     "TensorBrain",
     "VanillaRNNDynamicContext",
 ]
