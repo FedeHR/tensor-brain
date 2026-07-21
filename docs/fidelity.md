@@ -54,7 +54,7 @@ The following concepts should remain recognizable in code and in experiment sche
 - `gamma = sigmoid(q)` is the cognitive brain state (CBS).
 - `h` is the original Tensor Brain's dynamic-context preactivation, not the CBS.
 - `A[:, k] = a_k` is the learned embedding of symbolic index `k`.
-- The same `A` is used for bottom-up index scoring and top-down index feedback.
+- The same `A` is used for bottom-up index scoring and top-down index feedback - for now. Later we could eventually introduce additional layers in the bottom-up index scoring, i.e., introduce layers between q and A before we produce the index scores. Even, we could get scores without A. However, for the top-down index feeback, it is imperative that A is directly used, as it contains the index embeddings which need to be directly injected.
 - Measurement, attention, and evolution are distinct paper operations.
 - Evolution happens when processing moves between concept windows.
 - The order of scene, subject, object, unary-label, and predicate operations is part of the
