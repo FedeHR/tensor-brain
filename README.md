@@ -31,9 +31,10 @@ The code preserves the paper symbols:
 - `A[:, k]`: embedding `a_k` of global symbolic index `k`;
 - `a0[k]`: bias of index `k`.
 
-The four core operations are:
+The core operations are:
 
 ```python
+q = tb.integrate_input(q, input_drive, input_gate=mu)
 scores = tb.index_scores(q, indices)
 q, probabilities = tb.attend(q, indices)
 q, outcome, probabilities = tb.measure(q, indices)
@@ -44,12 +45,40 @@ q, outcome, probabilities = tb.measure(
 q, context = tb.evolve(q, context)
 ```
 
-External perception stays outside the core. With DINO features of the same dimension as `q`,
-input integration is simply visible experiment code:
+External perception stays outside the core. `input_drive` is an already prepared contribution
+in pre-CBS coordinates: feature extraction, normalization, and any projection into `state_dim`
+belong to the experiment. With DINO features of the same dimension as `q`, the input mapping
+can be the identity:
 
 ```python
-q = q + dino_features
+q = tb.integrate_input(q, normalized_dino_features)
 ```
+
+This implements `q <- q + mu * g(nu)` without coupling the Tensor Brain to a feature extractor.
+The optional `input_gate` is the paper's `mu`; as with the measurement gates, the experiment
+owns any range-constraining or learned parameterization.
+
+If an input source does not already have dimension `state_dim`, the experiment can use an
+ordinary projection head such as `nn.Linear(input_dim, state_dim)` before integration. This is
+part of `g`, not part of `TensorBrain`:
+
+```python
+vision_drive = vision_projection(dino_features)
+q = tb.integrate_input(q, vision_drive, input_gate=mu_vision)
+```
+
+QTB Equation 46 generalizes input to a gated sum over signals from different brain regions,
+`g(nu) = sum_k mu_k * g(nu_k)`. Because integration is additive, an explicit sequence of calls
+implements the same update while allowing every source to own its normalization and, when
+needed, its own projection head:
+
+```python
+q = tb.integrate_input(q, vision_drive, input_gate=mu_vision)
+q = tb.integrate_input(q, reward_drive, input_gate=mu_reward)
+```
+
+Repeated calls are deliberately kept in experiment code so that the active sources and gates
+remain visible at each concept window.
 
 ## Measurement
 

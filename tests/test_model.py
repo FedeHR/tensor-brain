@@ -15,6 +15,36 @@ def make_brain() -> TensorBrain:
     return brain
 
 
+def test_input_integration_matches_the_paper_equation_for_a_batch() -> None:
+    brain = make_brain()
+    q = torch.tensor([[0.4, -0.7], [0.1, 0.3]])
+    input_drive = torch.tensor([[1.2, -0.5], [-0.4, 0.8]])
+
+    q_next = brain.integrate_input(q, input_drive, input_gate=0.25)
+
+    torch.testing.assert_close(q_next, q + 0.25 * input_drive)
+
+
+def test_input_integration_preserves_gradients_through_input_and_gate() -> None:
+    brain = make_brain()
+    q = torch.tensor([0.4, -0.7], requires_grad=True)
+    input_drive = torch.tensor([1.2, -0.5], requires_grad=True)
+    input_gate = torch.tensor(0.25, requires_grad=True)
+
+    brain.integrate_input(q, input_drive, input_gate=input_gate).sum().backward()
+
+    assert q.grad is not None
+    assert input_drive.grad is not None
+    assert input_gate.grad is not None
+
+
+def test_input_integration_requires_input_in_state_coordinates() -> None:
+    brain = make_brain()
+
+    with pytest.raises(TypeCheckError):
+        brain.integrate_input(torch.zeros(2), torch.zeros(3))
+
+
 def test_index_scores_match_the_paper_equation() -> None:
     brain = make_brain()
     q = torch.tensor([0.4, -0.7])

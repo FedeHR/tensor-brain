@@ -46,6 +46,24 @@ class TensorBrain(nn.Module):
             return torch.arange(self.num_indices, device=device)
         return torch.as_tensor(candidates, dtype=torch.long, device=device)
 
+    def integrate_input(
+        self,
+        q: Float[Tensor, "*batch state"],
+        input_drive: Float[Tensor, "*batch state"],
+        *,
+        input_gate: Float[Tensor, "..."] | float = 1.0,
+    ) -> Float[Tensor, "*batch state"]:
+        r"""Add an already mapped input contribution to the pre-CBS.
+
+        ``input_drive`` represents :math:`g(\nu)` and must already be in
+        representation-layer coordinates. Feature extraction, normalization,
+        and any projection into ``state_dim`` remain outside the Tensor Brain
+        core. The update is :math:`q' = q + \mu g(\nu)`, where ``input_gate``
+        is :math:`\mu` and may be any value broadcastable to ``q``.
+        """
+
+        return q + input_gate * input_drive
+
     def index_scores(
         self,
         q: Float[Tensor, "*batch state"],
@@ -121,6 +139,10 @@ class TensorBrain(nn.Module):
         elif selection == "argmax":
             position = probabilities.argmax(dim=-1)
             outcome_index = indices[position]
+        else:
+            raise ValueError(
+                "measurement selection mode not supported, must be one of sample, argmax"
+            )
         outcome_embedding = self.A.T[outcome_index]
         q_next = retain_gate * q + feedback_gate * outcome_embedding
         return q_next, outcome_index, probabilities
