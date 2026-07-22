@@ -9,6 +9,54 @@ from jaxtyping import Int
 from torch import Tensor
 
 
+def get_candidate_positions(
+    candidate_indices: Int[Tensor, " candidates"] | Sequence[int],
+    global_indices: Int[Tensor, "*batch"] | int,
+) -> Int[Tensor, "*batch"]:
+    """Return each global index's position in an ordered candidate list.
+
+    Tensor Brain scores are compact: ``scores[..., position]`` is the score for
+    ``candidate_indices[position]``. Loss targets must therefore be candidate
+    positions, even though measurement outcomes and embedding lookups use global
+    indices.
+    """
+
+    if isinstance(global_indices, Tensor):
+        device = global_indices.device
+    elif isinstance(candidate_indices, Tensor):
+        device = candidate_indices.device
+    else:
+        device = None
+
+    candidates = torch.as_tensor(candidate_indices, dtype=torch.long, device=device)
+    targets = torch.as_tensor(global_indices, dtype=torch.long, device=device)
+    if candidates.ndim != 1 or candidates.numel() == 0:
+        raise ValueError("candidate_indices must be a non-empty one-dimensional sequence")
+
+    # Sorting lets us find arbitrary, non-contiguous global indices without relying
+    # on an offset. `sorted_positions` maps the search result back to the original
+    # candidate order, which is exactly the column order of the compact score tensor.
+    sorted_candidates, sorted_positions = candidates.sort()
+    if bool((sorted_candidates < 0).any()):
+        raise ValueError("candidate_indices must contain non-negative global indices")
+    if candidates.numel() > 1 and bool(
+        (sorted_candidates[1:] == sorted_candidates[:-1]).any()
+    ):
+        raise ValueError("candidate_indices must not contain duplicate global indices")
+
+    insertion_positions = torch.searchsorted(sorted_candidates, targets)
+    safe_insertions = insertion_positions.clamp_max(candidates.numel() - 1)
+    target_is_candidate = (insertion_positions < candidates.numel()) & (
+        sorted_candidates[safe_insertions] == targets
+    )
+    if bool((~target_is_candidate).any()):
+        raise ValueError("global_indices contain an index outside the candidate set")
+
+    # Cross-entropy consumes these local positions. Do not use them to index A;
+    # A is always indexed by the original global indices in `candidate_indices`.
+    return sorted_positions[safe_insertions]
+
+
 class IndexVocabulary:
     """Map symbolic names and candidate groups to stable global indices.
 
@@ -84,6 +132,15 @@ class IndexVocabulary:
         self, group: str, *, device: torch.device | str | None = None
     ) -> Int[Tensor, " indices"]:
         return torch.tensor(self._groups[group], dtype=torch.long, device=device)
+
+    def get_positions(
+        self,
+        group: str,
+        global_indices: Int[Tensor, "*batch"] | int,
+    ) -> Int[Tensor, "*batch"]:
+        """Return global indices' local score positions within a named group."""
+
+        return get_candidate_positions(self._groups[group], global_indices)
 
     def group_labels(self, group: str) -> tuple[str, ...]:
         return tuple(self._labels[index] for index in self._groups[group])

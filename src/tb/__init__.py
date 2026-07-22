@@ -8,7 +8,7 @@ from tb.evolution import (
     VanillaRNNDynamicContext,
 )
 from tb.model import TensorBrain
-from tb.vocabulary import IndexVocabulary
+from tb.vocabulary import IndexVocabulary, get_candidate_positions
 
 __all__ = [
     "Evolution",
@@ -18,4 +18,5 @@ __all__ = [
     "ReLUEvolution",
     "TensorBrain",
     "VanillaRNNDynamicContext",
+    "get_candidate_positions",
 ]
