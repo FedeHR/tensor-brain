@@ -218,4 +218,8 @@ marimo/_lsp/
 __marimo__/
 
 # Streamlit
+
+# Local PVSG artifacts are large and machine-specific. Keep the documented
+# directory contract, but never add converted tensors to Git.
+data/pvsg/features/
 .streamlit/secrets.toml
