@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import stat
+import time
 import zipfile
 from collections import Counter
 from dataclasses import dataclass
@@ -53,11 +54,28 @@ ARCHIVES = (
 )
 
 
-def _digest(path: Path, algorithm: str) -> str:
+def _format_bytes(num_bytes: int) -> str:
+    return f"{num_bytes / (1024 * 1024):.1f} MiB"
+
+
+def _digest(path: Path, algorithm: str, *, progress_label: str | None = None) -> str:
     digest = hashlib.new(algorithm)
+    file_size = path.stat().st_size
+    bytes_read = 0
+    next_report = max(file_size // 10, 512 * 1024 * 1024)
+    started_at = time.monotonic()
     with path.open("rb") as handle:
         for block in iter(lambda: handle.read(8 * 1024 * 1024), b""):
             digest.update(block)
+            bytes_read += len(block)
+            if progress_label is not None and bytes_read >= next_report:
+                elapsed = time.monotonic() - started_at
+                print(
+                    f"{progress_label}: checked {_format_bytes(bytes_read)} / "
+                    f"{_format_bytes(file_size)} in {elapsed:.0f}s",
+                    flush=True,
+                )
+                next_report += max(file_size // 10, 512 * 1024 * 1024)
     return digest.hexdigest()
 
 
@@ -210,14 +228,16 @@ def _extract_archive(
     video_ids: set[str],
     videos_by_id: dict[str, dict[str, Any]],
 ) -> None:
-    if not archive_path.is_file():
-        raise FileNotFoundError(archive_path)
-    if _digest(archive_path, "md5") != spec.md5:
-        raise ValueError(f"MD5 mismatch: {archive_path}")
-
+    label = f"{spec.source}/{spec.kind}"
     final_directory = dataset_root / spec.source / spec.kind
     if final_directory.exists():
+        print(f"{label}: already published; skipping", flush=True)
         return
+    if not archive_path.is_file():
+        raise FileNotFoundError(archive_path)
+    print(f"{label}: checking archive MD5", flush=True)
+    if _digest(archive_path, "md5", progress_label=label) != spec.md5:
+        raise ValueError(f"MD5 mismatch: {archive_path}")
     staging_directory = staging_root / f"{spec.source}_{spec.kind}"
     if staging_directory.exists():
         raise FileExistsError(
@@ -228,6 +248,7 @@ def _extract_archive(
     members: list[tuple[zipfile.ZipInfo, Path]] = []
     destinations: set[Path] = set()
     with zipfile.ZipFile(archive_path) as archive:
+        print(f"{label}: validating archive members", flush=True)
         for member in archive.infolist():
             if member.is_dir() or "__MACOSX" in PurePosixPath(member.filename).parts:
                 continue
@@ -251,14 +272,38 @@ def _extract_archive(
             raise ValueError(f"archive content mismatch; missing={missing}, extra={extra}")
 
         staging_directory.mkdir(parents=True)
-        for member, relative_destination in members:
+        total_files = len(members)
+        total_bytes = sum(member.file_size for member, _ in members)
+        print(
+            f"{label}: extracting {total_files:,} files "
+            f"({_format_bytes(total_bytes)})",
+            flush=True,
+        )
+        started_at = time.monotonic()
+        bytes_written = 0
+        next_percent = 10
+        for index, (member, relative_destination) in enumerate(members, start=1):
             destination = staging_directory / relative_destination
             destination.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(member) as source_handle, destination.open("xb") as target_handle:
                 shutil.copyfileobj(source_handle, target_handle, length=8 * 1024 * 1024)
+            bytes_written += member.file_size
+            percent = index * 100 // total_files
+            if percent >= next_percent or index == total_files:
+                elapsed = time.monotonic() - started_at
+                rate = bytes_written / max(elapsed, 1e-9)
+                print(
+                    f"{label}: {percent}% ({index:,} / {total_files:,} files, "
+                    f"{_format_bytes(bytes_written)} / {_format_bytes(total_bytes)}, "
+                    f"{elapsed:.0f}s, {_format_bytes(int(rate))}/s)",
+                    flush=True,
+                )
+                while percent >= next_percent:
+                    next_percent += 10
 
     final_directory.parent.mkdir(parents=True, exist_ok=True)
     staging_directory.replace(final_directory)
+    print(f"{label}: published {final_directory}", flush=True)
 
 
 def _write_json_atomic(path: Path, value: Any) -> None:
