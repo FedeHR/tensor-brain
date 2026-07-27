@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "jaxtyping>=0.3",
-  "torch>=2.2",
+  "torch==2.7.1",
 ]
 
 [project.optional-dependencies]
@@ -18,7 +18,7 @@ pvsg = [
   "av>=14",
   "numpy>=1.26",
   "pillow>=10",
-  "torchvision>=0.17",
+  "torchvision==0.22.1",
   "transformers==5.14.1",
 ]
 dev = [
@@ -26,6 +26,15 @@ dev = [
   "pytest>=8",
   "ruff>=0.9",
 ]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu118", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cu118", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tb"]

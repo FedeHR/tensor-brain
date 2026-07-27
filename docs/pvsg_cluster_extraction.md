@@ -75,6 +75,14 @@ enclosing-union features for every simultaneously visible pair. Every artifact a
 the model revision, processor configuration, original and processed dimensions, package
 versions, coordinate convention, pooling rules, and float16 storage dtype.
 
+Linux installs the official PyTorch 2.7.1 / torchvision 0.22.1 CUDA 11.8 wheels. This runtime
+is compatible with the minor partition's RTX 2080 Ti and 535 driver and remains usable on a
+later A100 through NVIDIA driver backward compatibility. DINO inference uses fixed FP16
+autocast on both partitions; changing hardware therefore does not silently change the feature
+precision. The conservative default batch size is 4 for the 11 GB 2080 Ti. Batch size affects
+throughput and memory only, not the stored feature contract. Each artifact also records the
+PyTorch CUDA runtime, GPU name, and compute capability for provenance.
+
 ## One-time setup
 
 After cloning into `/nfs/data8/harjes/MASTER/tensor-brain`, run on a login or data-transfer
@@ -100,8 +108,8 @@ memory, and time settings to the wrapper. Start with one manifest row:
 
 ```bash
 cd /nfs/data8/harjes/MASTER/tensor-brain
-ARRAY_RANGE=0 DINO_BATCH_SIZE=8 ./cluster/pvsg/submit_extract.sh \
-  --partition=<gpu-partition> \
+ARRAY_RANGE=0 DINO_BATCH_SIZE=4 ./cluster/pvsg/submit_extract.sh \
+  --partition=minor \
   --gres=gpu:1 \
   --cpus-per-task=4 \
   --mem=32G \
@@ -115,8 +123,8 @@ submit all rows:
 
 ```bash
 cd /nfs/data8/harjes/MASTER/tensor-brain
-MAX_PARALLEL=8 DINO_BATCH_SIZE=8 ./cluster/pvsg/submit_extract.sh \
-  --partition=<gpu-partition> \
+MAX_PARALLEL=8 DINO_BATCH_SIZE=4 ./cluster/pvsg/submit_extract.sh \
+  --partition=minor \
   --gres=gpu:1 \
   --cpus-per-task=4 \
   --mem=32G \

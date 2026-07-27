@@ -26,5 +26,5 @@ uv run --frozen --no-sync python -m experiments.pvsg.extract \
   --dataset-root "$PVSG_DATASET_ROOT" \
   --output-root "$DINO_FEATURE_ROOT" \
   --device cuda \
-  --batch-size "${DINO_BATCH_SIZE:-8}" \
+  --batch-size "${DINO_BATCH_SIZE:-4}" \
   --long-edge 448

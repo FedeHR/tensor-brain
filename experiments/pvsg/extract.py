@@ -16,7 +16,7 @@ from experiments.pvsg.prepare import PVSG_HUB_REVISION, PVSG_JSON_SHA256
 
 DINO_MODEL_ID = "facebook/dinov3-vitb16-pretrain-lvd1689m"
 DINO_MODEL_REVISION = "5931719e67bbdb9737e363e781fb0c67687896bc"
-FEATURE_SCHEMA_VERSION = 1
+FEATURE_SCHEMA_VERSION = 2
 
 
 def patch_aligned_size(
@@ -169,7 +169,11 @@ def _load_mask(path: Path, expected_size: tuple[int, int], num_objects: int) -> 
 
 
 def _existing_artifact_is_valid(
-    path: Path, record: dict[str, Any], *, long_edge: int
+    path: Path,
+    record: dict[str, Any],
+    *,
+    long_edge: int,
+    inference_autocast_dtype: str,
 ) -> bool:
     try:
         artifact = torch.load(path, map_location="cpu", weights_only=True)
@@ -184,6 +188,7 @@ def _existing_artifact_is_valid(
         and tuple(metadata.get("original_size_hw", ()))
         == (record["height"], record["width"])
         and metadata.get("long_edge") == long_edge
+        and metadata.get("inference_autocast_dtype") == inference_autocast_dtype
         and metadata.get("dino_model_id") == DINO_MODEL_ID
         and metadata.get("dino_model_revision") == DINO_MODEL_REVISION
         and metadata.get("pvsg_hub_revision") == PVSG_HUB_REVISION
@@ -211,8 +216,14 @@ def extract_video(
     mask_directory = _contained_path(dataset_root, record["mask_directory"])
     output_path = output_root / "videos" / record["source"] / f"{record['video_id']}.pt"
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    inference_autocast_dtype = "float16" if device.type == "cuda" else "float32"
     if output_path.exists():
-        if _existing_artifact_is_valid(output_path, record, long_edge=long_edge):
+        if _existing_artifact_is_valid(
+            output_path,
+            record,
+            long_edge=long_edge,
+            inference_autocast_dtype=inference_autocast_dtype,
+        ):
             key = f"{record['source']}/{record['video_id']}"
             print(f"valid artifact already exists; skipping {key}")
             return output_path
@@ -266,7 +277,7 @@ def extract_video(
             raise ValueError("DINOv3 processor did not produce the requested full-frame size")
         pixel_values = pixel_values.to(device)
         autocast = (
-            torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+            torch.autocast(device_type="cuda", dtype=torch.float16)
             if device.type == "cuda"
             else contextlib.nullcontext()
         )
@@ -338,6 +349,7 @@ def extract_video(
         "pair_feature": "enclosing union-box/patch-cell overlap pooling",
         "union_box_coordinates": "half-open xyxy in original frame coordinates",
         "feature_storage_dtype": "float16",
+        "inference_autocast_dtype": inference_autocast_dtype,
         "dino_model_id": DINO_MODEL_ID,
         "dino_model_revision": DINO_MODEL_REVISION,
         "feature_dim": feature_dim,
@@ -347,6 +359,13 @@ def extract_video(
         "pvsg_hub_revision": PVSG_HUB_REVISION,
         "pvsg_json_sha256": PVSG_JSON_SHA256,
         "torch_version": torch.__version__,
+        "torch_cuda_version": torch.version.cuda,
+        "cuda_device_name": (
+            torch.cuda.get_device_name(device) if device.type == "cuda" else None
+        ),
+        "cuda_device_capability": (
+            torch.cuda.get_device_capability(device) if device.type == "cuda" else None
+        ),
         "transformers_version": transformers.__version__,
         "av_version": av.__version__,
     }
