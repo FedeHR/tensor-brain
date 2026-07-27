@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+# One root owns every mutable cluster artifact; the repository remains code only.
+MASTER_ROOT="${MASTER_ROOT:-/nfs/data8/harjes/MASTER}"
+TB_REPO_ROOT="${TB_REPO_ROOT:-$MASTER_ROOT/tensor-brain}"
+PVSG_ROOT="${PVSG_ROOT:-$MASTER_ROOT/data/pvsg}"
+PVSG_ARCHIVES_ROOT="$PVSG_ROOT/archives"
+PVSG_DATASET_ROOT="$PVSG_ROOT/dataset"
+PVSG_MANIFEST_ROOT="$PVSG_ROOT/manifests"
+PVSG_FEATURE_ROOT="${PVSG_FEATURE_ROOT:-$MASTER_ROOT/features/pvsg}"
+PVSG_RUN_ROOT="${PVSG_RUN_ROOT:-$MASTER_ROOT/runs/pvsg}"
+SLURM_LOG_ROOT="${SLURM_LOG_ROOT:-$MASTER_ROOT/slurm/logs}"
+
+DINO_MODEL_NAME="dinov3-vitb16-pretrain-lvd1689m"
+DINO_MODEL_REVISION="5931719e67bbdb9737e363e781fb0c67687896bc"
+DINO_FEATURE_ROOT="$PVSG_FEATURE_ROOT/$DINO_MODEL_NAME/$DINO_MODEL_REVISION/schema-v1"
+
+export HF_HOME="$MASTER_ROOT/cache/huggingface"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export TORCH_HOME="$MASTER_ROOT/cache/torch"
+export UV_CACHE_DIR="$MASTER_ROOT/cache/uv"
+export XDG_CACHE_HOME="$MASTER_ROOT/cache/xdg"
+export PYTHONUNBUFFERED=1
