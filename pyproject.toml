@@ -14,6 +14,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pvsg = [
+  "av>=14",
+  "numpy>=1.26",
+  "pillow>=10",
+  "torchvision>=0.17",
+  "transformers==5.14.1",
+]
 dev = [
   "beartype>=0.19",
   "pytest>=8",
