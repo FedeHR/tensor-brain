@@ -94,6 +94,27 @@ def test_rectangle_pooling_accounts_for_partial_patch_overlap() -> None:
     torch.testing.assert_close(weights, torch.tensor([[[0.5, 0.5]]]))
 
 
+def test_rectangle_at_image_boundary_tolerates_float32_scaling_roundoff() -> None:
+    weights = rectangle_patch_weights(
+        torch.tensor([[0, 0, 360, 360]]),
+        image_size=(360, 360),
+        grid_size=(28, 28),
+        dtype=torch.float32,
+    )
+
+    torch.testing.assert_close(weights, torch.ones(1, 28, 28))
+
+
+def test_rectangle_outside_source_image_is_still_rejected() -> None:
+    with pytest.raises(ValueError, match="within the image"):
+        rectangle_patch_weights(
+            torch.tensor([[0, 0, 361, 360]]),
+            image_size=(360, 360),
+            grid_size=(28, 28),
+            dtype=torch.float32,
+        )
+
+
 def test_mask_pooling_is_exact_for_non_divisible_image_size() -> None:
     patches = torch.tensor([[[0.0], [10.0]]])
     mask = torch.tensor([[1, 1, 0]])

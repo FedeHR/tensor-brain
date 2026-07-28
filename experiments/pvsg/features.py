@@ -163,17 +163,25 @@ def rectangle_patch_weights(
             (0, grid_height, grid_width), dtype=dtype, device=boxes_xyxy.device
         )
 
-    boxes = boxes_xyxy.to(dtype)
-    x0 = boxes[:, 0] * (grid_width / image_width)
-    y0 = boxes[:, 1] * (grid_height / image_height)
-    x1 = boxes[:, 2] * (grid_width / image_width)
-    y1 = boxes[:, 3] * (grid_height / image_height)
-    if bool((x0 < 0).any() or (y0 < 0).any()):
+    x0_source, y0_source, x1_source, y1_source = boxes_xyxy.unbind(dim=1)
+    if bool(
+        (x0_source < 0).any()
+        or (y0_source < 0).any()
+        or (x1_source > image_width).any()
+        or (y1_source > image_height).any()
+    ):
         raise ValueError("boxes must lie within the image")
-    if bool((x1 > grid_width).any() or (y1 > grid_height).any()):
-        raise ValueError("boxes must lie within the image")
-    if bool((x1 <= x0).any() or (y1 <= y0).any()):
+    if bool((x1_source <= x0_source).any() or (y1_source <= y0_source).any()):
         raise ValueError("boxes must have positive half-open area")
+
+    # Validate exact integer source coordinates above. A source endpoint equal
+    # to the image boundary can otherwise scale to grid_size + epsilon in
+    # float32 (for example, 360 * (28 / 360) = 28.0000019).
+    boxes = boxes_xyxy.to(dtype)
+    x0 = (boxes[:, 0] * (grid_width / image_width)).clamp(0, grid_width)
+    y0 = (boxes[:, 1] * (grid_height / image_height)).clamp(0, grid_height)
+    x1 = (boxes[:, 2] * (grid_width / image_width)).clamp(0, grid_width)
+    y1 = (boxes[:, 3] * (grid_height / image_height)).clamp(0, grid_height)
 
     columns = torch.arange(grid_width, device=boxes.device, dtype=dtype)
     rows = torch.arange(grid_height, device=boxes.device, dtype=dtype)

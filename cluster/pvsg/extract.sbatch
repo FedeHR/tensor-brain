@@ -19,8 +19,8 @@ if [[ ! -d "$TB_REPO_ROOT" ]]; then
   echo "Tensor Brain repository is missing: $TB_REPO_ROOT" >&2
   exit 2
 fi
-if [[ ! -x "$SCRIPT_DIRECTORY/with_gpu_monitor.sh" ]]; then
-  echo "GPU monitor script is missing or not executable: $SCRIPT_DIRECTORY/with_gpu_monitor.sh" >&2
+if [[ ! -f "$SCRIPT_DIRECTORY/with_gpu_monitor.sh" ]]; then
+  echo "GPU monitor script is missing: $SCRIPT_DIRECTORY/with_gpu_monitor.sh" >&2
   exit 2
 fi
 if [[ ! -s "$PVSG_MANIFEST_ROOT/videos.jsonl" ]]; then
