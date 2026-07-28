@@ -20,7 +20,8 @@ export HF_HUB_OFFLINE=1
 export HF_HUB_DISABLE_TELEMETRY=1
 
 cd "$TB_REPO_ROOT"
-uv run --frozen --no-sync python -m experiments.pvsg.extract \
+bash "$SCRIPT_DIRECTORY/with_gpu_monitor.sh" \
+  uv run --frozen --no-sync python -m experiments.pvsg.extract \
   --manifest "$PVSG_MANIFEST_ROOT/videos.jsonl" \
   --index "$SLURM_ARRAY_TASK_ID" \
   --dataset-root "$PVSG_DATASET_ROOT" \

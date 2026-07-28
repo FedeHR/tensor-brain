@@ -96,6 +96,10 @@ uv run --frozen --no-sync hf auth login
 ./cluster/pvsg/setup.sh
 ```
 
+Setup logs archive MD5 progress and ten extraction checkpoints per archive. Completed archive
+groups are reported as `already published; skipping`; an archive appears under `dataset/` only
+after all of its files have been written and atomically published.
+
 Setting `HF_HOME` before authentication keeps the token and all model files under `MASTER`.
 Do not place a token in a script or Slurm environment argument. Setup downloads the pinned
 10.8 GB archives, retains them for reproducibility, extracts roughly 10.9 GB of canonical
@@ -111,25 +115,42 @@ cd /nfs/data8/harjes/MASTER/tensor-brain
 ARRAY_RANGE=0 DINO_BATCH_SIZE=4 ./cluster/pvsg/submit_extract.sh \
   --partition=minor \
   --gres=gpu:1 \
-  --cpus-per-task=4 \
-  --mem=32G \
-  --time=08:00:00
+  --cpus-per-task=2 \
+  --mem=8G \
+  --time=00:30:00
 ```
 
-The completion line reports frame, object-observation, pair-observation, and artifact-size
-counts. Use `ARRAY_RANGE=0-7` (or another explicit small cohort) to collect the inputs required
-by the pre-extraction audit described in the experiment design. After that audit is satisfactory,
-submit all rows:
+Two CPUs allow PyAV to decode ahead without making the pilot unnecessarily difficult to
+schedule. Eight GiB is a deliberately modest initial host-memory request; the worker keeps one
+image batch and the current video's compact float16 output tables in host memory. Thirty minutes
+is a pilot limit, not an expected runtime. If it is insufficient, the atomic writer leaves no
+partial feature artifact and the task can be resubmitted with a measured larger limit.
+
+The worker samples `nvidia-smi` once per second. Its final log line reports peak observed GPU
+memory and utilization; the raw CSV remains in the job-specific directory under `MASTER/tmp`.
+This sampled value may miss a sub-second transient, so retain at least 10% GPU-memory headroom
+when increasing `DINO_BATCH_SIZE`.
+
+The completion line also reports frame, object-observation, pair-observation, and artifact-size
+counts. Use `ARRAY_RANGE=0-7` (or another explicit small cohort) to measure the variation across
+videos before selecting resources for the full array. After that audit is satisfactory, submit
+all rows with limits derived from the cohort rather than the former blanket 32 GiB/eight-hour
+request. For example:
 
 ```bash
 cd /nfs/data8/harjes/MASTER/tensor-brain
+FULL_JOB_MEMORY=12G
+FULL_JOB_TIME=01:00:00
 MAX_PARALLEL=8 DINO_BATCH_SIZE=4 ./cluster/pvsg/submit_extract.sh \
   --partition=minor \
   --gres=gpu:1 \
-  --cpus-per-task=4 \
-  --mem=32G \
-  --time=08:00:00
+  --cpus-per-task=2 \
+  --mem="$FULL_JOB_MEMORY" \
+  --time="$FULL_JOB_TIME"
 ```
+
+The two `FULL_JOB_*` values are illustrative starting points, not fixed project defaults;
+replace them with the cohort measurements plus headroom.
 
 The wrapper creates the log directory before `sbatch` (Slurm will not do so), derives the array
 bounds from the immutable manifest, and submits one video per task. Workers run with the Hub in
