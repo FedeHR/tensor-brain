@@ -157,3 +157,50 @@ bounds from the immutable manifest, and submits one video per task. Workers run 
 offline mode, write to a same-directory temporary file, and rename only after the complete
 artifact validates. Rerunning the array skips compatible completed artifacts and refuses to
 overwrite an artifact with a different contract.
+
+## Audit the completed snapshot
+
+After the extraction array finishes, run the CPU-only audit:
+
+```bash
+cd /nfs/data8/harjes/MASTER/tensor-brain
+./cluster/pvsg/audit.sh
+```
+
+The command validates all feature-table contracts, visible object/pair completeness, finite
+features, and relation-to-feature joins. It separately expands PVSG relations as half-open and
+inclusive intervals, reports multi-predicate prevalence for both interpretations, and does not
+choose one silently. Results are written under
+`/nfs/data8/harjes/MASTER/runs/pvsg/audits/dino-schema-v2/` as `report.json` and a sampled
+`gallery.html`. The gallery compares the final half-open frame with the extra inclusive endpoint,
+overlaying the subject mask in cyan, object mask in magenta, and stored union box in yellow.
+
+This is a CPU and filesystem task. If cluster policy prohibits sustained work on the login node,
+request an ordinary CPU allocation and run the same shell script inside it; no GPU is required.
+
+No graphical software is needed on the cluster. The simplest inspection options are:
+
+1. Open the remote directory with VS Code Remote - SSH and click individual PNGs under
+   `gallery/`.
+2. Copy the compact audit directory to the local machine:
+
+   ```bash
+   scp -r <cluster-login>:/nfs/data8/harjes/MASTER/runs/pvsg/audits/dino-schema-v2 ./pvsg-audit
+   ```
+
+3. Serve the gallery privately from the SSH login. In one cluster shell:
+
+   ```bash
+   cd /nfs/data8/harjes/MASTER/runs/pvsg/audits/dino-schema-v2
+   /nfs/data8/harjes/MASTER/tensor-brain/.venv/bin/python -m http.server 8765 \
+     --bind 127.0.0.1
+   ```
+
+   In a second terminal on the local machine:
+
+   ```bash
+   ssh -N -L 8765:127.0.0.1:8765 <cluster-login>
+   ```
+
+   Then open `http://127.0.0.1:8765/gallery.html` locally. Binding to loopback keeps the server
+   inaccessible from the public network. None of these options requires sudo.

@@ -25,6 +25,6 @@ sbatch \
   --array="$ARRAY_RANGE" \
   --output="$SLURM_LOG_ROOT/%x-%A_%a.out" \
   --error="$SLURM_LOG_ROOT/%x-%A_%a.err" \
-  --export="ALL,MASTER_ROOT=$MASTER_ROOT" \
+  --export="ALL,MASTER_ROOT=$MASTER_ROOT,TB_REPO_ROOT=$TB_REPO_ROOT" \
   "$@" \
   "$SCRIPT_DIRECTORY/extract.sbatch"

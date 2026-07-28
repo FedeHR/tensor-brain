@@ -5,11 +5,30 @@
 
 set -euo pipefail
 
-SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# Slurm may execute a staged copy of this file from /var/lib/slurm/... .  Resolve
+# repository files through the exported cluster root rather than through BASH_SOURCE.
+REPOSITORY_ROOT="${TB_REPO_ROOT:-${MASTER_ROOT:-/nfs/data8/harjes/MASTER}/tensor-brain}"
+SCRIPT_DIRECTORY="$REPOSITORY_ROOT/cluster/pvsg"
 source "$SCRIPT_DIRECTORY/common.sh"
 
 if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
   echo "This job must be submitted as a Slurm array." >&2
+  exit 2
+fi
+if [[ ! -d "$TB_REPO_ROOT" ]]; then
+  echo "Tensor Brain repository is missing: $TB_REPO_ROOT" >&2
+  exit 2
+fi
+if [[ ! -x "$SCRIPT_DIRECTORY/with_gpu_monitor.sh" ]]; then
+  echo "GPU monitor script is missing or not executable: $SCRIPT_DIRECTORY/with_gpu_monitor.sh" >&2
+  exit 2
+fi
+if [[ ! -s "$PVSG_MANIFEST_ROOT/videos.jsonl" ]]; then
+  echo "PVSG extraction manifest is missing: $PVSG_MANIFEST_ROOT/videos.jsonl" >&2
+  exit 2
+fi
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is unavailable in the Slurm worker PATH" >&2
   exit 2
 fi
 
