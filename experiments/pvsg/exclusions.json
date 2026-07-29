@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "decision": "Exclude six source-defective videos from the initial PVSG experiments.",
+  "videos": [
+    {
+      "source": "ego4d",
+      "video_id": "ec2e69c1-fd07-48ec-adff-0b2cf3ab25b6",
+      "extraction_array_index": 52,
+      "reason": "Video decodes to 412 frames, while pvsg.json and the mask sequence declare 415."
+    },
+    {
+      "source": "vidor",
+      "video_id": "0054_2971876369",
+      "extraction_array_index": 149,
+      "reason": "Panoptic mask 0053.png contains an object ID absent from the video's pvsg.json object records."
+    },
+    {
+      "source": "vidor",
+      "video_id": "1005_8631926258",
+      "extraction_array_index": 197,
+      "reason": "Panoptic mask 0356.png contains an object ID absent from the video's pvsg.json object records."
+    },
+    {
+      "source": "vidor",
+      "video_id": "1008_6094765133",
+      "extraction_array_index": 217,
+      "reason": "Panoptic mask 0000.png contains an object ID absent from the video's pvsg.json object records."
+    },
+    {
+      "source": "vidor",
+      "video_id": "1014_5820886415",
+      "extraction_array_index": 239,
+      "reason": "Panoptic mask 0000.png contains an object ID absent from the video's pvsg.json object records."
+    },
+    {
+      "source": "vidor",
+      "video_id": "1019_3004044251",
+      "extraction_array_index": 257,
+      "reason": "Video decodes to 111 frames, while pvsg.json and the mask sequence declare 112."
+    }
+  ]
+}
