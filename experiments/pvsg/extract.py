@@ -19,6 +19,13 @@ DINO_MODEL_REVISION = "5931719e67bbdb9737e363e781fb0c67687896bc"
 FEATURE_SCHEMA_VERSION = 2
 
 
+def load_feature_artifact(path: Path) -> dict[str, Any]:
+    """Safely load a schema-v2 artifact, including the original version metadata type."""
+
+    with torch.serialization.safe_globals([torch.torch_version.TorchVersion]):
+        return torch.load(path, map_location="cpu", weights_only=True)
+
+
 def patch_aligned_size(
     image_size: tuple[int, int], *, long_edge: int, patch_size: int
 ) -> tuple[int, int]:
@@ -176,7 +183,7 @@ def _existing_artifact_is_valid(
     inference_autocast_dtype: str,
 ) -> bool:
     try:
-        artifact = torch.load(path, map_location="cpu", weights_only=True)
+        artifact = load_feature_artifact(path)
     except Exception:
         return False
     metadata = artifact.get("metadata", {})
@@ -358,7 +365,7 @@ def extract_video(
         "processor": processor.to_dict(),
         "pvsg_hub_revision": PVSG_HUB_REVISION,
         "pvsg_json_sha256": PVSG_JSON_SHA256,
-        "torch_version": torch.__version__,
+        "torch_version": str(torch.__version__),
         "torch_cuda_version": torch.version.cuda,
         "cuda_device_name": (
             torch.cuda.get_device_name(device) if device.type == "cuda" else None

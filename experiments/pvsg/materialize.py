@@ -16,10 +16,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
 
-import torch
-
 from experiments.pvsg.audit import validate_feature_artifact
-from experiments.pvsg.extract import FEATURE_SCHEMA_VERSION
+from experiments.pvsg.extract import FEATURE_SCHEMA_VERSION, load_feature_artifact
 from experiments.pvsg.prepare import PVSG_HUB_REVISION, PVSG_JSON_SHA256
 from experiments.pvsg.protocols import blocked_boundary, fewshot_support_and_queries
 from experiments.pvsg.records import (
@@ -307,7 +305,7 @@ def materialize_manifests(
                     raise FileNotFoundError(
                         f"non-excluded feature artifact is missing: {artifact_path}"
                     )
-                artifact = torch.load(artifact_path, map_location="cpu", weights_only=True)
+                artifact = load_feature_artifact(artifact_path)
                 validated = validate_feature_artifact(artifact, manifest_row)
                 provenance_groups[
                     json.dumps(validated["provenance"], sort_keys=True)

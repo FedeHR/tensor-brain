@@ -19,6 +19,7 @@ from experiments.pvsg.extract import (
     DINO_MODEL_ID,
     DINO_MODEL_REVISION,
     FEATURE_SCHEMA_VERSION,
+    load_feature_artifact,
 )
 from experiments.pvsg.prepare import PVSG_JSON_SHA256
 from experiments.pvsg.records import active_predicates, inclusive_clipped_frames, load_exclusions
@@ -502,7 +503,7 @@ def _render_gallery(
         artifact_path = (
             feature_root / "videos" / candidate["source"] / f"{candidate['video_id']}.pt"
         )
-        artifact = torch.load(artifact_path, map_location="cpu", weights_only=True)
+        artifact = load_feature_artifact(artifact_path)
         keys = [
             (frame, pair[0], pair[1])
             for frame, pair in zip(
@@ -618,7 +619,7 @@ def audit_snapshot(
             missing_artifacts.append(key)
             continue
         try:
-            artifact = torch.load(artifact_path, map_location="cpu", weights_only=True)
+            artifact = load_feature_artifact(artifact_path)
             feature_rows = validate_feature_artifact(artifact, manifest_row)
         except Exception as error:
             invalid_artifacts.append({"video": key, "error": str(error)})
