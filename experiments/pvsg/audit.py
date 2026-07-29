@@ -21,8 +21,9 @@ from experiments.pvsg.extract import (
     FEATURE_SCHEMA_VERSION,
 )
 from experiments.pvsg.prepare import PVSG_JSON_SHA256
+from experiments.pvsg.records import active_predicates, inclusive_clipped_frames, load_exclusions
 
-SpanConvention = Literal["half_open", "inclusive"]
+SpanConvention = Literal["half_open", "inclusive", "inclusive_clipped"]
 FEATURE_TABLES = ("scene_features", "object_features", "union_features")
 
 
@@ -69,6 +70,7 @@ def validate_feature_artifact(
         "source": manifest_row["source"],
         "video_id": manifest_row["video_id"],
         "num_frames": manifest_row["num_frames"],
+        "fps": manifest_row["fps"],
         "original_size_hw": (manifest_row["height"], manifest_row["width"]),
         "dino_model_id": DINO_MODEL_ID,
         "dino_model_revision": DINO_MODEL_REVISION,
@@ -252,6 +254,9 @@ def _valid_frames(
         return range(start, end)
     if convention == "inclusive" and 0 <= start <= end < num_frames:
         return range(start, end + 1)
+    if convention == "inclusive_clipped":
+        frames, _clipped = inclusive_clipped_frames(start, end, num_frames)
+        return frames or None
     return None
 
 
@@ -589,7 +594,9 @@ def audit_snapshot(
     if set(videos) != set(manifest_by_video):
         raise ValueError("annotation and extraction manifest video IDs differ")
     official_split = _split_by_video(annotation)
-    predicates = set(annotation["relations"])
+    exclusions = load_exclusions()
+    excluded_video_ids = set(exclusions)
+    predicates = set(active_predicates(annotation, excluded_video_ids)[0])
 
     missing_artifacts = []
     invalid_artifacts = []
@@ -600,10 +607,12 @@ def audit_snapshot(
         for name in FEATURE_TABLES
     }
     provenance: Counter[str] = Counter()
-    relation_totals = {name: _new_relation_totals() for name in ("half_open", "inclusive")}
+    relation_totals = {"inclusive_clipped": _new_relation_totals()}
     gallery_candidates = []
     for index, manifest_row in enumerate(manifest, start=1):
         key = f"{manifest_row['source']}/{manifest_row['video_id']}"
+        if manifest_row["video_id"] in excluded_video_ids:
+            continue
         artifact_path = feature_root / "videos" / f"{key}.pt"
         if not artifact_path.is_file():
             missing_artifacts.append(key)
@@ -620,7 +629,7 @@ def audit_snapshot(
         for name in FEATURE_TABLES:
             _merge_norms(norm_totals[name], feature_rows["feature_norms"][name])
         video = videos[manifest_row["video_id"]]
-        for convention in ("half_open", "inclusive"):
+        for convention in ("inclusive_clipped",):
             targets, issues = relation_records_for_video(
                 video,
                 predicate_vocabulary=predicates,
@@ -664,8 +673,10 @@ def audit_snapshot(
             "feature_root": str(feature_root),
         },
         "artifacts": {
-            "expected": len(manifest),
+            "source_videos": len(manifest),
+            "expected_retained": len(manifest) - len(exclusions),
             "valid": completed,
+            "excluded": list(exclusions.values()),
             "missing": missing_artifacts,
             "invalid": invalid_artifacts,
             **dict(counts),
@@ -688,14 +699,14 @@ def audit_snapshot(
             "html": str(output_directory / "gallery.html") if rendered_images else None,
         },
         "decision": (
-            "No span convention is selected. Compare relation_records and inspect gallery.html "
-            "before materializing experimental records."
+            "Inclusive endpoints clipped to valid frames; six reviewed source-defective videos "
+            "excluded; 64 retained predicates; complete evidence required by initial protocols."
         ),
     }
     temporary = output_directory / f".report.json.{os.getpid()}.tmp"
     temporary.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     os.replace(temporary, output_directory / "report.json")
-    success = completed == len(manifest) and not invalid_artifacts
+    success = completed == len(manifest) - len(exclusions) and not invalid_artifacts
     return report, success
 
 
@@ -721,7 +732,7 @@ def main() -> None:
     )
     artifacts = report["artifacts"]
     print(
-        f"valid artifacts: {artifacts['valid']}/{artifacts['expected']}; "
+        f"valid retained artifacts: {artifacts['valid']}/{artifacts['expected_retained']}; "
         f"missing: {len(artifacts['missing'])}; invalid: {len(artifacts['invalid'])}"
     )
     for convention, statistics in report["relation_records"].items():

@@ -26,6 +26,7 @@ def _artifact() -> dict:
             "source": "ego4d",
             "video_id": "video-1",
             "num_frames": 2,
+            "fps": 5,
             "original_size_hw": (3, 4),
             "feature_dim": 3,
             "dino_model_id": DINO_MODEL_ID,
@@ -44,6 +45,7 @@ def test_feature_audit_validates_complete_visible_pairs() -> None:
             "source": "ego4d",
             "video_id": "video-1",
             "num_frames": 2,
+            "fps": 5,
             "height": 3,
             "width": 4,
             "num_objects": 2,
@@ -78,6 +80,14 @@ def test_relation_expansion_keeps_all_labels_and_requires_explicit_endpoint_poli
         predicate_vocabulary={"beside", "looking_at"},
         convention="inclusive",
     )
+    inclusive_clipped, clipped_issues = relation_records_for_video(
+        {
+            "meta": {"num_frames": 3},
+            "relations": [[1, 2, "beside", [[1, 3]]]],
+        },
+        predicate_vocabulary={"beside"},
+        convention="inclusive_clipped",
+    )
 
     assert half_open == {
         (0, 1, 2): {"beside"},
@@ -90,3 +100,8 @@ def test_relation_expansion_keeps_all_labels_and_requires_explicit_endpoint_poli
     }
     assert not half_open_issues["invalid_spans"]
     assert not inclusive_issues["invalid_spans"]
+    assert inclusive_clipped == {
+        (1, 1, 2): {"beside"},
+        (2, 1, 2): {"beside"},
+    }
+    assert not clipped_issues["invalid_spans"]
