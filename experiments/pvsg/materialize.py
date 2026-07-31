@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import hashlib
 import json
 import os
 import shutil
@@ -27,6 +26,7 @@ from experiments.pvsg.records import (
     load_exclusions,
     relation_targets,
 )
+from experiments.pvsg.snapshot_io import read_json, read_jsonl, sha256_file
 
 MANIFEST_SCHEMA_VERSION = 1
 SUPPORT_COUNT = 5
@@ -50,16 +50,6 @@ JSONL_PATHS = (
 )
 
 
-def _read_json(path: Path) -> Any:
-    with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
-
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    with path.open("r", encoding="utf-8") as handle:
-        return [json.loads(line) for line in handle if line.strip()]
-
-
 def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
@@ -67,14 +57,6 @@ def _write_json(path: Path, value: Any) -> None:
 
 def _write_row(handle: TextIO, row: dict[str, Any]) -> None:
     handle.write(json.dumps(row, separators=(",", ":"), sort_keys=False) + "\n")
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _git_revision(repository: Path) -> str | None:
@@ -226,7 +208,7 @@ def materialize_manifests(
 
     if output_root.exists():
         raise FileExistsError(f"refusing to replace an existing manifest snapshot: {output_root}")
-    manifest = _read_jsonl(extraction_manifest)
+    manifest = read_jsonl(extraction_manifest)
     if len(manifest) != 400:
         raise ValueError(f"expected 400 extraction rows, found {len(manifest)}")
     manifest_by_video = {row["video_id"]: row for row in manifest}
@@ -234,9 +216,9 @@ def materialize_manifests(
         raise ValueError("extraction manifest video IDs are not unique")
 
     annotation_path = dataset_root / "pvsg.json"
-    if _sha256(annotation_path) != PVSG_JSON_SHA256:
+    if sha256_file(annotation_path) != PVSG_JSON_SHA256:
         raise ValueError("dataset annotation is not the pinned pvsg.json")
-    annotation = _read_json(annotation_path)
+    annotation = read_json(annotation_path)
     videos = {video["video_id"]: video for video in annotation["data"]}
     if set(videos) != set(manifest_by_video):
         raise ValueError("annotation and extraction manifest video IDs differ")
@@ -597,7 +579,7 @@ def materialize_manifests(
                 relative = path.relative_to(staging).as_posix()
                 file_manifest[relative] = {
                     "bytes": path.stat().st_size,
-                    "sha256": _sha256(path),
+                    "sha256": sha256_file(path),
                     "rows": counts.get(relative),
                 }
         provenance = {
@@ -609,7 +591,7 @@ def materialize_manifests(
             "feature_schema_version": FEATURE_SCHEMA_VERSION,
             "feature_root": str(feature_root),
             "exclusions_path": str(EXCLUSIONS_PATH.relative_to(repository_root)),
-            "exclusions_sha256": _sha256(EXCLUSIONS_PATH),
+            "exclusions_sha256": sha256_file(EXCLUSIONS_PATH),
             "excluded_videos": list(exclusions.values()),
             "relation_spans": "inclusive endpoints intersected with [0, num_frames - 1]",
             "complete_pair_evidence": "scene, subject, object, and union rows all present",

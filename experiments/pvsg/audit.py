@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import html
 import json
 import math
@@ -23,22 +22,20 @@ from experiments.pvsg.extract import (
 )
 from experiments.pvsg.prepare import PVSG_JSON_SHA256
 from experiments.pvsg.records import active_predicates, inclusive_clipped_frames, load_exclusions
+from experiments.pvsg.snapshot_io import read_json, read_jsonl, sha256_file
 
 SpanConvention = Literal["half_open", "inclusive", "inclusive_clipped"]
 FEATURE_TABLES = ("scene_features", "object_features", "union_features")
 
 
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    with path.open("r", encoding="utf-8") as handle:
-        return [json.loads(line) for line in handle if line.strip()]
-
-
 def _load_annotation(path: Path) -> dict[str, Any]:
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = sha256_file(path)
     if digest != PVSG_JSON_SHA256:
         raise ValueError(f"annotation is not the pinned pvsg.json: {path}")
-    with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+    annotation = read_json(path)
+    if not isinstance(annotation, dict):
+        raise ValueError(f"annotation must be a JSON object: {path}")
+    return annotation
 
 
 def _tensor_contract(
@@ -586,7 +583,7 @@ def audit_snapshot(
 ) -> tuple[dict[str, Any], bool]:
     """Audit all videos, write a report and gallery, and return report plus success."""
 
-    manifest = _read_jsonl(extraction_manifest)
+    manifest = read_jsonl(extraction_manifest)
     manifest_by_video = {row["video_id"]: row for row in manifest}
     if len(manifest_by_video) != len(manifest):
         raise ValueError("manifest video IDs are not globally unique")

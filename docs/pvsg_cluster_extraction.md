@@ -168,11 +168,11 @@ cd /nfs/data8/harjes/MASTER/tensor-brain
 ```
 
 The command validates all feature-table contracts, visible object/pair completeness, finite
-features, and relation-to-feature joins. It separately expands PVSG relations as half-open and
-inclusive intervals, reports multi-predicate prevalence for both interpretations, and does not
-choose one silently. Results are written under
+features, and relation-to-feature joins for the 394 retained videos. It accepts exactly the six
+reviewed exclusions, expands inclusive relation spans after clipping to valid frames, and reports
+multi-predicate prevalence and incomplete evidence. Results are written under
 `/nfs/data8/harjes/MASTER/runs/pvsg/audits/dino-schema-v2/` as `report.json` and a sampled
-`gallery.html`. The gallery compares the final half-open frame with the extra inclusive endpoint,
+`gallery.html`. The gallery compares the final half-open frame with the inclusive endpoint,
 overlaying the subject mask in cyan, object mask in magenta, and stored union box in yellow.
 
 This is a CPU and filesystem task. If cluster policy prohibits sustained work on the login node,
@@ -204,3 +204,34 @@ No graphical software is needed on the cluster. The simplest inspection options 
 
    Then open `http://127.0.0.1:8765/gallery.html` locally. Binding to loopback keeps the server
    inaccessible from the public network. None of these options requires sudo.
+
+## Materialize the initial experiment records
+
+The initial experiment deliberately excludes the six reviewed source-defective videos recorded
+in `experiments/pvsg/exclusions.json`. Materialization still requires valid schema-v2 artifacts
+for every other video, so this allowlist cannot hide a new extraction failure.
+
+Run the CPU-only materializer once:
+
+```bash
+cd /nfs/data8/harjes/MASTER/tensor-brain
+./cluster/pvsg/materialize.sh
+```
+
+It atomically writes `/nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1/`. The canonical
+positive-pair file retains complete and incomplete evidence flags. Protocol files contain only
+complete evidence and make the following fixed schedules explicit:
+
+- `heldout_video`: official training versus official validation videos;
+- `blocked`: first 45% observation, middle 10% embargo, final 45% evaluation;
+- `fewshot`: first five visible observations per new validation identity, followed by a
+  25-frame/five-second embargo before re-identification queries.
+
+`ontology.json` records the 64 active predicates, actual tracked identities, and per-split
+predicate support. `provenance.json` records every decision, exclusion, count, source revision,
+feature provenance group, file size, and checksum. The command refuses to replace an existing
+`section6-v1` directory. `span_issues.json` makes the remaining annotation damage explicit: in
+the pinned retained snapshot, 44 spans are clipped at the video boundary and five lie wholly
+outside their declared videos, so the latter cannot produce a frame record. Two retained videos
+also contain self-relations, accounting for 335 canonical frame records without a two-object
+union; these remain auditable but are absent from complete-evidence protocol views.

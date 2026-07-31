@@ -90,6 +90,12 @@ only the small aspect-ratio approximation required by the patch grid.
 Object weights are exact overlaps between source-mask pixels and these patch cells, including
 for non-divisible source dimensions. Features are stored in float16 after float32 pooling.
 
+The initial experiment loads every cached vector as float32 and independently applies L2
+normalization with epsilon `1e-12`. Raw caches remain unchanged. Mask area and union-box
+coordinates are analysis/provenance fields, not numerical inputs to the initial model. Six
+source-defective videos are explicitly excluded by `experiments/pvsg/exclusions.json`; task
+materialization accepts no other missing or invalid artifact.
+
 ## Three tasks
 
 ### 1. Object perception and later recognition
@@ -116,11 +122,27 @@ Its evidence is
 x_t^{s,o}=\left(f_{scene}(t), f_s(t), f_o(t), f_{\{s,o\}}(t)\right),
 \]
 
-and its target is one multi-hot vector over the official predicate vocabulary:
+and its target is one multi-hot vector over the active predicate vocabulary:
 
 \[
 y_{t,p}^{s,o}=\mathbf 1[p\in Y_t(s,o)].
 \]
+
+PVSG declares 57 predicates but uses seven additional predicates in the retained annotations.
+The initial active vocabulary therefore contains 64 labels: the declared order followed by the
+additional labels in deterministic alphabetical order. No string similarity or automatic
+semantic collapsing is applied. Simultaneous predicates for the same directed pair and frame
+remain one multi-hot target. Records lacking either visible participant or their union evidence
+are retained with evidence flags but excluded from the initial complete-perception views.
+
+The initial closed-set model view is narrower than the immutable ontology. It contains only
+predicates with at least one complete positive-pair frame in the official training split. For
+`section6-v1`, this excludes `grabbing`, `riding`, `going down`, and `squeezing`. Evaluation
+removes those assignments from mixed targets and omits records whose targets are entirely
+excluded; the exact record and assignment counts are saved in each run's `split.json`. This is
+not a claim that the labels are semantically invalid. Their independent index embeddings simply
+have no positive training evidence, so evaluating them as ordinary zero-shot classes would not
+test the initial Tensor Brain model.
 
 This is predicate recognition conditioned on an oracle positive pair and frame. It does not
 test whether a relationship exists.
@@ -269,21 +291,22 @@ retrieval of analogous training identities.
 
 ### `blocked`
 
-Each selected training video is divided by an actual time boundary into an observation prefix,
-an embargo, and a later evaluation suffix. Object observations and positive-pair records from
-the prefix train the model. Evaluation uses later records only when both participants were
-observed in the prefix. Distance from each evaluation frame to the final training exposure is
-stored and stratified.
+Each selected training video is divided into the first 45% as an observation prefix, the middle
+10% as an embargo, and the final 45% as an evaluation suffix. Object observations and
+positive-pair records from the prefix train the model. Evaluation uses later records only when
+both participants were observed in the prefix. Distance from each evaluation frame to the final
+training exposure is stored and stratified.
 
 This protocol is causal: evaluation never includes frames earlier than the training encounter.
 
 ### `fewshot`
 
-Few-shot evaluation is an explicit enrollment experiment, not a row split. A base model is
-trained on disjoint videos. For each evaluation video, new identity indices are enrolled from
-the first `k` mask-visible observations in a short support interval. Adaptation scope—new
-identity embeddings only by default—is declared and frozen before later query frames are
-evaluated. Support and query are separated by a time embargo.
+Few-shot evaluation is an explicit re-identification experiment, not a row split. A base model
+is trained on official-training videos. For each official-validation video, a new identity index
+is enrolled from its first five mask-visible observations, using identity supervision only.
+Adaptation changes the new identity embedding only by default. Queries begin at least 25 frames
+(five seconds at PVSG's 5 FPS) after the fifth support observation. A pair query begins only
+after both participants have been enrolled and passed this embargo.
 
 This definition prevents later predicate records from giving an identity more than `k`
 exposures. It is intentionally implemented after the held-out and blocked pipelines are

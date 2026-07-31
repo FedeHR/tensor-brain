@@ -1,7 +1,23 @@
 import pytest
 import torch
 
-from experiments.pvsg.extract import patch_aligned_size, split_dinov3_tokens
+from experiments.pvsg.extract import (
+    load_feature_artifact,
+    patch_aligned_size,
+    split_dinov3_tokens,
+)
+
+
+def test_feature_loader_safely_accepts_original_torch_version_metadata(tmp_path) -> None:
+    path = tmp_path / "feature.pt"
+    torch.save(
+        {"features": torch.ones(2), "metadata": {"torch_version": torch.__version__}},
+        path,
+    )
+
+    artifact = load_feature_artifact(path)
+
+    assert artifact["metadata"]["torch_version"] == torch.__version__
 
 
 def test_patch_aligned_size_preserves_full_frame_aspect_approximately() -> None:
