@@ -178,7 +178,7 @@ DINO evidence.
 
 ### Tensor Brain schedule
 
-The initial model has no hand-authored episodic index. Scene evidence initializes the
+The perception-only baseline has no episodic index. Scene evidence initializes the
 representation; the Tensor Brain then moves through subject, object, and predicate windows:
 
 ```text
@@ -191,8 +191,28 @@ object mask input  -> identity readout -> identity feedback -> semantic readouts
 union-box input    -> multi-label predicate readout
 ```
 
-Omitting an episode index is deliberate: learning which frames constitute an event is a later
-research problem. It does not justify omitting scene evidence.
+This baseline separates the contribution of memory from perception and does not justify
+omitting scene evidence. Controlled memory conditions add episodic indices as described below.
+
+### Episode formation and episodic-index creation
+
+The first episodic-memory conditions use a predetermined `relation_state_episode`: a maximal,
+nonempty video interval during which the complete active set of `(subject identity, predicate,
+object identity)` facts is unchanged. Overlapping predicate spans are therefore partitioned
+into non-overlapping relational states rather than treated as overlapping episodes. The episode
+kind describes the resulting interval; separate provenance records whether its boundaries came
+from annotations, a fixed-window control, or a learned policy. Only information from the
+observation prefix may create an episode used by a causal evaluation protocol.
+
+Predetermined episodes deliberately isolate whether the Tensor Brain can store, retrieve, and
+use an episodic index from the harder question of when a new episode should exist. A later
+experimental extension makes boundary detection and memory creation learnable. Its policy may
+use prediction error, changes in `q` or dynamic context `h`, and the expected utility of later
+retrieval to decide when to start or end an episode, allocate a new index, update an existing
+one, or decline to write. It should be compared with annotation-derived relation-state episodes
+and fixed-duration windows while controlling for the number and duration of stored memories.
+Success is measured by downstream recall, recognition, anticipation, or decision quality, not
+only agreement with human or annotation boundaries.
 
 ### First comparison
 
@@ -266,7 +286,8 @@ Semantic supervision is a central experiment, introduced in controlled stages:
 
 1. actual identity only;
 2. identity plus the official PVSG category;
-3. identity plus a manually reviewed, versioned WordNet hierarchy.
+3. identity plus the manually reviewed, versioned four-level
+   [PVSG object hierarchy](pvsg_object_hierarchy.md).
 
 Semantic targets are read from the post-feedback object state, as in the paper's unary
 readouts. They do not replace identity feedback. Frozen probes on the identity-only model can
