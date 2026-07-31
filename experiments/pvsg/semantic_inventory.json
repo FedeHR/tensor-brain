@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "unknown_policy": "An omitted property is unknown, never an implicit negative or an other class.",
+  "families": {
+    "color": {
+      "kind": "perceptual",
+      "stability": "identity_stable",
+      "cardinality": "multi_label",
+      "source_conventions": ["VAW"],
+      "values": [
+        "property:color/black",
+        "property:color/blue",
+        "property:color/brown",
+        "property:color/gray",
+        "property:color/green",
+        "property:color/orange",
+        "property:color/pink",
+        "property:color/purple",
+        "property:color/red",
+        "property:color/white",
+        "property:color/yellow"
+      ]
+    },
+    "material": {
+      "kind": "perceptual",
+      "stability": "identity_stable",
+      "cardinality": "multi_label",
+      "source_conventions": ["VAW", "CSLB:made_of"],
+      "values": [
+        "property:material/metal",
+        "property:material/wood",
+        "property:material/plastic",
+        "property:material/glass",
+        "property:material/ceramic",
+        "property:material/paper",
+        "property:material/cardboard",
+        "property:material/textile",
+        "property:material/leather",
+        "property:material/rubber",
+        "property:material/stone",
+        "property:material/concrete"
+      ]
+    },
+    "shape": {
+      "kind": "perceptual",
+      "stability": "identity_stable",
+      "cardinality": "multi_label",
+      "source_conventions": ["VAW"],
+      "values": [
+        "property:shape/round",
+        "property:shape/spherical",
+        "property:shape/cylindrical",
+        "property:shape/rectangular",
+        "property:shape/square",
+        "property:shape/oval",
+        "property:shape/conical",
+        "property:shape/flat",
+        "property:shape/curved",
+        "property:shape/pointed"
+      ]
+    },
+    "closure_state": {
+      "kind": "perceptual",
+      "stability": "observation_transient",
+      "cardinality": "single_label",
+      "source_conventions": ["VAW:state"],
+      "values": ["property:closure_state/open", "property:closure_state/closed"]
+    },
+    "content_state": {
+      "kind": "perceptual",
+      "stability": "observation_transient",
+      "cardinality": "single_label",
+      "source_conventions": ["VAW:state"],
+      "values": ["property:content_state/empty", "property:content_state/full"]
+    },
+    "surface_condition": {
+      "kind": "perceptual",
+      "stability": "observation_transient",
+      "cardinality": "multi_label",
+      "source_conventions": ["VAW:cleanliness", "VAW:state"],
+      "values": [
+        "property:surface_condition/wet",
+        "property:surface_condition/dry",
+        "property:surface_condition/clean",
+        "property:surface_condition/dirty",
+        "property:surface_condition/damaged"
+      ]
+    },
+    "power_state": {
+      "kind": "perceptual",
+      "stability": "observation_transient",
+      "cardinality": "single_label",
+      "source_conventions": ["VAW:state"],
+      "values": ["property:power_state/powered_on", "property:power_state/powered_off"]
+    },
+    "affordance": {
+      "kind": "semantic",
+      "stability": "category_typical",
+      "cardinality": "multi_label",
+      "source_conventions": ["THINGSplus"],
+      "values": [
+        "property:affordance/can_move_independently",
+        "property:affordance/movable_by_person",
+        "property:affordance/graspable_by_hand",
+        "property:affordance/holdable_by_hand"
+      ]
+    },
+    "risk": {
+      "kind": "semantic",
+      "stability": "category_typical",
+      "cardinality": "multi_label",
+      "source_conventions": ["TensorBrain:risk"],
+      "values": ["property:risk/can_cause_physical_harm"]
+    }
+  },
+  "relations": {
+    "relation:made_of": {
+      "kind": "conceptual",
+      "stability": "category_typical",
+      "inverse": null,
+      "symmetric": false,
+      "subject_scope": "category_or_identity",
+      "object_scope": "property/material",
+      "source_conventions": ["CSLB:made_of", "ConceptNet:MadeOf"]
+    },
+    "relation:used_for": {
+      "kind": "conceptual",
+      "stability": "category_typical",
+      "inverse": null,
+      "symmetric": false,
+      "subject_scope": "category_or_identity",
+      "object_scope": "action",
+      "source_conventions": ["CSLB:does", "ConceptNet:UsedFor"]
+    },
+    "relation:capable_of": {
+      "kind": "conceptual",
+      "stability": "category_typical",
+      "inverse": null,
+      "symmetric": false,
+      "subject_scope": "category_or_identity",
+      "object_scope": "action",
+      "source_conventions": ["CSLB:does", "ConceptNet:CapableOf"]
+    },
+    "relation:owned_by": {
+      "kind": "identity",
+      "stability": "time_varying",
+      "inverse": "relation:owns",
+      "symmetric": false,
+      "subject_scope": "identity",
+      "object_scope": "identity",
+      "source_conventions": ["TensorBrain:ownedBy", "Wikidata:P127"]
+    },
+    "relation:owns": {
+      "kind": "identity",
+      "stability": "time_varying",
+      "inverse": "relation:owned_by",
+      "symmetric": false,
+      "subject_scope": "identity",
+      "object_scope": "identity",
+      "source_conventions": ["TensorBrain:ownedBy", "Wikidata:P127:inverse"]
+    },
+    "relation:parent_of": {
+      "kind": "identity",
+      "stability": "identity_stable",
+      "inverse": "relation:child_of",
+      "symmetric": false,
+      "subject_scope": "human_identity",
+      "object_scope": "human_identity",
+      "source_conventions": ["Wikidata:P22/P25/P40"]
+    },
+    "relation:child_of": {
+      "kind": "identity",
+      "stability": "identity_stable",
+      "inverse": "relation:parent_of",
+      "symmetric": false,
+      "subject_scope": "human_identity",
+      "object_scope": "human_identity",
+      "source_conventions": ["Wikidata:P22/P25/P40"]
+    },
+    "relation:partner_of": {
+      "kind": "identity",
+      "stability": "time_varying",
+      "inverse": "relation:partner_of",
+      "symmetric": true,
+      "subject_scope": "human_identity",
+      "object_scope": "human_identity",
+      "source_conventions": ["Wikidata:P26/P451"]
+    },
+    "relation:sibling_of": {
+      "kind": "identity",
+      "stability": "identity_stable",
+      "inverse": "relation:sibling_of",
+      "symmetric": true,
+      "subject_scope": "human_identity",
+      "object_scope": "human_identity",
+      "source_conventions": ["Wikidata:P3373"]
+    }
+  }
+}

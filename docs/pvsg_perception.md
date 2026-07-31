@@ -297,6 +297,13 @@ VLM-derived semantics from PVSG descriptions and captions form a later, separate
 modality. Because language can reveal relations and future events, every derived feature must
 have explicit observation-time or training-only provenance.
 
+The versioned [semantic property and relation inventory](pvsg_semantic_inventory.md) defines
+the additional candidate space for controlled memory experiments. It does not fabricate facts:
+visual properties require explicit instance labels, category-typical affordances and risk
+require reviewed semantic facts, and ownership or kinship requires identity-to-identity triples.
+Transient state belongs to episodic conditions; stable category knowledge belongs to semantic
+memory conditions.
+
 ## Evaluation protocols
 
 Every split is materialized as a saved manifest of native video, frame, and object IDs.
