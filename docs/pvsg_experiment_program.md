@@ -15,6 +15,10 @@ answers a different question: **given that we now have real video with real indi
 claims of the Tensor Brain line are currently unsupported, and which experiments would settle
 them.**
 
+A fourth question — which claims are unfalsifiable today because the *component* they describe
+does not exist, and what it would cost to build it — is treated separately in
+[Missing components](tb_missing_components.md).
+
 The short version of the assessment:
 
 - The original paper's *conceptual* contribution is large and mostly untested. Almost everything
