@@ -182,6 +182,8 @@ later components stop being blocked.
 **Cost.** Very low. A linear or two-layer head on cached features; no new data; trains in minutes.
 Cosine and MSE against held-out features, plus a nearest-neighbour retrieval check (does the
 decoded vector retrieve the right object?), which is a much more meaningful metric than raw MSE.
+A concrete staged design, including a scale diagnostic that must run first, is in
+[the feature decoder plan](tb_feature_decoder_plan.md).
 
 **Design boundary.** Keep it outside `src/tb`, exactly as the encoder is. It is part of `g`, not
 part of the Tensor Brain.
