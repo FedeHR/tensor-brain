@@ -47,7 +47,8 @@ perceptual space.
 This makes **embodiment unfalsifiable**. The claim in Sections 7.5 and 10.8 is that activating an
 index grounds it — that top-down index activation reaches earlier processing layers and reinstates
 something perceptual. With no decoder there is no observable to check. The same absence makes the
-BTN-as-autoencoder framing (QTB Section 4.1) untested, and it makes imagination, future episodic
+BTN-as-autoencoder framing (extended paper Sections 4.1 and 4.6; QTB Section 10.8 and the
+"Autoencoder Learning" project in 15.9) untested, and it makes imagination, future episodic
 memory and planned rollouts impossible to evaluate, because an unrolled trajectory of `q` values
 cannot be compared against anything.
 
