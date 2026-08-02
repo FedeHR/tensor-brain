@@ -292,6 +292,123 @@ Keep it to positive-pair predicate recognition, which is unaffected by the PU qu
 chapter, not the spine of the thesis, and it is the natural place to state plainly that PVSG masks
 and tracks are oracle: the claim is about binding and memory *given* grouping, not about detection.
 
+### Tier 5 — contributions beyond the original paper
+
+Tiers 1–4 test claims the paper made. This tier makes claims it did not. Ordered by value per unit
+of remaining time, and the first two are close to free.
+
+#### X1. The scale conflict in shared bidirectional weights
+*New. Detailed in [scale and normalization](tb_scale_and_normalization.md).*
+
+`A` serves as a logit-scale readout and a state-scale write simultaneously, and the required norms
+for the two roles diverge **linearly in the representation dimension** — 26× at `D = 128`, 159× at
+the current `D = 768`, and 853× at the original paper's `r = 4096`. The original never hit this
+because its trainable VGG encoder was a free scale parameter; freezing DINO with an identity input
+map removed that degree of freedom.
+
+Deliverables: the `D`-scaling law; the three concrete failures (input scale, feedback magnitude,
+score offset); an empirical comparison of the five candidate resolutions; and the connection to
+tied input/output embeddings in language models, where the same conflict is handled by the
+`√d_model` multiplier.
+
+**Why it counts:** it is a structural critique of the architecture with a quantitative scaling law,
+and the work has to be done anyway to run Tiers 1–4. Highest value per effort in the program.
+
+#### X2. Superposition capacity of the representation layer
+*New. Directly quantifies the global-workspace claim of §6.6 and §8.5.*
+
+Set `q = Σ_{k∈S} a_k` for a random index set `S` of size `m`, then ask whether the members of `S`
+are the top-`m` scored indices. With the score offset absorbed (see X1), random columns at
+`D = 768`, `N = 4000` give perfect recall to `m = 16`, 0.94 at `m = 32`, and smooth degradation
+after.
+
+**A 768-dimensional global workspace holds roughly 16–32 simultaneously active concepts.**
+
+Run it as a real experiment with the controlled variables the preliminary numbers lack: random
+versus *trained* columns (does learning improve packing?), `D`, vocabulary size `N`, and
+hierarchically related versus unrelated index sets (are semantically close concepts harder or easier
+to superpose?).
+
+**Why it counts:** the paper asserts a single global workspace and argues in §8.5 that it forces
+serialization of parallel computing. This measures the bottleneck. It costs a script, needs no
+training, connects to global-workspace theory and to current superposition/feature-capacity work,
+and no number like it exists for this model.
+
+#### X3. The decoder `g⁺` and compositional embodiment
+*Extends QTB §10.8, which specifies `ν̂_k ← g⁺(sig(a_k))` but was never built. Full staged design in
+[the decoder plan](tb_feature_decoder_plan.md).*
+
+Beyond grounding and reconstruction, one genuinely novel test: **compositional superposition
+decoding.** The paper explicitly describes superposition — activating `Sparky` then `Friendly`
+"leads to a superposition of both embeddings in `q̈_S`". So decode `σ(a_i + a_j)` and ask whether it
+lands where the conjunction should: `fine:dog + coarse:living_being` on dogs, an identity plus its
+class on that individual, two unrelated indices nowhere coherent.
+
+That tests a stated mechanism nobody has verified, and it composes with X2: superposition capacity
+measures how many indices survive *readout*, compositional decoding measures whether the superposed
+state is *meaningful*.
+
+Keep E5 (prototype versus classifier row) as the cheap prerequisite — if embeddings turn out to be
+classifier rows, the decoder's grounding result is predictable and the chapter should be scoped
+accordingly.
+
+#### X4. An extensible index layer
+*Extends §10.1–10.2 (complementary learning systems), which the repository cannot currently
+express.*
+
+Three components, each small: a reserve-pool allocator; a one-shot Hebbian write `a_new ← σ(q)`,
+which is the direct reading of §10.2's "copying the episodic memory trace"; and a slow
+consolidation pass. Together they partition `A` into a gradient-trained slow region and a
+one-shot-written fast region — complementary learning systems as a property of one matrix.
+
+Novel results available:
+
+- **one-shot versus gradient-trained enrollment** at `k = 1, 5, 25` exposures, under `blocked`;
+- **an index-capacity scaling law** — sweep `state_dim` against enrolled identity count and find
+  where interference begins, which pairs directly with X2;
+- **verified self-supervised recruitment** — recruit indices for unlabeled tracks by the paper's own
+  novelty criterion, then score the recruited indices against ground-truth `object_id` tracks with
+  cluster purity and completeness. VRD had no ground truth for invented indices; PVSG does. This is
+  the strongest available version of "to perceive is to learn."
+
+#### X5. Causal intervention on symbolic indices
+*New framing; falsification test for the framework's central mechanism.*
+
+Inject a wrong identity index and measure the downstream change in hierarchy and predicate
+readouts. Compare against the same intervention on a flat-fusion model's hidden state, where the
+intervention cannot even be *specified*.
+
+**Why it counts:** the Tensor Brain's intermediate variables are named, discrete and human-readable
+*by construction* — the property a large body of interpretability work exists to recover from
+transformers post hoc. Demonstrating that they are causally load-bearing is a contribution to that
+discussion. It is equally a falsification test: if injecting a wrong identity barely moves the
+downstream distribution, index feedback is decorative and the result reframes the thesis.
+
+Run it *after* X1, since a `10⁻³`-relative feedback perturbation would produce a null result for
+scale reasons rather than architectural ones.
+
+#### X6. Object-level anticipation
+*New. §9.8 (forecasting, future episodic memory) is entirely prose in the original.*
+
+Anticipation without relations, so none of the span or PU hazards apply:
+
+- **presence prediction** — given frames up to `t`, which identities are visible at `t + Δ`?
+  A set-prediction task straight from the object table.
+- **permanence as prediction** — during an occlusion gap, does the model keep the identity index
+  active and correctly predict reappearance? This is the predictive form of E2 and turns the
+  lurking-bear illustration into a forecast.
+- **feature-level rollout** — with X3's decoder, unroll evolution and score decoded predictions
+  against actual future features. **Mandatory baseline: persistence.** At 5 FPS consecutive DINO
+  features are near-identical, so any claim that does not beat "predict no change" is empty.
+
+#### X7. Evolution backend as a controlled variable
+*Extends the ledger's stated future direction; only meaningful on real temporal data.*
+
+Original TB recurrence versus QTB feed-forward versus GRU versus Mamba/xLSTM, with measurement,
+candidate sets and the shared `A` path held fixed. The object-scan schedule of E3 and the temporal
+schedule of E2 are the two natural test beds. Lowest priority here — include only if time remains,
+since it is an architecture comparison rather than a claim about the theory.
+
 ---
 
 ## 4. What to cut, and why
@@ -303,13 +420,13 @@ and tracks are oracle: the claim is about binding and memory *given* grouping, n
   building cessation strata without marking those would corrupt the result.)*
 - **All-pair relationship prediction.** The positive-unlabeled question is unresolved and would
   need its own audit before the task is even well posed.
-- **The feature decoder `g⁺`.** Deferred. E5 answers the prototype-versus-classifier-row question,
-  which was the main scientific motivation, at a fraction of the cost.
-- **Index recruitment and full self-supervised learning.** Needs the allocator. A cheap partial
-  substitute: measure pseudo-label precision as a function of confidence threshold on held-out
-  observations. That quantifies the *premise* of the paper's SSL claim in a day — if precision at
-  the operating threshold is poor, the SSL story fails regardless of implementation.
-- **The synthetic environment, action indices, planning.** Correctly out of scope for this thesis.
+- **The synthetic environment, action indices, planning.** Correctly out of scope for this thesis:
+  PVSG is passive, so decision support and planning are structurally untestable on it.
+- **Relation-level anticipation.** Superseded by X6, which asks the same question on objects without
+  the span and PU hazards.
+
+The decoder and index recruitment are **no longer cut** — they return as X3 and X4. E5 remains the
+cheap prerequisite for X3 rather than a replacement for it.
 - **VLM zero-shot baseline.** Optional; include only if a reviewer-facing reference point is wanted
   and time remains.
 
@@ -322,21 +439,33 @@ supports.
 
 | Phase | Work | Output |
 |---|---|---|
-| Days 1–2 | Scale diagnostic (Section 6); object-scan and gap-detection record builders | unblocked, and the gate question settled |
+| Days 1–2 | `a0` offset fix (**F0**); scale diagnostic; object-scan and gap-detection record builders | unblocked; **X1** and **X2** largely fall out of this |
 | Week 1 | **E1** individuation, **E5** prototype analysis | the premise of the thesis, plus the cheapest result |
 | Week 2 | **E3** object-scan dynamic context | the centerpiece |
-| Week 3 | **E2** persistence and occlusion, absorbing `fewshot` | the temporal chapter |
-| Week 4 | **E4** enrichment under degraded evidence; **E6**, **E7** decoding and map | the semantic-memory chapter |
-| Weeks 5–6 | **E8** order effects (reduced design), **E9** folded in | the QTB bridge |
+| Week 3 | **E2** persistence and occlusion, absorbing `fewshot`; **X5** intervention | the temporal chapter plus the falsification test |
+| Week 4 | **E4** enrichment; **E6**, **E7** decoding and map; **X2** written up properly | the semantic-memory chapter |
+| Weeks 5–6 | **E8** order effects (reduced design), **E9** folded in; **X1** written up | the QTB bridge and the scale chapter |
 | Week 7 | **E10** episodic memory | Section 9 made quantitative |
-| Week 8 | **E11** relation decomposition | the one relation chapter |
+| Weeks 8–9 | **X4** extensible index layer | the first extension chapter |
+| Week 10 | **X3** decoder and compositional embodiment | the second extension chapter |
+| If time | **E11** relations, **X6** anticipation, **X7** evolution backends | additive |
 
-E1, E3 and E5 alone constitute a defensible thesis contribution. Everything after week 4 is
-additive rather than load-bearing, which is the right risk profile under time pressure.
+**Risk profile.** E1, E3 and E5 alone constitute a defensible thesis. X1 and X2 are close to free
+and are the two contributions most likely to survive contact with limited time — both largely fall
+out of work that has to happen in the first two days regardless. X4 and X3 are the substantial
+extension chapters and are correctly placed late, where they can be cut without damaging the core.
+
+If the schedule slips, cut from the bottom: X7, then X6, then E11, then X3. Do not cut X1 or X2 —
+they cost days and carry the novelty.
 
 ---
 
 ## 6. Scale verification (retained, and now more important)
+
+> Full treatment, including the `D`-scaling law, the newly identified `a0` offset problem, the
+> asymmetric-transformation variants, and the ranked menu of fixes, is in
+> [scale and normalization](tb_scale_and_normalization.md). This section keeps the summary that
+> gates the experiments below.
 
 ### 6.1 The working-tree fix is correct
 
@@ -427,9 +556,17 @@ be corrected.
 | E9 P-SA/P-Samp | **Yes** | calibration metrics; gate on `attend` |
 | E10 episodic memory | **Yes** | episodic group in the experiment-side vocabulary builder |
 | E11 relations | **Yes** | flat-fusion model class |
+| X1 scale study | **Yes** | logging plus the fix comparison; no new data |
+| X2 superposition capacity | **Yes** | a script; no training required |
+| X3 decoder | **Yes** | decoder head outside `src/tb` |
+| X4 extensible index layer | **Yes** | reserve-pool allocator and one-shot write — the only `src/tb` addition |
+| X5 intervention | **Yes** | small harness |
+| X6 anticipation | **Yes** | Δ-shifted presence targets from the object table |
+| X7 evolution backends | **Yes** | backend implementations behind the existing contract |
 
-No experiment in this program requires new feature extraction, and none requires a change to
-`src/tb` beyond the optional `attend` gate. The curation is finished; what remains is runners,
+No experiment in this program requires new feature extraction. Only X4 requires an addition to
+`src/tb` (the allocator); everything else needs at most the optional `attend` gate and the `a0`
+initialization fix. The curation is finished; what remains is runners,
 metrics and analysis.
 
 ---
