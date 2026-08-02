@@ -25,6 +25,12 @@ should be treated as fixed constraints, not choices:
 
 Like the encoder, `g⁺` belongs outside `src/tb`. It is part of `g`, not part of the Tensor Brain.
 
+What the definition does *not* fix is how deep `g` and `g⁺` should reach — the paper's own `f(·)` is
+the entire fine-tuned DCNN, not a head on frozen features, and the embodiment claim is explicitly
+about reaching *earlier* perceptual layers. §3.4 treats that question and turns it into
+**Capability 5**, which measures how deep embodiment actually reaches instead of assuming a
+boundary.
+
 ---
 
 ## 2. Prerequisite: run the scale diagnostic before building anything
@@ -138,6 +144,77 @@ Condition the decoder on the role: a shared trunk with four output heads (`scene
 `object`, `union`). This mirrors the role structure already present in the schedule and keeps the
 parameter count low.
 
+### 3.4 How deep should `g` and `g⁺` reach?
+
+The plan so far treats `g` as "frozen DINO, then identity" and `g⁺` as a head onto the final pooled
+vector. That is a scoping choice, not a principled boundary, and it is worth making the boundary
+explicit because the papers point the other way.
+
+**The papers place the whole encoder inside `g`.** In the original, `f(·)` is the complete
+VGG-19 / Faster R-CNN backbone, fine-tuned end to end — not a projection head on frozen features.
+And the embodiment claim in §7.5 and §10.8 is specifically that top-down index activation reaches
+*earlier perceptual layers*: "if this affects earlier processing layers, this process is referred
+to as embodiment." Decoding only to the final CLS or mask-pooled vector therefore demonstrates
+embodiment down to a frozen encoder's **output**, which is a strictly weaker statement than the one
+the paper makes.
+
+So the honest framing is not "one layer versus the whole model." It is: **how deep does embodiment
+reach?** That converts a scoping compromise into the experiment of Capability 5.
+
+#### The target ladder
+
+| Target | What it tests | Cached? | Cost |
+|---|---|---|---|
+| **T0** pooled vector (CLS / mask-pooled) | embodiment to the encoder's output | **yes** | free |
+| **T1** intermediate block features, layers ℓ | **how deep embodiment reaches** | no — subset re-extraction | hours |
+| **T2** patch-token grid at the final block | spatial structure, not just a summary | no — only pooled features were cached | hours |
+| **T3** pixels / masked crops | qualitative illustration | no | GPU-day, plus a trained decoder |
+
+T0 is the plan as written. T1 is the scientifically interesting extension and the direct answer to
+the depth question. T2 is worth noting because inverting a *mask-pooled* quantity is many-to-one and
+inherently lossy — the token grid is the tractable spatial target, not pixels.
+
+#### Keep the measurement at feature level
+
+A more powerful decoder is a liability for evidence. If `g⁺` reaches pixels and the reconstruction
+looks like a dog, that is consistent with the index embedding carrying dog-information *and* with a
+generative prior hallucinating a plausible dog from very little. This is the standard failure mode
+of generative interpretability, and it is why Capability 1 scores grounding by **retrieval** rather
+than reconstruction error: retrieval against held-out observations is much harder to fake.
+
+**Rule: T0 and T1 produce the evidence. T3 produces at most one clearly labelled illustrative
+figure.**
+
+#### Do not make DINO trainable
+
+Folding the encoder into a *trainable* `g` would change the project rather than extend it:
+
+- the entire pipeline is built on cached float16 tables precisely so experiments are cheap;
+  unfreezing the encoder discards that and makes every run a GPU job;
+- it collides directly with the scale analysis. A trainable encoder is exactly the free scale
+  parameter the original had (see [scale and normalization](tb_scale_and_normalization.md) §1.2),
+  so it would quietly absorb the readout/write conflict — you would stop *observing* the phenomenon
+  you are trying to characterize;
+- the oracle-mask framing depends on the encoder being fixed: the claim is about binding and memory
+  given grouping, not about learning better features.
+
+If a learnable component is wanted in `g`, use the projection head already discussed — a small map
+after frozen DINO — and run it as a named condition, not as the default.
+
+### 3.5 Visualization without a generative model
+
+There is a free way to *show* what an index has become, and it is more paper-faithful than a
+generative decoder.
+
+Decode `σ(a_k)`, retrieve the nearest cached DINO features among held-out observations, and display
+those mask crops. No decoder to train, no re-extraction, no generative prior to confound the result.
+
+This is exactly how the original paper visualizes recall: Figures 9 and 12 do not show generated
+images, they show **retrieved bounding-box contents** for the sampled entities. The equivalent panel
+here — "activate the index for this identity, and here are the crops it retrieves" — comes for free
+from the Capability 1 retrieval metric, and it is the qualitative figure most likely to end up in
+the thesis.
+
 ---
 
 ## 4. Three training regimes, in order
@@ -237,6 +314,37 @@ compare against the actual future features PVSG contains.
 rollout claim that does not beat persistence at each horizon is meaningless. Report cosine against
 horizon `n`, with persistence and a per-video mean-feature baseline on the same axes.
 
+### Capability 5 — how deep does embodiment reach?
+
+*This is the experiment the "should `g⁺` cover the whole encoder" question turns into, and it is the
+most novel item in the plan.*
+
+**Setup.** Re-extract intermediate block features for a subset of frames — a few thousand is ample,
+not the full 147,795 — at a spread of depths (say blocks 3, 6, 9, 12 of the ViT-B/16). Train a
+**separate small `g⁺_ℓ` per layer**, each with the same architecture and the same training design as
+T0, then run Capability 1's retrieval-based grounding metric at every depth.
+
+**Report grounding quality as a function of ℓ.** That curve is the result.
+
+**Why it matters.** The paper's embodiment claim is directional, so the curve is a genuine test
+rather than a description:
+
+- if grounding decodes well to late layers and **non-trivially to early ones**, index feedback is
+  embodiment in the paper's sense — a top-down signal that reinstates perceptual structure, not only
+  a semantic label;
+- if it works *only* at the final layer, embodiment in this model is a late-stage semantic
+  phenomenon and the neuroscience framing of §7.5 overstates what the architecture does. That is a
+  substantive negative result about a published claim, and it is worth as much as the positive one.
+
+**Controls.** Each layer has different dimensionality and feature statistics, so grounding scores
+are not comparable across ℓ without normalization. Use per-layer controls: the oracle class-centroid
+at that layer as the ceiling, and a random-index column as the floor, then report grounding as a
+*fraction of the achievable range at that depth*. Without this the curve measures layer statistics
+rather than embodiment.
+
+**Cost.** One subset re-extraction plus four small heads. This is the only item in the plan that
+needs new features, and it is bounded — hours, not a re-run of the pipeline.
+
 ---
 
 ## 6. The memorization confound, and the one design that avoids it
@@ -279,15 +387,22 @@ Additional controls:
 | 4 | Capability 3: prediction error, validated against onset/cessation strata | ~1 day | correlation with real boundaries, or a clear negative |
 | 5 | Hierarchy compositionality in decoded space | ~0.5 day | parent-centroid relation holds or fails |
 | 6 | Capability 4: rollout versus persistence | ~1 day | beats persistence at some horizon, or does not |
-| 7 | R2 joint training, `λ` sweep, full metric suite | ~1 week | trade-off characterized |
-| 8 | R3 in-the-loop, gated, small `μ_top` | ~1 week | stable, or documented as unstable |
+| 6b | **Retrieval figure** (§3.5): decode `σ(a_k)`, show the crops it retrieves | ~2 hours | the qualitative panel, free from stage 2 |
+| 7 | **Capability 5: depth of embodiment.** Subset re-extraction at 4 depths, one `g⁺_ℓ` each, per-layer controls | ~3 days | a grounding-versus-depth curve |
+| 8 | R2 joint training, `λ` sweep, full metric suite | ~1 week | trade-off characterized |
+| 9 | R3 in-the-loop, gated, small `μ_top` | ~1 week | stable, or documented as unstable |
+| — | *Optional* T3 pixel decoder, one illustrative figure only | ~1 GPU-day | explicitly labelled illustration, never evidence |
 
-**Stages 0–6 are about a week and answer the scientific questions.** R2 and R3 are the extensions
-and should only follow a positive R1.
+**Stages 0–6b are about a week and answer the scientific questions.** Stage 7 is the depth
+extension — the one item that justifies new extraction, and the strongest addition if a fuller
+embodiment chapter is wanted. R2 and R3 are further extensions and should only follow a positive R1.
 
-Everything runs on the cached float16 feature tables; no re-extraction, no GPU cluster time beyond
-what training the base checkpoints already costs. A 768×768 linear head over 1.5M object
-observations trains in minutes.
+Stages 0–6b run entirely on the cached float16 feature tables: no re-extraction, no GPU cluster time
+beyond what training the base checkpoints already costs. A 768×768 linear head over 1.5M object
+observations trains in minutes. **Stage 7 is the only stage needing new features, and it is bounded
+to a few thousand frames at four depths.** DINO itself stays frozen throughout — see §3.4 for why
+unfreezing it would both discard the cached-feature economics and mask the scale phenomenon under
+study.
 
 ---
 
@@ -310,7 +425,14 @@ The plan is worth running because every outcome is informative:
 - **Rollout never beats persistence.** Imagination and future episodic memory are not supported at
   this timescale on this data; either the timescale is wrong (see multi-timescale evolution,
   component 3.13) or the claim does not transfer to passive video.
+- **Grounding decodes to late layers only (Capability 5).** Embodiment in this model is a
+  late-stage semantic phenomenon rather than a top-down reinstatement of perceptual structure, and
+  the neuroscience framing of §7.5 overstates what the architecture does.
+- **Grounding decodes non-trivially to early layers.** Embodiment holds in the paper's stronger
+  sense. This would be the most striking positive result available in the whole plan, because it is
+  the claim the original could not test at all.
 
-The component costs about a week for the parts that matter, needs no new data, and it is the
-single cheapest way to convert three separate unfalsifiable claims — embodiment, autoencoding,
-imagination — into measurements.
+Stages 0–6b cost about a week, need no new data, and are the cheapest way to convert three
+unfalsifiable claims — embodiment, autoencoding, imagination — into measurements. Stage 7 adds the
+depth dimension for a bounded subset re-extraction, and converts the scoping question "which layer
+should `g⁺` target" into the substantive question "how deep does embodiment reach."
