@@ -19,6 +19,12 @@ A fourth question — which claims are unfalsifiable today because the *componen
 does not exist, and what it would cost to build it — is treated separately in
 [Missing components](tb_missing_components.md).
 
+> **Scope note.** [The core-capability plan](pvsg_core_capability_plan.md) supersedes this document
+> as the actual thesis program. It pivots to the object-observation stream, since nine of the
+> paper's ten perception-and-memory claims need no relations, and demotes the relation experiments
+> here to a single chapter. Read that first; this document remains the fuller critique of the
+> original evidence.
+
 The short version of the assessment:
 
 - The original paper's *conceptual* contribution is large and mostly untested. Almost everything
