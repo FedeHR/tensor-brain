@@ -90,11 +90,27 @@ only the small aspect-ratio approximation required by the patch grid.
 Object weights are exact overlaps between source-mask pixels and these patch cells, including
 for non-divisible source dimensions. Features are stored in float16 after float32 pooling.
 
-The initial experiment loads every cached vector as float32 and independently applies L2
-normalization with epsilon `1e-12`. Raw caches remain unchanged. Mask area and union-box
-coordinates are analysis/provenance fields, not numerical inputs to the initial model. Six
-source-defective videos are explicitly excluded by `experiments/pvsg/exclusions.json`; task
-materialization accepts no other missing or invalid artifact.
+The initial experiment loads each addressed cached vector as float32 and applies
+`sqrt(D) * L2-normalize(x)` with epsilon `1e-12`, where `D` is the feature dimension. Every
+nonzero input therefore has component RMS one. This preserves DINO direction and removes the
+systematic norm difference between CLS and pooled-region evidence while placing the input at a
+meaningful pre-CBS scale. Raw caches remain unchanged. Mask area and union-box coordinates are
+analysis/provenance fields, not numerical inputs to the initial model. Six source-defective
+videos are explicitly excluded by `experiments/pvsg/exclusions.json`; task materialization
+accepts no other missing or invalid artifact.
+
+The complete data path is:
+
+```text
+PVSG videos + panoptic masks ──DINOv3 extraction──> per-video float16 feature tables
+PVSG annotations + feature rows ──materialization──> audited protocol JSONL manifests
+manifest row + addressed feature rows ──float32 RMS normalization──> model evidence
+                                                                   scene / subject / object / union
+```
+
+Training visits videos in shuffled blocks and shuffles rows within each video. The loader caches
+the small set of current raw video tables and normalizes only the addressed rows, avoiding a
+whole-video float32 conversion for every randomly selected example.
 
 ## Three tasks
 
@@ -106,6 +122,13 @@ are added as named experimental conditions.
 
 This stream defines what it means to have observed an object. It is not restricted to frames
 where that object participates in an annotated relation.
+
+Object observations are the primary evidence stream for identity, category, semantic-memory,
+episodic-memory, and re-identification experiments. Pair completeness never filters this stream.
+The frozen snapshot also contains one record for every retained video frame, including frames
+with no mask-visible object, with the visible object IDs and feature rows ordered by object ID.
+This supports explicit sequential-object schedules and makes disappearance and reappearance
+observable without fabricating an object feature during an occlusion.
 
 ### 2. Positive-pair predicate recognition
 
@@ -135,14 +158,19 @@ semantic collapsing is applied. Simultaneous predicates for the same directed pa
 remain one multi-hot target. Records lacking either visible participant or their union evidence
 are retained with evidence flags but excluded from the initial complete-perception views.
 
+This complete-evidence restriction belongs only to the initial four-input relation task. It is
+not a dataset-wide filter. Later missing-evidence experiments may select canonical incomplete
+records, but must define an explicit evidence mask and state-update rule; absent tensors are not
+silently padded, interpolated, or replaced by prior observations.
+
 The initial closed-set model view is narrower than the immutable ontology. It contains only
-predicates with at least one complete positive-pair frame in the official training split. For
-`section6-v1`, this excludes `grabbing`, `riding`, `going down`, and `squeezing`. Evaluation
-removes those assignments from mixed targets and omits records whose targets are entirely
-excluded; the exact record and assignment counts are saved in each run's `split.json`. This is
-not a claim that the labels are semantically invalid. Their independent index embeddings simply
-have no positive training evidence, so evaluating them as ordinary zero-shot classes would not
-test the initial Tensor Brain model.
+predicates with at least one complete positive-pair frame in the frozen model-selection training
+subset. The exact supported and unseen labels are stored in `ontology.json`; they are derived
+only after the development videos are reserved. Evaluation removes unsupported assignments from
+mixed targets and omits records whose targets are entirely unsupported; each run stores the exact
+counts. This is not a claim that those labels are semantically invalid. Their independent index
+embeddings simply have no positive training evidence, so evaluating them as ordinary zero-shot
+classes would not test the initial Tensor Brain model.
 
 This is predicate recognition conditioned on an oracle positive pair and frame. It does not
 test whether a relationship exists.
@@ -307,15 +335,18 @@ memory conditions.
 ## Evaluation protocols
 
 Every split is materialized as a saved manifest of native video, frame, and object IDs.
-Hyperparameters are selected on a development subset of official training videos. The official
-PVSG validation videos are retained for final held-out-video evaluation.
+Within each PVSG source, a deterministic hash reserves 15% of retained official-training videos
+for development; the remaining 85% are model-selection training data. This is a video split, not
+a row split. The exact membership and hash salt are frozen in `splits.json`. The official PVSG
+validation videos are untouched and retained for final held-out-video evaluation.
 
 ### `heldout_video`
 
-Train on training videos and evaluate on held-out videos. All evaluation identities are novel.
-Identity classification is therefore not a closed-set metric and is reported as unavailable;
-predicate and semantic results measure generalization, while identity attention is analysed as
-retrieval of analogous training identities.
+Train on model-selection training videos, select hyperparameters on development videos, and
+evaluate once on official-validation videos. All evaluation identities are novel. Identity
+classification is therefore not a closed-set metric and is reported as unavailable; predicate
+and semantic results measure generalization, while identity attention is analysed as retrieval
+of analogous training identities.
 
 ### `blocked`
 
@@ -330,11 +361,15 @@ This protocol is causal: evaluation never includes frames earlier than the train
 ### `fewshot`
 
 Few-shot evaluation is an explicit re-identification experiment, not a row split. A base model
-is trained on official-training videos. For each official-validation video, a new identity index
-is enrolled from its first five mask-visible observations, using identity supervision only.
-Adaptation changes the new identity embedding only by default. Queries begin at least 25 frames
-(five seconds at PVSG's 5 FPS) after the fifth support observation. A pair query begins only
-after both participants have been enrolled and passed this embargo.
+is trained on the model-selection training videos. Development-video identities provide the
+model-selection counterpart and official-validation identities remain the final evaluation. Each
+eligible identity contributes its earliest ten mask-visible observations separated by at least
+five frames (one second at PVSG's asserted 5 FPS), using identity supervision only. The same
+identity pool and queries are evaluated at `k in {1, 3, 5, 10}` by exposing only the first `k`
+ranked supports. The snapshot records the complete support sequence and temporal span. Adaptation
+changes the new identity embedding only by default. Queries begin at least 25 frames (five
+seconds) after the tenth support observation. A pair query begins only after both participants
+have been enrolled and passed this embargo.
 
 This definition prevents later predicate records from giving an identity more than `k`
 exposures. It is intentionally implemented after the held-out and blocked pipelines are
@@ -379,10 +414,12 @@ training loop.
 2. Extract a small cohort and inspect coverage, pair count, and storage.
 3. Implement transparent annotation expansion and target construction.
 4. Verify dataset and split statistics before adding a model.
-5. Overfit tiny object and positive-pair datasets.
-6. Run P-Direct and one integral TB checkpoint as P-SA/P-Samp on `heldout_video`.
-7. Add the causal `blocked` protocol, then explicit few-shot enrollment.
-8. Add category and reviewed WordNet conditions.
-9. Add matched-information and no-feedback controls.
-10. Audit PVSG negatives before implementing all-pair relationship prediction.
-11. Implement pair-conditioned and then scene-wide relationship anticipation.
+5. Overfit a tiny object dataset, then a tiny complete-positive-pair dataset.
+6. Run object identity/category and input-ablation controls on `heldout_video`.
+7. Run the causal `blocked` object protocol and explicit few-shot re-identification.
+8. Add episodic recall and sequential-object schedules over the canonical frame stream.
+9. Run P-Direct and one integral TB checkpoint as P-SA/P-Samp on complete relation evidence.
+10. Add category and reviewed semantic-memory conditions.
+11. Add matched-information and no-feedback controls.
+12. Audit PVSG negatives before implementing all-pair relationship prediction.
+13. Implement pair-conditioned and then scene-wide relationship anticipation.

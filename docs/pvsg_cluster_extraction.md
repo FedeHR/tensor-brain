@@ -218,20 +218,72 @@ cd /nfs/data8/harjes/MASTER/tensor-brain
 ./cluster/pvsg/materialize.sh
 ```
 
-It atomically writes `/nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1/`. The canonical
-positive-pair file retains complete and incomplete evidence flags. Protocol files contain only
-complete evidence and make the following fixed schedules explicit:
+It atomically writes `/nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1/`. The snapshot is
+object-first: `canonical/frames.jsonl` contains every retained frame and its ascending visible
+object IDs and feature rows, including empty lists, and all mask-visible object observations are
+usable without any relation join. `canonical/positive_pairs.jsonl` separately retains complete
+and incomplete relation evidence. Only the initial four-input pair protocol files require
+complete scene, subject, object, and union evidence. The fixed schedules are:
 
-- `heldout_video`: official training versus official validation videos;
+- `heldout_video`: a deterministic per-source 85/15 split of official-training videos for
+  training/development, with official-validation videos untouched for final evaluation;
 - `blocked`: first 45% observation, middle 10% embargo, final 45% evaluation;
-- `fewshot`: first five visible observations per new validation identity, followed by a
-  25-frame/five-second embargo before re-identification queries.
+- `fewshot`: the earliest ten visible observations per novel development or validation identity,
+  separated by at least five frames, followed by a 25-frame/five-second embargo. Restricting the
+  ranked supports to `k in {1, 3, 5, 10}` keeps the identity pool and queries fixed across `k`.
 
 `ontology.json` records the 64 active predicates, actual tracked identities, and per-split
-predicate support. `provenance.json` records every decision, exclusion, count, source revision,
-feature provenance group, file size, and checksum. The command refuses to replace an existing
-`section6-v1` directory. `span_issues.json` makes the remaining annotation damage explicit: in
-the pinned retained snapshot, 44 spans are clipped at the video boundary and five lie wholly
-outside their declared videos, so the latter cannot produce a frame record. Two retained videos
-also contain self-relations, accounting for 335 canonical frame records without a two-object
-union; these remain auditable but are absent from complete-evidence protocol views.
+predicate support for both all annotated positive frames and their complete-evidence subset.
+`splits.json` freezes exact video membership and `object_hierarchy.json`
+freezes the validated reviewed hierarchy. `provenance.json` records every decision, exclusion,
+count, source revision, feature provenance group, file size, and checksum. The command refuses
+to replace an existing `section6-v1` directory. `span_issues.json` makes the remaining annotation
+damage explicit: in the pinned retained snapshot, 44 spans are clipped at the video boundary and
+five lie wholly outside their declared videos, so the latter cannot produce a frame record. Two
+retained videos also contain self-relations, accounting for 335 canonical frame records without
+a two-object union; these remain auditable but are absent from complete-evidence protocol views.
+
+### Replace the unused pre-experiment snapshot
+
+Because no experiment consumed the earlier `section6-v1`, materialize the revised contract to a
+candidate directory first:
+
+```bash
+cd /nfs/data8/harjes/MASTER/tensor-brain
+test -z "$(git status --porcelain)"
+test ! -e /nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1.next
+test ! -e /nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1.previous
+PVSG_SECTION6_MANIFEST_ROOT=/nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1.next \
+  ./cluster/pvsg/materialize.sh
+uv run --frozen --no-sync python - <<'PY'
+import json
+from pathlib import Path
+
+root = Path("/nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1.next")
+provenance = json.loads((root / "provenance.json").read_text())
+ontology = json.loads((root / "ontology.json").read_text())
+counts = provenance["counts"]
+for role, prefix in (("development", "development_"), ("evaluation", "")):
+    enrollments = counts[f"fewshot/{prefix}enrollment.jsonl"]
+    supports = counts[f"fewshot/{prefix}support_objects.jsonl"]
+    queries = counts[f"fewshot/{prefix}query_objects.jsonl"]
+    assert enrollments > 0 and supports == 10 * enrollments and queries > 0
+    print(role, {"identities": enrollments, "supports": supports, "queries": queries})
+print("train-supported predicates:", ontology["train_supported_predicates"])
+PY
+```
+
+Review the two eligible-identity counts and the newly derived train-supported predicate list.
+Only if they are suitable, promote the candidate and remove the unused previous snapshot:
+
+```bash
+mv /nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1 \
+  /nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1.previous
+mv /nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1.next \
+  /nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1
+test -f /nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1/provenance.json
+rm -rf -- /nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1.previous
+```
+
+Staging first means a failed materialization cannot damage the existing snapshot. The old
+snapshot remains recoverable until the candidate has been inspected and promoted successfully.
