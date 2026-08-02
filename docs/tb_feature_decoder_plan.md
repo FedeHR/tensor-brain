@@ -81,6 +81,13 @@ matters for the *existing* P-SA/P-Direct comparison, not only for the decoder.
 - log `‖q‖` at each concept window, and `‖feedback‖ / ‖q‖` for both P-SA and P-Samp;
 - log the component histogram of `σ(q)` versus `σ(a_k)` at convergence.
 
+> **Update (working tree).** The input side of this has since been fixed: `normalize_dino` now
+> applies `sqrt(D) * L2-normalize`, raising `σ(q)` sd from 0.0090 to 0.208. That fix is correct and
+> necessary, but it does not touch `A`'s initialization, so it *widens* the drive-to-feedback
+> asymmetry from 1.03 to 0.037. See
+> [the core-capability plan](pvsg_core_capability_plan.md) Section 1 for the verification and the
+> recommended gate-based response.
+
 **Decision rule.** If at convergence `‖a_k‖` is within a factor of ~3 of the typical `‖q‖`, proceed
 as specified. If the gap remains an order of magnitude, then the embodiment evaluation must include
 an explicit, named **scale-matched condition**: decode `σ(c · a_k)` with `c` calibrated so that
