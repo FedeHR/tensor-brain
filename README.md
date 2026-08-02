@@ -51,12 +51,13 @@ q, context = tb.evolve(q, context)
 ```
 
 External perception stays outside the core. `input_drive` is an already prepared contribution
-in pre-CBS coordinates: feature extraction, normalization, and any projection into `state_dim`
-belong to the experiment. With DINO features of the same dimension as `q`, the input mapping
-can be the identity:
+in pre-CBS coordinates: feature extraction, normalization, scaling, and any projection into
+`state_dim` belong to the experiment. Dimensional agreement alone is not enough to make an
+identity mapping suitable: the feature components must also have a meaningful pre-CBS scale.
+For example, the initial PVSG experiment RMS-normalizes each DINO vector before using it directly:
 
 ```python
-q = tb.integrate_input(q, normalized_dino_features)
+q = tb.integrate_input(q, rms_normalized_dino_features)
 ```
 
 This implements `q <- q + mu * g(nu)` without coupling the Tensor Brain to a feature extractor.
