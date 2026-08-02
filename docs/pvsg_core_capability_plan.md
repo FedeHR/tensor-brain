@@ -439,7 +439,7 @@ supports.
 
 | Phase | Work | Output |
 |---|---|---|
-| Days 1–2 | `a0` offset fix (**F0**); scale diagnostic; object-scan and gap-detection record builders | unblocked; **X1** and **X2** largely fall out of this |
+| Days 1–2 | Scale **diagnostics** (no behavioral fix); object-scan and gap-detection record builders | unblocked; **X1** and **X2** largely fall out of this |
 | Week 1 | **E1** individuation, **E5** prototype analysis | the premise of the thesis, plus the cheapest result |
 | Week 2 | **E3** object-scan dynamic context | the centerpiece |
 | Week 3 | **E2** persistence and occlusion, absorbing `fewshot`; **X5** intervention | the temporal chapter plus the falsification test |
@@ -513,6 +513,11 @@ E4 and E10 have the same exposure: both depend on the state being meaningfully m
 rather than by pixels.
 
 ### 6.4 Recommendation
+
+> **Revised.** The scale document has been corrected after review: the feedback-magnitude
+> argument used the wrong diagnostic, the `a0` fix is the first-order term of a bias QTB
+> derives (Eq. 31), and the analysis is specific to the sigmoid path. **No behavioral fix before
+> the diagnostics run.** See [scale and normalization](tb_scale_and_normalization.md) §5.
 
 **Measure first — one hour, no model change.** Log `‖a_k‖` by index group over training,
 `‖feedback‖ / ‖q‖` per window for both P-SA and P-Samp, and the component histograms of `σ(q)`
