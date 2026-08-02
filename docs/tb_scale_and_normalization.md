@@ -11,6 +11,12 @@ a common root cause, and only one of them has been fixed.
 | **P2** | Feedback magnitude: `‖a_k‖ ≈ 1` writes into `‖q‖ ≈ 27.7`, a 3.7% perturbation, and expected feedback shrinks a further 70× | Open |
 | **P3** | Score offset: `a0` initializes to zero, leaving a structural per-index offset **1.9× larger than the self-recall signal** | Open, newly identified, one-line fix |
 
+A fourth question — whether a learnable linear map between DINO and the CBS simply resolves all of
+this — is treated in Section 4b. Short answer: there are **three** constraints (CBS dynamic range,
+readout scale, write magnitude) and only **two** knobs (input scale, `‖a‖`). A learnable map
+replaces the second knob rather than adding a third, so it moves the trade-off without removing it.
+A feedback gate or a readout temperature is what adds the missing knob.
+
 The common root cause is that **`A` is asked to serve two roles whose scale requirements are
 incompatible, and the mismatch grows roughly linearly with the representation dimension.**
 
@@ -260,14 +266,126 @@ an embedding used both as a lookup key and as a vector.
 
 ---
 
-## 5. The full menu, ranked
+## 4b. Would a learnable linear map between DINO and the CBS just fix this?
+
+It is the natural first thought, it is worth adding for other reasons, and **it does not fix the
+scale conflict.** The reason is worth stating carefully, because it also explains what *does* fix
+it.
+
+### 4b.1 There are three constraints, not two
+
+The framing so far has been readout-versus-write. There is a third, and it is the one the RMS fix
+addressed:
+
+1. **CBS informativeness.** `σ(q)` must have dynamic range, which requires component scale
+   `s_q = O(1)`, hence `‖q‖ ≈ s_q√D`.
+2. **Readout scale.** `c · ‖a‖ · ‖δ‖ ≈ L` for a target logit `L` and alignment `c`, where
+   `δ = σ(q) − mean` is the discriminative part of the CBS.
+3. **Write magnitude.** `‖a‖ ≈ ‖q‖`, so that index feedback actually moves the state.
+
+Setting `W` learnable makes `‖q‖` a free parameter. But `‖q‖` was *already* a free parameter — it is
+exactly what the normalization constant chose when you picked `√D · L2`. Making it learnable lets
+SGD pick that number instead of you; it does not create a new degree of freedom.
+
+**Count the knobs.** Input scale (1) and `‖a‖` (1) — two knobs against three constraints. The system
+is over-determined, and no choice of `W` changes that.
+
+### 4b.2 What the sigmoid pins
+
+`W` is a full 768×768 matrix, so it clearly adds *representational* freedom — rotation, shaping,
+conditioning. But it adds only **one scale** degree of freedom, because the sigmoid fixes the
+relationships that matter:
+
+- `‖σ(q)‖ ≈ 0.5√D` almost regardless of `q`, since σ maps into `(0,1)` centred near 0.5;
+- `‖δ‖ ≈ s_q√D / 4` in the linear regime, saturating toward `0.5√D`.
+
+So `‖δ‖`, which sets the readout scale, is slaved to `s_q`, which sets the CBS range. You cannot
+move one without the other.
+
+### 4b.3 The trade-off, measured
+
+Sweeping `‖q‖` at `D = 768`, with logit target `L = 5` and alignment `c = 0.5`:
+
+| `‖q‖` | `σ(q)` sd | `‖δ‖` | `‖a‖` for readout | `‖a‖` for write |
+|---:|---:|---:|---:|---:|
+| 1.0 | 0.0090 | 0.25 | 40.0 | 1.0 |
+| 4.0 | 0.0359 | 0.99 | 10.1 | 4.0 |
+| **6.3** | **0.0561** | 1.55 | **6.44** | **6.30** ← they meet |
+| 15.0 | 0.1266 | 3.51 | 2.85 | 15.0 |
+| **27.7** (current) | **0.2104** | 5.83 | **1.72** | **27.7** |
+| 100.0 | 0.3885 | 10.76 | 0.93 | 100.0 |
+
+The two requirements **do** cross, at
+
+```
+‖q‖* = 2 √(L/c)          →  6.32 for L = 5, c = 0.5   (table: 6.3)
+```
+
+but notice what it costs. At the crossover `σ(q)` sd is **0.056**, against **0.208** at the current
+setting — a 3.7× loss of CBS dynamic range, moving back toward the very problem the RMS fix
+resolved. And since
+
+```
+σ(q) sd at the balanced point  ≈  √(L/c) / (2√D)
+```
+
+**the achievable dynamic range at the balance point falls as `1/√D`** — 0.056 at `D = 768`, 0.025 at
+`D = 4096`. The trilemma tightens with dimension, just as the readout/write ratio does.
+
+So a learnable map lets gradient descent choose *which row of that table to sit on*. Every row
+forces a trade. It cannot escape the table.
+
+### 4b.4 What does escape it
+
+One more knob. Either of the two already discussed:
+
+- **A feedback gate `β`:** `q ← αq + β a_k`. Write becomes `β‖a‖ ≈ ‖q‖`, decoupled from `‖a‖`.
+- **A readout temperature `s`:** `score = s · a^T σ(q)`. Readout becomes `s·c·‖a‖·‖δ‖ ≈ L`,
+  decoupled from `‖a‖`.
+
+Either gives three knobs for three constraints, and the system becomes solvable. This is the precise
+sense in which C1 and F1 are root-cause fixes and a learnable input map is not.
+
+**A concrete number falls out.** Staying at the current, good `‖q‖ = 27.7` with `σ(q)` sd 0.208, the
+readout row wants `‖a‖ ≈ 1.72`. Making feedback comparable to the state then needs
+
+```
+β  ≈  ‖q‖ / ‖a‖  ≈  27.7 / 1.72  ≈  16
+```
+
+Even for a deliberately sub-dominant feedback of 20–50% of the state, `β ≈ 3–8`. **The default
+`feedback_gate = 1` is off by roughly an order of magnitude**, which is the sharpest argument for
+learning `β` rather than fixing it.
+
+### 4b.5 Add the linear map anyway — for different reasons
+
+None of the above is an argument against it. It is worth adding, just not as *the fix*:
+
+- **Fidelity.** The original had a trainable VGG/Faster-R-CNN mapping. A learnable `g` restores the
+  degree of freedom the original architecture actually had, which is the honest modernization.
+- **It decouples `state_dim` from 768.** This matters more than it first appears: Section 3.2
+  measures the workspace as holding ~16–32 concurrent concepts at `D = 768`. Without a projection,
+  the workspace capacity of the model is hostage to DINO's output width. With one, `state_dim`
+  becomes an experimental variable — which is a prerequisite for the capacity experiment (X2) being
+  about the Tensor Brain rather than about DINO.
+- **It can absorb the CLS-versus-pooled distribution difference** between scene, object and union
+  evidence, ideally as separate per-role maps.
+
+**One methodological hazard, and it is real.** A jointly learned `W` can silently compensate for a
+badly scaled feedback path by reshaping `q`, which would make the symptom disappear without
+explaining it. For a thesis whose contribution includes *characterizing* this conflict, that is
+backwards. So:
+
+**Do not make the input map the first change.** Run F0 and the diagnostic on the frozen identity
+map, where the phenomenon is visible, then introduce the learnable map as a named condition that is
+measured rather than assumed.
 
 | | Fix | Addresses | Fidelity | Cost | Verdict |
 |---|---|---|---|---|---|
 | **F0** | `a0 ← −0.5 Σ_i A[i,k]` (centered CBS) | P3 | initialization only; paper's equation unchanged | one line | **Do immediately, unconditionally** |
 | **F1** | Gates on `attend`, mirroring `measure`; then learned `β` | P2 | API completion; ledger already sanctions gate values | small | **Do next.** `β` becomes a measurement |
 | **F2** | Learned inverse temperature `s` (C1) | root cause | reasonable interpretation | one parameter | **Do as the primary resolution** |
-| **F3** | Learnable input map `nn.Linear(768, state_dim)` in `g` | root cause | most faithful to the original's trainable encoder | small | **Run as a named condition** |
+| **F3** | Learnable input map `nn.Linear(768, state_dim)` in `g` | **not the root cause — see 4b**; decouples `state_dim` from 768 | most faithful to the original's trainable encoder | small | **Run as a named condition, but not first** — it can mask the phenomenon |
 | **F4** | Cosine readout + temperature (C3) | root cause | deliberate modernization | trivial | Extension; strong baseline |
 | **F5** | Learned adapter `φ` (C2) | root cause | experimental extension | `D²` | Extension; tests the paper's 1% symmetry claim |
 | **F6** | Normalized write `q + β a_k/‖a_k‖` | P2 | reasonable interpretation | trivial | Useful ablation next to F1 |
