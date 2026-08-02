@@ -17,7 +17,12 @@ class TensorBrain(nn.Module):
     The cognitive brain state is always derived as ``gamma = sigmoid(q)``.
     """
 
-    def __init__(self, state_dim: int, num_indices: int, evolution: Evolution) -> None:
+    def __init__(
+        self,
+        state_dim: int,
+        num_indices: int,
+        evolution: Evolution | None,
+    ) -> None:
         super().__init__()
         if state_dim <= 0 or num_indices <= 0:
             raise ValueError("state_dim and num_indices must be positive")
@@ -157,4 +162,6 @@ class TensorBrain(nn.Module):
     ]:
         """Move between concept windows using the configured evolution backend."""
 
+        if self.evolution is None:
+            raise RuntimeError("this Tensor Brain has no evolution operator")
         return self.evolution(q, context)
