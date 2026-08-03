@@ -96,9 +96,13 @@ class PVSGObjectDataset(Dataset[dict[str, Any]]):
     def __getitem__(self, index: int) -> dict[str, Any]:
         record = self.records[index]
         tables = _video_feature_tables(self.feature_root, record["source"], record["video_id"])
+        scene = tables["scene_features"][record["scene_row"]]
+        object_ = tables["object_features"][record["object_row"]]
         return {
-            "scene_features": normalize_dino(tables["scene_features"][record["scene_row"]]),
-            "object_features": normalize_dino(tables["object_features"][record["object_row"]]),
+            "scene_features": normalize_dino(scene),
+            "object_features": normalize_dino(object_),
+            "scene_raw_l2": scene.float().norm(),
+            "object_raw_l2": object_.float().norm(),
             "identity": record["identity"],
             "category": record["category"],
             "source": record["source"],
@@ -124,13 +128,19 @@ class PVSGPairDataset(Dataset[dict[str, Any]]):
         if not record["has_complete_evidence"]:
             raise ValueError("the initial pair dataset requires complete DINO evidence")
         tables = _video_feature_tables(self.feature_root, record["source"], record["video_id"])
+        scene = tables["scene_features"][record["scene_row"]]
+        subject = tables["object_features"][record["subject_row"]]
+        object_ = tables["object_features"][record["object_row"]]
+        union = tables["union_features"][record["union_row"]]
         return {
-            "scene_features": normalize_dino(tables["scene_features"][record["scene_row"]]),
-            "subject_features": normalize_dino(
-                tables["object_features"][record["subject_row"]]
-            ),
-            "object_features": normalize_dino(tables["object_features"][record["object_row"]]),
-            "union_features": normalize_dino(tables["union_features"][record["union_row"]]),
+            "scene_features": normalize_dino(scene),
+            "subject_features": normalize_dino(subject),
+            "object_features": normalize_dino(object_),
+            "union_features": normalize_dino(union),
+            "scene_raw_l2": scene.float().norm(),
+            "subject_raw_l2": subject.float().norm(),
+            "object_raw_l2": object_.float().norm(),
+            "union_raw_l2": union.float().norm(),
             "subject_identity": record["subject_identity"],
             "object_identity": record["object_identity"],
             "subject_category": record["subject_category"],

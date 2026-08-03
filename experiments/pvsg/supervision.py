@@ -13,7 +13,7 @@ from torch.nn import functional as F
 
 from experiments.pvsg.hierarchy import HIERARCHY_LEVELS, object_hierarchy_path
 from experiments.pvsg.indices import predicate_label, source_category_label
-from experiments.pvsg.models import PerceptionOutputs
+from experiments.pvsg.models import ObjectOutputs, PerceptionOutputs
 from tb import IndexVocabulary
 
 IGNORE_INDEX = -100
@@ -45,12 +45,28 @@ class PairTargets:
 
 
 @dataclass(frozen=True)
+class ObjectTargets:
+    """Compact candidate positions for one object-observation batch."""
+
+    identity: Int[Tensor, " batch"]
+    categories: dict[str, Int[Tensor, " batch"]]
+
+    def to(self, device: torch.device | str) -> ObjectTargets:
+        return ObjectTargets(
+            identity=self.identity.to(device),
+            categories={group: target.to(device) for group, target in self.categories.items()},
+        )
+
+
+@dataclass(frozen=True)
 class PairLosses:
     """Unweighted negative-log-likelihood terms for one pair batch."""
 
     total: Float[Tensor, ""]
-    predicate_sum: Float[Tensor, ""]
-    predicate_mean: Float[Tensor, ""]
+    overfit_excess: Float[Tensor, ""]
+    predicate_cross_entropy: Float[Tensor, ""]
+    predicate_target_entropy: Float[Tensor, ""]
+    predicate_kl: Float[Tensor, ""]
     subject_identity: Float[Tensor, ""]
     object_identity: Float[Tensor, ""]
     subject_categories: dict[str, Float[Tensor, ""]]
@@ -59,8 +75,14 @@ class PairLosses:
     def scalars(self) -> dict[str, float]:
         values = {
             "loss/total": float(self.total.detach()),
-            "loss/predicate_sum": float(self.predicate_sum.detach()),
-            "loss/predicate_mean": float(self.predicate_mean.detach()),
+            "loss/overfit_excess": float(self.overfit_excess.detach()),
+            "loss/predicate_cross_entropy": float(
+                self.predicate_cross_entropy.detach()
+            ),
+            "loss/predicate_target_entropy": float(
+                self.predicate_target_entropy.detach()
+            ),
+            "loss/predicate_kl": float(self.predicate_kl.detach()),
             "loss/subject_identity": float(self.subject_identity.detach()),
             "loss/object_identity": float(self.object_identity.detach()),
         }
@@ -75,6 +97,25 @@ class PairLosses:
                 }
             )
         return values
+
+
+@dataclass(frozen=True)
+class ObjectLosses:
+    """Unweighted identity and unary-category losses for an object batch."""
+
+    total: Float[Tensor, ""]
+    identity: Float[Tensor, ""]
+    categories: dict[str, Float[Tensor, ""]]
+
+    def scalars(self) -> dict[str, float]:
+        return {
+            "loss/total": float(self.total.detach()),
+            "loss/identity": float(self.identity.detach()),
+            **{
+                f"loss/category/{group}": float(loss.detach())
+                for group, loss in self.categories.items()
+            },
+        }
 
 
 def _string_sequence(batch: Mapping[str, Any], key: str) -> tuple[str, ...]:
@@ -129,14 +170,96 @@ def _candidate_position(
 
 
 def _class_targets(
-    labels: tuple[str | None, ...], vocabulary: IndexVocabulary, group: str
+    labels: tuple[str | None, ...],
+    vocabulary: IndexVocabulary,
+    group: str,
+    *,
+    allow_unknown: bool = False,
 ) -> Int[Tensor, " batch"]:
-    return torch.tensor(
-        [
-            IGNORE_INDEX if label is None else _candidate_position(vocabulary, group, label)
-            for label in labels
-        ],
-        dtype=torch.long,
+    positions = []
+    for label in labels:
+        if label is None:
+            positions.append(IGNORE_INDEX)
+            continue
+        try:
+            positions.append(_candidate_position(vocabulary, group, label))
+        except ValueError:
+            if not allow_unknown:
+                raise
+            positions.append(IGNORE_INDEX)
+    return torch.tensor(positions, dtype=torch.long)
+
+
+def build_category_targets(
+    batch: Mapping[str, Any],
+    vocabulary: IndexVocabulary,
+    *,
+    hierarchy: Mapping[str, Any] | None = None,
+    allow_unknown: bool = False,
+) -> dict[str, Int[Tensor, " batch"]]:
+    """Map object categories without requiring identities to be vocabulary members.
+
+    Held-out-video identities are novel by construction, but their reviewed unary
+    categories can still be evaluated. Unsupported category labels are ignored only
+    when ``allow_unknown`` is explicitly enabled.
+    """
+
+    identities = _string_sequence(batch, "identity")
+    source_categories = _string_sequence(batch, "category")
+    if len(identities) != len(source_categories):
+        raise ValueError("identity and category fields must have the same length")
+    return {
+        group: _class_targets(
+            _category_labels(
+                identities,
+                source_categories,
+                level=group.removeprefix(CATEGORY_GROUP_PREFIX),
+                hierarchy=hierarchy,
+            ),
+            vocabulary,
+            group,
+            allow_unknown=allow_unknown,
+        )
+        for group in vocabulary.groups
+        if group.startswith(CATEGORY_GROUP_PREFIX)
+    }
+
+
+def _entity_targets(
+    identities: tuple[str, ...],
+    source_categories: tuple[str, ...],
+    vocabulary: IndexVocabulary,
+    hierarchy: Mapping[str, Any] | None,
+) -> ObjectTargets:
+    if len(identities) != len(source_categories):
+        raise ValueError("identity and category fields must have the same length")
+    global_indices = torch.tensor(
+        [vocabulary.index(identity) for identity in identities], dtype=torch.long
+    )
+    categories = build_category_targets(
+        {"identity": identities, "category": source_categories},
+        vocabulary,
+        hierarchy=hierarchy,
+    )
+    return ObjectTargets(
+        identity=vocabulary.get_positions("identity", global_indices),
+        categories=categories,
+    )
+
+
+def build_object_targets(
+    batch: Mapping[str, Any],
+    vocabulary: IndexVocabulary,
+    *,
+    hierarchy: Mapping[str, Any] | None = None,
+) -> ObjectTargets:
+    """Map one object-observation batch to identity and unary-category positions."""
+
+    return _entity_targets(
+        _string_sequence(batch, "identity"),
+        _string_sequence(batch, "category"),
+        vocabulary,
+        hierarchy,
     )
 
 
@@ -159,14 +282,12 @@ def build_pair_targets(
     ):
         raise ValueError("pair batch symbolic fields must have the same length")
 
-    subject_global = torch.tensor(
-        [vocabulary.index(identity) for identity in subject_identities], dtype=torch.long
+    subject_targets = _entity_targets(
+        subject_identities, subject_categories, vocabulary, hierarchy
     )
-    object_global = torch.tensor(
-        [vocabulary.index(identity) for identity in object_identities], dtype=torch.long
+    object_targets = _entity_targets(
+        object_identities, object_categories, vocabulary, hierarchy
     )
-    subject_identity_targets = vocabulary.get_positions("identity", subject_global)
-    object_identity_targets = vocabulary.get_positions("identity", object_global)
 
     predicate_names = batch["predicates"]
     if not isinstance(predicate_names, Sequence) or len(predicate_names) != batch_size:
@@ -187,37 +308,12 @@ def build_pair_targets(
                 row, _candidate_position(vocabulary, "predicate", label)
             ] = 1.0
 
-    subject_category_targets = {}
-    object_category_targets = {}
-    for group in vocabulary.groups:
-        if not group.startswith(CATEGORY_GROUP_PREFIX):
-            continue
-        level = group.removeprefix(CATEGORY_GROUP_PREFIX)
-        subject_labels = _category_labels(
-            subject_identities,
-            subject_categories,
-            level=level,
-            hierarchy=hierarchy,
-        )
-        object_labels = _category_labels(
-            object_identities,
-            object_categories,
-            level=level,
-            hierarchy=hierarchy,
-        )
-        subject_category_targets[group] = _class_targets(
-            subject_labels, vocabulary, group
-        )
-        object_category_targets[group] = _class_targets(
-            object_labels, vocabulary, group
-        )
-
     return PairTargets(
-        subject_identity=subject_identity_targets,
-        object_identity=object_identity_targets,
+        subject_identity=subject_targets.identity,
+        object_identity=object_targets.identity,
         predicates=predicate_targets,
-        subject_categories=subject_category_targets,
-        object_categories=object_category_targets,
+        subject_categories=subject_targets.categories,
+        object_categories=object_targets.categories,
     )
 
 
@@ -233,11 +329,21 @@ def _masked_cross_entropy(
 def pair_losses(outputs: PerceptionOutputs, targets: PairTargets) -> PairLosses:
     """Return the factorized pair negative log-likelihood without ad-hoc weights."""
 
-    predicate_per_label = F.binary_cross_entropy_with_logits(
-        outputs["predicate_logits"], targets.predicates, reduction="none"
+    predicate_distribution = targets.predicates / targets.predicates.sum(
+        dim=-1, keepdim=True
     )
-    predicate_sum = predicate_per_label.sum(dim=-1).mean()
-    predicate_mean = predicate_per_label.mean()
+    predicate_log_probabilities = F.log_softmax(outputs["predicate_logits"], dim=-1)
+    predicate_cross_entropy = -(
+        predicate_distribution * predicate_log_probabilities
+    ).sum(dim=-1).mean()
+    predicate_target_entropy = -torch.xlogy(
+        predicate_distribution, predicate_distribution
+    ).sum(dim=-1).mean()
+    predicate_kl = F.kl_div(
+        predicate_log_probabilities,
+        predicate_distribution,
+        reduction="batchmean",
+    )
     subject_identity = F.cross_entropy(
         outputs["subject_identity_logits"], targets.subject_identity
     )
@@ -256,13 +362,15 @@ def pair_losses(outputs: PerceptionOutputs, targets: PairTargets) -> PairLosses:
         group: _masked_cross_entropy(outputs["object_category_logits"][group], target)
         for group, target in targets.object_categories.items()
     }
-    total = predicate_sum + subject_identity + object_identity
+    total = predicate_cross_entropy + subject_identity + object_identity
     total = total + sum(subject_categories.values(), total.new_zeros(()))
     total = total + sum(object_categories.values(), total.new_zeros(()))
     return PairLosses(
         total=total,
-        predicate_sum=predicate_sum,
-        predicate_mean=predicate_mean,
+        overfit_excess=total - predicate_target_entropy,
+        predicate_cross_entropy=predicate_cross_entropy,
+        predicate_target_entropy=predicate_target_entropy,
+        predicate_kl=predicate_kl,
         subject_identity=subject_identity,
         object_identity=object_identity,
         subject_categories=subject_categories,
@@ -282,16 +390,21 @@ def pair_metrics(outputs: PerceptionOutputs, targets: PairTargets) -> dict[str, 
             outputs["object_identity_logits"].argmax(dim=-1)
             == targets.object_identity
         )
-        predicate_predictions = outputs["predicate_logits"] >= 0
         predicate_targets = targets.predicates.bool()
+        predicate_predictions = torch.zeros_like(predicate_targets)
+        for row, count in enumerate(predicate_targets.sum(dim=-1).tolist()):
+            winners = outputs["predicate_logits"][row].topk(count).indices
+            predicate_predictions[row, winners] = True
         predicate_exact = (predicate_predictions == predicate_targets).all(dim=-1)
+        predicate_recall = (
+            (predicate_predictions & predicate_targets).sum(dim=-1)
+            / predicate_targets.sum(dim=-1)
+        )
         values = {
             "accuracy/subject_identity": float(subject_correct.float().mean()),
             "accuracy/object_identity": float(object_correct.float().mean()),
             "accuracy/predicate_exact": float(predicate_exact.float().mean()),
-            "accuracy/predicate_labels": float(
-                (predicate_predictions == predicate_targets).float().mean()
-            ),
+            "recall/predicate_at_target_count": float(predicate_recall.mean()),
         }
         all_correct = subject_correct & object_correct & predicate_exact
         for owner, logits_by_group, targets_by_group in (
@@ -309,5 +422,38 @@ def pair_metrics(outputs: PerceptionOutputs, targets: PairTargets) -> dict[str, 
                 owner_complete = torch.ones_like(all_correct)
                 owner_complete[valid] = correct
                 all_correct &= owner_complete
+        values["accuracy/all_exact"] = float(all_correct.float().mean())
+        return values
+
+
+def object_losses(outputs: ObjectOutputs, targets: ObjectTargets) -> ObjectLosses:
+    """Return identity and enabled unary-category cross-entropies."""
+
+    if set(outputs["category_logits"]) != set(targets.categories):
+        raise ValueError("category output groups must exactly match category target groups")
+    identity = F.cross_entropy(outputs["identity_logits"], targets.identity)
+    categories = {
+        group: _masked_cross_entropy(outputs["category_logits"][group], target)
+        for group, target in targets.categories.items()
+    }
+    total = identity + sum(categories.values(), identity.new_zeros(()))
+    return ObjectLosses(total=total, identity=identity, categories=categories)
+
+
+def object_metrics(outputs: ObjectOutputs, targets: ObjectTargets) -> dict[str, float]:
+    """Compute identity, category, and strict all-target object accuracy."""
+
+    with torch.no_grad():
+        all_correct = outputs["identity_logits"].argmax(dim=-1) == targets.identity
+        values = {"accuracy/identity": float(all_correct.float().mean())}
+        for group, target in targets.categories.items():
+            valid = target != IGNORE_INDEX
+            if not bool(valid.any()):
+                continue
+            correct = outputs["category_logits"][group].argmax(dim=-1)[valid] == target[valid]
+            values[f"accuracy/category/{group}"] = float(correct.float().mean())
+            complete = torch.ones_like(all_correct)
+            complete[valid] = correct
+            all_correct &= complete
         values["accuracy/all_exact"] = float(all_correct.float().mean())
         return values

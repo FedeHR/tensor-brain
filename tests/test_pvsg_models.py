@@ -3,6 +3,8 @@ import torch
 from jaxtyping import Float
 from torch import Tensor
 
+from experiments.pvsg.baselines import FlatFusion, LinearProbe
+from experiments.pvsg.diagnostics import object_scale_trace_rows
 from experiments.pvsg.models import IntegralTB, PDirect
 from tb.evolution import Evolution
 
@@ -32,7 +34,8 @@ def set_index_parameters(model: PDirect | IntegralTB) -> None:
                 ]
             )
         )
-        model.brain.a0.copy_(torch.tensor([0.1, -0.2, 0.0, 0.3, -0.1]))
+        if model.brain.a0 is not None:
+            model.brain.a0.copy_(torch.tensor([0.1, -0.2, 0.0, 0.3, -0.1]))
 
 
 def test_p_direct_scores_each_feature_independently() -> None:
@@ -211,3 +214,109 @@ def test_integral_category_loss_reaches_identity_embeddings_through_feedback() -
 
     assert model.brain.A.grad is not None
     assert model.brain.A.grad[:, identities].abs().sum() > 0
+
+
+def test_object_schedule_is_the_scene_and_single_entity_prefix() -> None:
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+    set_index_parameters(model)
+    scene = torch.tensor([[0.2, -0.1]])
+    object_ = torch.tensor([[0.4, 0.3]])
+    identities = torch.tensor([0, 1])
+    categories = {"object_category/source": torch.tensor([2, 3, 4])}
+
+    outputs = model.forward_object(
+        scene,
+        object_,
+        identities,
+        category_candidates=categories,
+        return_trace=True,
+    )
+    q_before_feedback = 2.0 * scene + 1.0 + object_
+    q_after_feedback, _ = model.brain.attend(q_before_feedback, identities)
+
+    torch.testing.assert_close(
+        outputs["identity_logits"],
+        model.brain.index_scores(q_before_feedback, identities),
+    )
+    torch.testing.assert_close(
+        outputs["category_logits"]["object_category/source"],
+        model.brain.index_scores(q_after_feedback, categories["object_category/source"]),
+    )
+    assert set(outputs["trace"]) == {"scene", "object"}
+    rows = object_scale_trace_rows(
+        model,
+        outputs,
+        {"identity": identities, **categories},
+        {"scene_raw_l2": torch.tensor([2.0]), "object_raw_l2": torch.tensor([1.0])},
+    )
+    assert {"raw_input_norm", "operation_delta", "readout"} <= {
+        row["kind"] for row in rows
+    }
+
+
+def test_no_feedback_control_keeps_the_post_input_state() -> None:
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+    set_index_parameters(model)
+    outputs = model.forward_object(
+        torch.tensor([[0.2, -0.1]]),
+        torch.tensor([[0.4, 0.3]]),
+        torch.tensor([0, 1]),
+        feedback_mode="none",
+        return_trace=True,
+    )
+
+    torch.testing.assert_close(
+        outputs["trace"]["object"]["q_after_feedback"],
+        outputs["trace"]["object"]["q_after_input"],
+    )
+
+
+@pytest.mark.parametrize("model_type", (LinearProbe, FlatFusion))
+def test_non_tb_baselines_return_pair_readouts(model_type) -> None:
+    model = (
+        model_type(state_dim=2, num_indices=5, hidden_dim=3)
+        if model_type is FlatFusion
+        else model_type(state_dim=2, num_indices=5)
+    )
+    identities = torch.tensor([0, 1])
+    predicates = torch.tensor([2, 3, 4])
+    categories = {"object_category/source": torch.tensor([2, 4])}
+    scene = torch.tensor([[0.2, -0.1]])
+    subject = torch.tensor([[0.4, 0.3]])
+    object_ = torch.tensor([[-0.2, 0.5]])
+    union = torch.tensor([[0.1, -0.4]])
+
+    if isinstance(model, FlatFusion):
+        pair = model(
+            scene,
+            subject,
+            object_,
+            union,
+            identities,
+            predicates,
+            category_candidates=categories,
+        )
+    else:
+        pair = model(
+            subject,
+            object_,
+            union,
+            identities,
+            predicates,
+            category_candidates=categories,
+        )
+
+    assert pair["subject_identity_logits"].shape == (1, 2)
+    assert pair["predicate_logits"].shape == (1, 3)
+
+
+def test_linear_probe_returns_object_readouts() -> None:
+    model = LinearProbe(state_dim=2, num_indices=5)
+    single = model.forward_object(
+        torch.tensor([[-0.2, 0.5]]),
+        torch.tensor([0, 1]),
+        category_candidates={"object_category/source": torch.tensor([2, 4])},
+    )
+
+    assert single["identity_logits"].shape == (1, 2)
+    assert single["category_logits"]["object_category/source"].shape == (1, 2)

@@ -6,8 +6,11 @@ from typing import Literal
 import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
+from torch.nn import functional as F
 
 from tb.evolution import Evolution
+
+ScoreMode = Literal["direct", "centered", "learned-bias", "softplus-bias"]
 
 
 class TensorBrain(nn.Module):
@@ -22,6 +25,8 @@ class TensorBrain(nn.Module):
         state_dim: int,
         num_indices: int,
         evolution: Evolution | None,
+        *,
+        score_mode: ScoreMode = "direct",
     ) -> None:
         super().__init__()
         if state_dim <= 0 or num_indices <= 0:
@@ -29,8 +34,14 @@ class TensorBrain(nn.Module):
         self.state_dim = state_dim
         self.num_indices = num_indices
         self.evolution = evolution
+        self.score_mode = score_mode
         self.A = nn.Parameter(torch.empty(state_dim, num_indices))
-        self.a0 = nn.Parameter(torch.zeros(num_indices))
+        if score_mode == "learned-bias":
+            self.a0 = nn.Parameter(torch.zeros(num_indices))
+        elif score_mode in ("direct", "centered", "softplus-bias"):
+            self.register_parameter("a0", None)
+        else:
+            raise ValueError(f"unknown score mode: {score_mode}")
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -38,7 +49,8 @@ class TensorBrain(nn.Module):
         # [fan_out, fan_in] linear weight. This scale gives every column an
         # expected squared norm of one, independently of num_indices.
         nn.init.normal_(self.A, mean=0.0, std=self.state_dim**-0.5)
-        nn.init.zeros_(self.a0)
+        if self.a0 is not None:
+            nn.init.zeros_(self.a0)
 
     def _resolve_candidate_indices(
         self,
@@ -74,14 +86,35 @@ class TensorBrain(nn.Module):
         q: Float[Tensor, "*batch state"],
         candidates: Int[Tensor, " indices"] | Sequence[int] | None = None,
     ) -> Float[Tensor, "*batch indices"]:
-        r"""Return :math:`a_{0,k} + a_k^\top\sigma(q)` for candidate indices.
+        r"""Score candidate indices under the configured direct-score condition.
 
         ``candidates=None`` scores the complete global index layer.
         """
 
         indices = self._resolve_candidate_indices(candidates, q.device)
         gamma = torch.sigmoid(q)
-        return gamma @ self.A[:, indices] + self.a0[indices]
+        if self.score_mode == "centered":
+            gamma = gamma - 0.5
+        return gamma @ self.A[:, indices] + self.index_bias(indices)
+
+    def index_bias(
+        self,
+        candidates: Int[Tensor, " indices"] | Sequence[int] | None = None,
+    ) -> Float[Tensor, " indices"]:
+        r"""Return the effective index offset for the configured score mode.
+
+        ``softplus-bias`` is QTB's factorized-Bernoulli log-normalizer
+        :math:`a_{0,k}=-\sum_l\operatorname{softplus}(a_{l,k})`. It is explicit
+        in current-arXiv Equation (31) and follows from latest-draft Equations
+        (25), (32)-(34).
+        """
+
+        indices = self._resolve_candidate_indices(candidates, self.A.device)
+        if self.a0 is not None:
+            return self.a0[indices]
+        if self.score_mode == "softplus-bias":
+            return -F.softplus(self.A[:, indices]).sum(dim=0)
+        return self.A.new_zeros(indices.shape)
 
     def attend(
         self,

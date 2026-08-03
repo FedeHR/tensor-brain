@@ -8,7 +8,7 @@ from tb import QTBEvolution, TensorBrain
 
 
 def make_brain() -> TensorBrain:
-    brain = TensorBrain(2, 3, QTBEvolution(2, 2))
+    brain = TensorBrain(2, 3, QTBEvolution(2, 2), score_mode="learned-bias")
     with torch.no_grad():
         brain.A.copy_(torch.tensor([[1.0, -1.0, 0.5], [0.0, 2.0, -0.5]]))
         brain.a0.copy_(torch.tensor([0.1, -0.2, 0.3]))
@@ -59,6 +59,30 @@ def test_omitted_candidates_score_the_complete_global_index_set() -> None:
     expected = brain.a0 + brain.A.T @ q.sigmoid()
 
     torch.testing.assert_close(brain.index_scores(q), expected)
+
+
+def test_softplus_bias_matches_the_qtb_bernoulli_normalizer() -> None:
+    brain = TensorBrain(2, 3, evolution=None, score_mode="softplus-bias")
+    with torch.no_grad():
+        brain.A.copy_(torch.tensor([[1.0, -1.0, 0.5], [0.0, 2.0, -0.5]]))
+    q = torch.tensor([0.4, -0.7])
+    candidates = torch.tensor([0, 2])
+    expected_bias = -torch.nn.functional.softplus(brain.A[:, candidates]).sum(dim=0)
+
+    torch.testing.assert_close(brain.index_bias(candidates), expected_bias)
+    torch.testing.assert_close(
+        brain.index_scores(q, candidates),
+        expected_bias + brain.A[:, candidates].T @ q.sigmoid(),
+    )
+    brain.index_scores(q, candidates).sum().backward()
+    assert brain.a0 is None
+    assert brain.A.grad is not None
+
+
+def test_centered_scores_remove_the_neutral_half_activation() -> None:
+    brain = TensorBrain(2, 3, evolution=None, score_mode="centered")
+
+    torch.testing.assert_close(brain.index_scores(torch.zeros(2)), torch.zeros(3))
 
 
 def test_attention_is_expected_index_feedback() -> None:

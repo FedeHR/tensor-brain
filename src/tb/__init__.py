@@ -7,7 +7,7 @@ from tb.evolution import (
     ReLUEvolution,
     VanillaRNNDynamicContext,
 )
-from tb.model import TensorBrain
+from tb.model import ScoreMode, TensorBrain
 from tb.vocabulary import IndexVocabulary, get_candidate_positions
 
 __all__ = [
@@ -16,6 +16,7 @@ __all__ = [
     "OriginalTBDynamicContext",
     "QTBEvolution",
     "ReLUEvolution",
+    "ScoreMode",
     "TensorBrain",
     "VanillaRNNDynamicContext",
     "get_candidate_positions",

@@ -73,7 +73,12 @@ def train_variant(
 
     torch.manual_seed(seed)
     problem = make_xor_problem()
-    brain = TensorBrain(2, 2, make_evolution(variant, 2, hidden_dim))
+    brain = TensorBrain(
+        2,
+        2,
+        make_evolution(variant, 2, hidden_dim),
+        score_mode="learned-bias",
+    )
     optimizer = torch.optim.Adam(brain.parameters(), lr=learning_rate)
     losses: list[float] = []
 

@@ -9,7 +9,7 @@ from typing import Any
 import torch
 from torch import Tensor
 
-from experiments.pvsg.models import IntegralTB, PDirect, PerceptionOutputs
+from experiments.pvsg.models import IntegralTB, ObjectOutputs, PDirect, PerceptionOutputs
 
 
 def _summary(values: Tensor) -> dict[str, float]:
@@ -78,6 +78,57 @@ def state_rows(trace: Mapping[str, Mapping[str, Tensor]]) -> list[dict[str, Any]
     return rows
 
 
+def operation_rows(trace: Mapping[str, Mapping[str, Tensor]]) -> list[dict[str, Any]]:
+    """Measure how much input, feedback, and evolution move q and the CBS."""
+
+    rows: list[dict[str, Any]] = []
+    operations = (
+        ("input", "q_before_input", "q_after_input"),
+        ("feedback", "q_after_input", "q_after_feedback"),
+        ("evolution", "q_after_feedback", "q_after_evolution"),
+        ("evolution", "q_after_input", "q_after_evolution"),
+    )
+    for window, tensors in trace.items():
+        recorded: set[str] = set()
+        for operation, before_name, after_name in operations:
+            if operation in recorded or before_name not in tensors or after_name not in tensors:
+                continue
+            before = tensors[before_name]
+            after = tensors[after_name]
+            for space, delta in (
+                ("q", after - before),
+                ("cbs", torch.sigmoid(after) - torch.sigmoid(before)),
+            ):
+                rows.append(
+                    {
+                        "kind": "operation_delta",
+                        "window": window,
+                        "operation": operation,
+                        "space": space,
+                        **_vector_summary(delta),
+                    }
+                )
+            recorded.add(operation)
+    return rows
+
+
+def raw_input_rows(batch: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Summarize cached feature norms before experiment normalization."""
+
+    rows = []
+    for key, values in batch.items():
+        if not key.endswith("_raw_l2") or not isinstance(values, Tensor):
+            continue
+        rows.append(
+            {
+                "kind": "raw_input_norm",
+                "source": key.removesuffix("_raw_l2"),
+                **_summary(values),
+            }
+        )
+    return rows
+
+
 def feedback_rows(trace: Mapping[str, Mapping[str, Tensor]]) -> list[dict[str, Any]]:
     """Summarize actual and counterfactual identity feedback at each entity window."""
 
@@ -129,7 +180,6 @@ def readout_rows(
     trace = outputs.get("trace")
     if trace is None:
         raise ValueError("readout diagnostics require a traced model forward pass")
-    brain = model.brain
     q_by_group: dict[str, tuple[str, Tensor]] = {
         "identity/subject": ("subject", trace["subject"]["q_after_input"]),
         "identity/object": ("object", trace["object"]["q_after_input"]),
@@ -144,40 +194,74 @@ def readout_rows(
         q_by_group[f"{group}/subject"] = ("subject", trace["subject"][category_q_name])
         q_by_group[f"{group}/object"] = ("object", trace["object"][category_q_name])
 
+    return _readout_scale_rows(model, q_by_group, candidates_by_group)
+
+
+def _readout_scale_rows(
+    model: PDirect | IntegralTB,
+    q_by_group: Mapping[str, tuple[str, Tensor]],
+    candidates_by_group: Mapping[str, Tensor],
+) -> list[dict[str, Any]]:
+    brain = model.brain
     rows: list[dict[str, Any]] = []
     for readout, (window, q) in q_by_group.items():
         base_group = readout.removesuffix("/subject").removesuffix("/object")
-        if base_group.startswith("identity/"):
+        if base_group.startswith("identity"):
             base_group = "identity"
         candidates = candidates_by_group[base_group].to(brain.A.device)
         columns = brain.A[:, candidates]
-        bias = brain.a0[candidates]
-        neutral_scores = bias + 0.5 * columns.sum(dim=0)
-        centered_scores = (torch.sigmoid(q) - 0.5) @ columns
+        bias = brain.index_bias(candidates)
+        neutral_scores = brain.index_scores(q.new_zeros(brain.state_dim), candidates)
+        data_scores = brain.index_scores(q, candidates) - neutral_scores
         neutral_std = neutral_scores.detach().float().std(unbiased=False)
-        centered_std = centered_scores.detach().float().std(unbiased=False)
+        data_std = data_scores.detach().float().std(unbiased=False)
         rows.append(
             {
                 "kind": "readout",
                 "window": window,
                 "group": readout,
                 "candidate_count": int(candidates.numel()),
+                "score_mode": brain.score_mode,
                 "A_column_norm_mean": float(columns.detach().float().norm(dim=0).mean()),
                 "A_column_norm_std": float(
                     columns.detach().float().norm(dim=0).std(unbiased=False)
                 ),
-                "a0_mean": float(bias.detach().float().mean()),
-                "a0_std": float(bias.detach().float().std(unbiased=False)),
+                "score_offset_mean": float(bias.detach().float().mean()),
+                "score_offset_std": float(bias.detach().float().std(unbiased=False)),
                 "neutral_score_mean": float(neutral_scores.detach().float().mean()),
                 "neutral_score_std": float(neutral_std),
-                "centered_score_mean": float(centered_scores.detach().float().mean()),
-                "centered_score_std": float(centered_std),
-                "neutral_over_centered_std": float(
-                    neutral_std / centered_std.clamp_min(1e-12)
+                "data_dependent_score_mean": float(data_scores.detach().float().mean()),
+                "data_dependent_score_std": float(data_std),
+                "neutral_over_data_std": float(
+                    neutral_std / data_std.clamp_min(1e-12)
                 ),
             }
         )
     return rows
+
+
+def object_readout_rows(
+    model: PDirect | IntegralTB,
+    outputs: ObjectOutputs,
+    candidates_by_group: Mapping[str, Tensor],
+) -> list[dict[str, Any]]:
+    """Measure score scales for a single-entity schedule."""
+
+    trace = outputs.get("trace")
+    if trace is None:
+        raise ValueError("readout diagnostics require a traced model forward pass")
+    category_q = trace["object"].get(
+        "q_after_feedback", trace["object"]["q_after_input"]
+    )
+    q_by_group = {"identity": ("object", trace["object"]["q_after_input"])}
+    q_by_group.update(
+        {
+            group: ("object", category_q)
+            for group in candidates_by_group
+            if group.startswith("object_category/")
+        }
+    )
+    return _readout_scale_rows(model, q_by_group, candidates_by_group)
 
 
 def gradient_rows(
@@ -200,14 +284,14 @@ def gradient_rows(
         )
 
     brain = model.brain
-    if brain.A.grad is None or brain.a0.grad is None:
+    if brain.A.grad is None:
         return rows
     for group, candidates in candidates_by_group.items():
         candidates = candidates.to(brain.A.device)
-        for parameter_name, gradient in (
-            ("brain.A", brain.A.grad[:, candidates]),
-            ("brain.a0", brain.a0.grad[candidates]),
-        ):
+        gradients = [("brain.A", brain.A.grad[:, candidates])]
+        if brain.a0 is not None and brain.a0.grad is not None:
+            gradients.append(("brain.a0", brain.a0.grad[candidates]))
+        for parameter_name, gradient in gradients:
             rows.append(
                 {
                     "kind": "gradient_group",
@@ -224,6 +308,7 @@ def scale_trace_rows(
     model: PDirect | IntegralTB,
     outputs: PerceptionOutputs,
     candidates_by_group: Mapping[str, Tensor],
+    batch: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Return all scalar scale diagnostics for one forward/backward checkpoint."""
 
@@ -231,8 +316,31 @@ def scale_trace_rows(
     if trace is None:
         raise ValueError("scale diagnostics require return_trace=True")
     return [
+        *raw_input_rows(batch or {}),
         *state_rows(trace),
+        *operation_rows(trace),
         *feedback_rows(trace),
         *readout_rows(model, outputs, candidates_by_group),
+        *gradient_rows(model, candidates_by_group),
+    ]
+
+
+def object_scale_trace_rows(
+    model: PDirect | IntegralTB,
+    outputs: ObjectOutputs,
+    candidates_by_group: Mapping[str, Tensor],
+    batch: Mapping[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Return the same diagnostics for the scene-and-single-entity schedule."""
+
+    trace = outputs.get("trace")
+    if trace is None:
+        raise ValueError("scale diagnostics require return_trace=True")
+    return [
+        *raw_input_rows(batch or {}),
+        *state_rows(trace),
+        *operation_rows(trace),
+        *feedback_rows(trace),
+        *object_readout_rows(model, outputs, candidates_by_group),
         *gradient_rows(model, candidates_by_group),
     ]
