@@ -27,6 +27,10 @@ def _batch():
         "subject_features": torch.tensor([[0.2, 1.0], [0.5, -0.4]]),
         "object_features": torch.tensor([[1.0, -0.1], [-0.2, 0.7]]),
         "union_features": torch.tensor([[0.4, 0.9], [0.8, -0.6]]),
+        "scene_raw_l2": torch.tensor([3.0, 4.0]),
+        "subject_raw_l2": torch.tensor([1.0, 2.0]),
+        "object_raw_l2": torch.tensor([2.0, 3.0]),
+        "union_raw_l2": torch.tensor([4.0, 5.0]),
         "subject_identity": ("identity:dog", "identity:ball"),
         "object_identity": ("identity:ball", "identity:dog"),
         "subject_category": ("dog", "ball"),
@@ -70,7 +74,16 @@ def test_integral_runner_supports_each_evolution_and_scale_trace(
     ]
 
     kinds = {row["kind"] for row in rows}
-    assert {"state", "cbs", "attention", "feedback", "readout", "gradient"} <= kinds
+    assert {
+        "raw_input_norm",
+        "state",
+        "cbs",
+        "operation_delta",
+        "attention",
+        "feedback",
+        "readout",
+        "gradient",
+    } <= kinds
     applied = next(
         row
         for row in rows
@@ -87,7 +100,7 @@ def test_integral_runner_supports_each_evolution_and_scale_trace(
     )
     assert set(result["evaluation"]) == {"p-sa", "p-samp"}
     stored = json.loads((tmp_path / evolution / "config.json").read_text())
-    assert stored["resolved_evolution"] == evolution
+    assert stored["evolution"] == evolution
 
 
 def test_overfit_runner_can_fit_and_save_a_fixed_batch(tmp_path) -> None:
@@ -105,6 +118,7 @@ def test_overfit_runner_can_fit_and_save_a_fixed_batch(tmp_path) -> None:
     config = OverfitConfig(
         run_name="smoke",
         model="p-direct",
+        score_mode="softplus-bias",
         semantic_condition="source",
         num_examples=2,
         learning_rate=1.0,
@@ -121,7 +135,6 @@ def test_overfit_runner_can_fit_and_save_a_fixed_batch(tmp_path) -> None:
         "batch.jsonl",
         "checkpoint.pt",
         "config.json",
-        "predictions.pt",
         "result.json",
         "scale_trace.jsonl",
         "training_trace.jsonl",
@@ -130,6 +143,7 @@ def test_overfit_runner_can_fit_and_save_a_fixed_batch(tmp_path) -> None:
     assert {path.name for path in (tmp_path / "smoke").iterdir()} == expected
     stored = json.loads((tmp_path / "smoke" / "result.json").read_text())
     assert stored["success"] is True
+    assert json.loads((tmp_path / "smoke" / "config.json").read_text())["model"] == "p-direct"
     assert json.loads((tmp_path / "smoke" / "config.json").read_text())[
-        "resolved_evolution"
-    ] is None
+        "score_mode"
+    ] == "softplus-bias"
