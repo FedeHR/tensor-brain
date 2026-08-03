@@ -318,3 +318,57 @@ The shell variables `PVSG_OVERFIT_EXAMPLES`, `PVSG_OVERFIT_LEARNING_RATE`,
 scientific and optimization choices already recorded in `config.json`. Do not change several of
 them in an unnamed retry. A failed primary run should first be read through its loss, gradient,
 CBS, neutral-score, and feedback traces rather than silently converted into a new architecture.
+
+## Run the first full object grid
+
+After the overfit gate passes, submit exactly 12 object-only conditions:
+
+```text
+evolution:     original, qtb
+score mode:    centered, softplus-bias
+learning rate: 1e-4, 3e-4, 1e-3
+```
+
+All other choices are fixed in `object_grid.sbatch`: RMS-normalized DINO evidence, current
+activation-matched initialization, P-SA training, Adam without weight decay, batch size 128,
+seed 0, 10,000 updates, development validation every 1,000 updates, and a deterministic
+20,000-observation validation subset. Submit the complete array with:
+
+```bash
+cd /nfs/data8/harjes/MASTER/tensor-brain
+source cluster/pvsg/common.sh
+mkdir -p "$SLURM_LOG_ROOT"
+sbatch \
+  --partition=minor \
+  --gres=gpu:1 \
+  --cpus-per-task=3 \
+  --mem=16G \
+  --time=2-00:00:00 \
+  --output="$SLURM_LOG_ROOT/%x-%A_%a.out" \
+  --error="$SLURM_LOG_ROOT/%x-%A_%a.err" \
+  cluster/pvsg/object_grid.sbatch
+```
+
+The script defaults to at most 12 concurrent tasks. Pass `--array=0-11%N` to `sbatch` to lower
+that limit; this changes scheduling only. Array tasks are assigned as follows:
+
+| Task | Evolution | Score mode | Learning rate |
+|---:|---|---|---:|
+| 0 | original | centered | `1e-4` |
+| 1 | original | centered | `3e-4` |
+| 2 | original | centered | `1e-3` |
+| 3 | original | softplus-bias | `1e-4` |
+| 4 | original | softplus-bias | `3e-4` |
+| 5 | original | softplus-bias | `1e-3` |
+| 6 | qtb | centered | `1e-4` |
+| 7 | qtb | centered | `3e-4` |
+| 8 | qtb | centered | `1e-3` |
+| 9 | qtb | softplus-bias | `1e-4` |
+| 10 | qtb | softplus-bias | `3e-4` |
+| 11 | qtb | softplus-bias | `1e-3` |
+
+Each result is written under `$PVSG_RUN_ROOT/object-grid/` with its configuration, vocabulary,
+best checkpoint, train/validation traces, scale diagnostics, and aggregate P-SA and
+P-Samp metrics. Development videos select the checkpoint through hierarchy loss. The final
+within-training blocked interval supplies known-identity re-identification metrics; official
+evaluation videos remain untouched for later confirmatory experiments.

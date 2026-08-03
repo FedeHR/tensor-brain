@@ -130,6 +130,18 @@ with no mask-visible object, with the visible object IDs and feature rows ordere
 This supports explicit sequential-object schedules and makes disappearance and reappearance
 observable without fabricating an object feature during an occlusion.
 
+The initial object program is the single-entity prefix of the original perception algorithm:
+
+```text
+scene input -> evolve
+object mask input -> identity readout -> identity feedback -> unary semantic readouts
+```
+
+The paper writes this operation for its subject window and repeats identity recognition for its
+object window. Applying it to an arbitrary tracked entity is the symmetric PVSG transfer. It
+tests the paper's indexing and unary-decoding operations without making a relation claim; pair
+experiments remain necessary for transport across subject, object, and predicate windows.
+
 ### 2. Positive-pair predicate recognition
 
 For a directed pair `(s,o)` at frame `t`, let `Y_t(s,o)` be the complete set of active
@@ -275,24 +287,37 @@ k^*=\arg\max_{k\in I}z_k,\qquad q'=q+a_{k^*}.
 
 P-Samp is an inference condition, not a separately trained model.
 
+Index scoring is crossed with named neutral-offset conditions. `direct` uses the original TB
+perception score `A.T @ gamma`; `softplus-bias` uses QTB's factorized-Bernoulli log-normalizer;
+`centered` uses `A.T @ (gamma - 0.5)` as a diagnostic control; and `learned-bias` adds an ordinary
+free bias as the repository's previous implementation. The current QTB arXiv states the
+softplus formula explicitly in Equation (31). In the July 22 latest draft, it follows from the
+generic normalizer in Equation (25), the outcome-column state in Equations (32)-(33), and the
+score in Equation (34), although the formula is not restated there. Results retain the condition
+name because the four offsets are not paper-equivalent.
+
 P-Direct is faithful to the broad comparison in the paper, but it is not a matched-information
 causal control: its predicate decision sees the union, whereas the TB transports scene,
-subject, and object evidence into that decision. Before claiming that a gain is specifically
-caused by TB recurrence or feedback, add:
+subject, and object evidence into that decision. The first full comparison therefore also uses:
 
-- a flat fusion model that receives the same four feature sources without TB operations;
-- a separately trained sequential model with dynamic context but no index feedback.
+- a conventional local frozen-DINO linear probe;
+- a flat-fusion MLP that receives the same four feature sources without TB operations;
+- a separately trained Integral schedule with dynamic context but no index feedback;
+- predicate-frequency and directed category-pair priors fitted only on training targets.
 
-These controls follow the first end-to-end validation; they do not complicate the first runner.
+P-SA and P-Samp remain two inference modes of one checkpoint. The no-feedback control is trained
+separately because removing feedback changes the learned solution. Model parameter counts are
+reported; flat fusion matches information, not exact parameterization.
 
 ### Training targets
 
 The identity-only condition uses actual `(video_id, object_id)` indices and predicate indices.
-For a positive-pair batch, the initial probabilistic objective is
+For a positive-pair record with active set `Y_b`, define the uniform categorical target
+`r_bp = 1[p in Y_b] / |Y_b|`. The initial paper-aligned objective is
 
 \[
 \mathcal L_{pair}
-=\frac1B\sum_b\sum_p\operatorname{BCE}(z_{b,p},y_{b,p})
+=-\frac1B\sum_b\sum_p r_{b,p}\log\operatorname{softmax}(z_b)_p
 +\operatorname{CE}(z_S,s)
 +\operatorname{CE}(z_O,o)
 +\sum_{g\in\mathcal G}\left[
@@ -301,14 +326,16 @@ For a positive-pair batch, the initial probabilistic objective is
 \right].
 \]
 
-Summing the predicate Bernoulli terms, rather than silently averaging them over the vocabulary,
-makes this the negative log-likelihood of the multi-label target. The runner logs both the
-summed predicate loss and its per-label mean and both identity losses; the scale trace records
-parameter gradients at the same checkpoints. `G` is empty for the identity-only condition,
+This is ordinary categorical cross-entropy for single-label records and gives simultaneous true
+labels equal mass without discarding them. The runner also logs target entropy and
+`KL(r || softmax(z))`; the KL differs from cross-entropy only by the target-only entropy and is
+used for the zero-optimum overfit criterion. `G` is empty for the identity-only condition,
 contains the official source category for that condition, and contains the four reviewed
 hierarchy levels for the hierarchy condition.
 An unavailable reviewed path uses the ordinary cross-entropy ignore index for that term only.
 No configurable loss weights are introduced until these diagnostics show a concrete problem.
+A separately named Bernoulli-BCE condition remains a possible later extension if simultaneous
+predicate calibration becomes a research target; it is not the initial objective.
 
 The overfit gate uses only pair batches so that it exercises the complete sequential schedule.
 The subsequent full experiment combines those pair rows with object-observation batches, which
@@ -344,6 +371,28 @@ while identity-only and official-category checkpoints are necessary ablations. F
 the identity-only model can later test whether semantic structure emerged without direct
 supervision.
 
+### First full object grid
+
+The first full-data screen deliberately uses only the paper-aligned scene-to-object schedule,
+not relation batches. It crosses original recurrent and QTB evolution with `centered` and
+`softplus-bias` scoring at learning rates `1e-4`, `3e-4`, and `1e-3`. Every other choice is
+fixed: RMS-normalized DINO input, activation-matched initialization, P-SA training, Adam without
+weight decay, batch size 128, seed 0, and 10,000 updates.
+
+The model-selection signal is the sum of the four hierarchy cross-entropies on a deterministic
+20,000-observation subset of held-out development videos every 1,000 updates. Novel development
+identities are not inserted into the training identity group; category labels absent from the
+training-supported candidate groups are counted and ignored. After selecting the best
+checkpoint, the runner evaluates P-SA and P-Samp on all development observations for semantic
+transfer and on the training-role blocked interval for known-identity re-identification. The
+official evaluation videos are not consumed by this screen.
+
+The fixed diagnostic batch is independent of the optimization batches and is reused at steps
+0, 1, 10, 100, 1,000, 5,000, 10,000, and the selected checkpoint. Its trace records the scale,
+saturation, score, feedback, attention, and gradient quantities defined in the fidelity ledger.
+The experiment is therefore informative about TB mechanisms while still serving its immediate
+purpose: choose one score/evolution/learning-rate configuration before paper-ready experiments.
+
 ### Tiny-data overfit gate
 
 Before any comparison or full-data training, `experiments/pvsg/overfit.py` loads the first 200
@@ -352,12 +401,14 @@ batch. A manifest prefix is an I/O-efficient deterministic diagnostic selection,
 of population performance. Its identity candidate set contains exactly the entities occurring in
 that batch; predicate candidates remain the complete train-supported closed set. The default
 condition is Integral TB with the original recurrent dynamic context and reviewed hierarchy
-supervision. Identity-only and official-source-category conditions are explicit alternatives.
+supervision using the original TB `direct` score. Identity-only, official-source-category, and
+the other named score conditions are explicit alternatives.
 
 The optimizer is ordinary Adam over the complete model. The gate succeeds only when every
 enabled identity, predicate, and available category target is correct for every example and the
-unweighted total objective is at most `0.01`. Initialization, fixed early checkpoints, and the
-final state are diagnosed on this same batch. This runner intentionally contains no baseline
+unweighted total objective above irreducible predicate target entropy is at most `0.01`.
+Initialization, fixed early checkpoints, and the final state are diagnosed on this same batch.
+This runner intentionally contains no baseline
 composer, callback system, full-dataset sampler, or validation protocol; those belong to the
 subsequent experiment after the computational graph has passed the overfit gate.
 
@@ -365,8 +416,8 @@ Each run directory is immutable and contains:
 
 - `config.json`, `vocabulary.json`, and `batch.jsonl` for exact reconstruction;
 - `training_trace.jsonl` and `scale_trace.jsonl` for optimization and scale analysis;
-- `checkpoint.pt`, `predictions.pt`, and `result.json` for the final P-SA checkpoint and its
-  evaluation-only P-Samp readout.
+- `checkpoint.pt` and `result.json` for the final P-SA checkpoint and its evaluation-only
+  P-Samp metrics.
 
 ### Input-scale and initialization trace
 
@@ -375,23 +426,23 @@ tiny overfit and full training run must therefore evaluate it on a fixed, versio
 batch and write `scale_trace.jsonl`. Each row identifies the run, checkpoint step, evidence
 window, candidate group, and feedback mode. It records:
 
-- input-drive and pre-CBS `q` norm, component RMS, mean, and standard deviation after integration,
-  index feedback, and evolution;
+- raw cached DINO norms and normalized input-drive norms;
+- pre-CBS `q` norm, component RMS, mean, and standard deviation after integration, index
+  feedback, and evolution;
+- the delta caused by each operation in both `q` and `gamma = sigmoid(q)` coordinates;
 - `gamma = sigmoid(q)` quantiles and the fractions below `0.01` and above `0.99`;
-- `A` column-norm and `a0` summaries for identity, category, and predicate groups;
-- the effective neutral-state score offset
-  `a0[k] + 0.5 * sum_i A[i, k]`, the centered data-dependent score
-  `A[:, k]^T (gamma - 0.5)`, and their dispersion ratio;
+- `A` column-norm and effective score-offset summaries for identity, category, and predicate groups;
+- the configured score at neutral `q = 0`, the data-dependent difference from that score, and
+  their dispersion ratio;
 - P-SA expected-feedback and winner-feedback norms relative to both the current input drive and
   pre-feedback `q`, together with attention entropy and maximum probability;
-- gradient norms for `A`, `a0`, each evolution parameter, and any input or feedback gate present
-  in that named condition.
+- gradient norms for `A`, a learned bias when present, each evolution parameter, and any input
+  or feedback gate present in that named condition.
 
 The diagnostic batch stores its native video/frame/object addresses and is reused across steps,
 models, seeds, and normalization ablations. Required capture points are initialization before any
 optimizer step, fixed early steps, and the final checkpoint; the exact cadence belongs in
-`config.json`. Raw per-example tensors may be retained in `predictions.pt`, while
-`scale_trace.jsonl` contains aggregation-ready scalar summaries. Any future input mapping,
+`config.json`. `scale_trace.jsonl` contains aggregation-ready scalar summaries. Any future input mapping,
 centering, gate, or initialization change receives a new condition name and ledger entry and is
 compared on the same raw cached DINO features rather than replacing the feature snapshot.
 
@@ -434,7 +485,7 @@ This protocol is causal: evaluation never includes frames earlier than the train
 
 ### `fewshot`
 
-Few-shot evaluation is an explicit re-identification experiment, not a row split. A base model
+Few-shot evaluation is an explicit object-only re-identification experiment, not a row split. A base model
 is trained on the model-selection training videos. Development-video identities provide the
 model-selection counterpart and official-validation identities remain the final evaluation. Each
 eligible identity contributes its earliest ten mask-visible observations separated by at least
@@ -446,8 +497,8 @@ seconds) after the tenth support observation. A pair query begins only after bot
 have been enrolled and passed this embargo.
 
 This definition prevents later predicate records from giving an identity more than `k`
-exposures. It is intentionally implemented after the held-out and blocked pipelines are
-validated.
+exposures. Enrollment and object queries use the single-entity schedule and require no relation
+evidence. Pair queries are an optional later test after both participants have been enrolled.
 
 Random frame splitting is only a leakage diagnostic and is never a headline result.
 
@@ -455,7 +506,7 @@ Random frame splitting is only a leakage diagnostic and is never a headline resu
 
 For positive-pair predicate recognition, report:
 
-- predicate negative log-likelihood and per-label BCE;
+- categorical predicate cross-entropy, target entropy, and KL;
 - micro, macro, and per-example Recall@K;
 - Precision@K and mean/per-predicate average precision;
 - per-predicate support;
@@ -469,19 +520,17 @@ Each run writes:
 
 ```text
 config.json
-provenance.json
-split.json
+vocabulary.json
 checkpoint.pt
-results.json
-predictions.pt
+result.json
 scale_trace.jsonl
-tensorboard/
+training_trace.jsonl
+validation_trace.jsonl  # when the experiment has validation
 ```
 
-`predictions.pt` retains frame and object addresses, union boxes, complete predicate targets
-and logits, compact identity retrievals, and condition labels. Quantitative tables and
-qualitative overlays are generated later from these artifacts; plotting is not part of the
-training loop.
+Dataset snapshots already own detailed data provenance. Training runs retain only the
+configuration and aggregate evidence needed to interpret the checkpoint; per-example
+predictions are produced only by experiments that actually analyze them.
 
 ## Implementation order
 

@@ -34,7 +34,7 @@ The code preserves the paper symbols:
 - `context`: optional state of the chosen evolution backend; for the original TB recurrence,
   this is the dynamic-context preactivation `h`;
 - `A[:, k]`: embedding `a_k` of global symbolic index `k`;
-- `a0[k]`: bias of index `k`.
+- `a0[k]`: effective score offset of index `k` when the selected score mode has one.
 
 The core operations are:
 
@@ -88,11 +88,27 @@ remain visible at each concept window.
 
 ## Measurement
 
-For candidate index `k`, the score is
+The score path is an explicit experimental condition. The default `direct` mode preserves the
+original TB perception equation `A[:, k] @ sigmoid(q)`. `learned-bias` preserves the
+repository's initial implementation:
 
 ```text
-a0[k] + A[:, k] @ sigmoid(q)
+b[k] + A[:, k] @ sigmoid(q)
 ```
+
+`centered` replaces `sigmoid(q)` with `sigmoid(q) - 0.5`, and
+`softplus-bias` implements QTB's factorized-Bernoulli log-normalizer
+
+```text
+a0[k] = -sum_l softplus(A[l, k]).
+```
+
+The current arXiv version states this formula explicitly in Equation (31). In the July 22 latest
+draft, it follows by applying the generic Bernoulli normalizer in Equation (25) to the index-column
+state `q = a_k` in Equations (32)-(33), before `a0,k` enters the outcome score in Equation (34).
+It is therefore derived from `A`, not independently learned. These named alternatives preserve
+the same shared matrix for scoring and feedback and make the neutral-state offset a controlled
+question rather than an implicit preprocessing choice.
 
 After sampling or supplying an outcome, the generalized QTB update is
 
@@ -174,10 +190,10 @@ claim that one activation is universally better.
 
 ## Bottom-up index scoring extensions
 
-The default score path remains the paper equation
+The paper-facing direct score path is
 
 ```text
-scores = a0[candidates] + A[:, candidates].T @ sigmoid(q)
+scores = A[:, candidates].T @ sigmoid(q)
 ```
 
 It is scientifically reasonable to add a learned bottom-up adapter between `gamma` and the
@@ -190,7 +206,7 @@ baseline.
 ## Index vocabulary
 
 `IndexVocabulary` contains names and candidate groups but no learned parameters. Its global
-index `k` refers to column `A[:, k]` and bias `a0[k]` in `TensorBrain`. Save the vocabulary
+index `k` refers to column `A[:, k]` and any effective score offset in `TensorBrain`. Save the vocabulary
 next to model checkpoints because changing label order changes the meaning of the learned
 columns.
 
