@@ -129,6 +129,62 @@ the best-guess learning rate rather than restoring a full crossed axis. Cost: +1
 
 ---
 
+## Is the single-object task hard enough for feedback to matter?
+
+Short answer: **no, and this needs to be said out loud before the results come back.** The
+single-object schedule is close to the weakest possible test of index feedback. Three structural
+reasons:
+
+**1. Feedback adds no information here — only a re-representation.** The injected vector is
+`Σ_k p_k(q) a_k`, a deterministic function of `q`. So the update is `q' = q + f(q)`: nothing enters
+the state that was not already in it. It can help only by making the category readout *linearly*
+decodable when `γ(q)` alone was not — i.e. it is one step of soft nearest-prototype attention, not a
+memory retrieval. In the paper's intended regime feedback is a memory operation because the index
+carries information the current input does not (the `Y/O` column of Table 5, learnable *only* for
+known entities). Here every supervised target is derivable from the current frame.
+
+**2. Identity determines category by construction.** `category` is a per-track constant in the
+manifests, so identity → category is a noiseless lookup. But identity is a ~4 600-way problem and
+fine category is 121-way, so identity is *strictly harder*. A model good enough to exploit the
+lookup could already read the category directly.
+
+**3. In this schedule feedback cannot touch identity at all.** `forward_object` computes
+`identity_logits` from `q_after_input`, *before* `_identity_feedback`. That is correct — it matches
+Algorithm 1 lines 18–22 — but it means the only place `p-sa` and `none` can differ within one
+checkpoint is the **category** readouts. Do not build a results table that expects otherwise.
+(Across separately trained arms identity can still differ, because the category loss backpropagates
+through the feedback into `A`.)
+
+**Predict the result now, in writing:** `none ≈ p-sa` overall. That is a correct finding about *this
+task*, not about the Tensor Brain, and stating the prediction in advance is what stops it from being
+read as a refutation later.
+
+### The fix that fits the hour: stratify, do not redesign
+
+Feedback becomes a memory operation exactly when the index is established at a different time, or
+under better evidence, than when it is used. Two such axes are already in the manifests and cost
+**evaluation-side changes only — no retraining, no new runs**:
+
+- **Mask area.** Measured on the proxy track data (244 694 observations): the median mask is 15 384
+  px, but **15.4 % of observations fall below one DINOv3 patch (~2 057 source px) and 36.4 % below
+  four patches**. In that stratum the pooled feature is largely background and the visual evidence is
+  genuinely insufficient. That is a real information deficit, it is well populated, and it is where
+  feedback has something to contribute. Bin every metric by mask-area decile.
+- **Recency.** `blocked/evaluation_objects.jsonl` already carries `frames_since_last_observation`.
+  Bin by it.
+
+The headline figure of this chapter is the crossing point: feedback's contribution as a function of
+how degraded the evidence is. This is the cheap core of experiment **E-B**, and it turns an expected
+null into a curve.
+
+### One more eval-only probe worth three lines
+
+Record the category logits from `q_after_input` alongside the supervised ones from
+`q_after_feedback`. Same forward pass, same `A` columns, supervision unchanged — so it is a
+**paired, within-checkpoint** measurement of exactly what feedback contributed to each category
+decision. Far stronger than comparing two separately trained models, and immune to the seed and
+optimization noise that separates them.
+
 ## Deliberately not now
 
 - **`PDirect` / M0–M1 rungs.** Different `forward_object` signature, and confounded as a control
