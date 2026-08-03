@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from experiments.pvsg.snapshot_io import read_json
+from experiments.pvsg.io import read_json
 
 SEMANTIC_INVENTORY_PATH = Path(__file__).with_name("semantic_inventory.json")
 

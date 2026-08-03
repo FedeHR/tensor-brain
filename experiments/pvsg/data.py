@@ -15,7 +15,7 @@ from torch import Tensor
 from torch.utils.data import Dataset, Sampler, default_collate
 
 from experiments.pvsg.extract import FEATURE_SCHEMA_VERSION, load_feature_artifact
-from experiments.pvsg.snapshot_io import read_jsonl
+from experiments.pvsg.io import read_jsonl
 
 NORMALIZATION_EPSILON = 1e-12
 _FEATURE_TABLES = ("scene_features", "object_features", "union_features")

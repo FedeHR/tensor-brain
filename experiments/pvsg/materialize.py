@@ -18,6 +18,7 @@ from typing import Any, TextIO
 from experiments.pvsg.audit import validate_feature_artifact
 from experiments.pvsg.extract import FEATURE_SCHEMA_VERSION, load_feature_artifact
 from experiments.pvsg.hierarchy import load_object_hierarchy
+from experiments.pvsg.io import read_json, read_jsonl, sha256_file, write_json
 from experiments.pvsg.prepare import PVSG_HUB_REVISION, PVSG_JSON_SHA256
 from experiments.pvsg.protocols import (
     DEVELOPMENT_FRACTION,
@@ -33,7 +34,6 @@ from experiments.pvsg.records import (
     load_exclusions,
     relation_targets,
 )
-from experiments.pvsg.snapshot_io import read_json, read_jsonl, sha256_file
 
 MANIFEST_SCHEMA_VERSION = 2
 ONTOLOGY_SCHEMA_VERSION = 1
@@ -69,11 +69,6 @@ JSONL_PATHS = (
 )
 
 
-def _write_json(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
-
-
 def _write_row(handle: TextIO, row: dict[str, Any]) -> None:
     handle.write(json.dumps(row, separators=(",", ":"), sort_keys=False) + "\n")
 
@@ -89,24 +84,21 @@ def _git_revision(repository: Path) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def _official_splits(annotation: dict[str, Any]) -> dict[str, str]:
-    result = {}
-    for _source, splits in annotation["split"].items():
-        for split in ("train", "val"):
-            for video_id in splits[split]:
-                if video_id in result:
-                    raise ValueError(f"video occurs more than once in official splits: {video_id}")
-                result[video_id] = split
-    return result
-
-
-def _annotation_sources(annotation: dict[str, Any]) -> dict[str, str]:
-    result = {}
+def _annotation_video_tables(
+    annotation: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, str]]:
+    official_splits = {}
+    sources = {}
     for source, splits in annotation["split"].items():
         for split in ("train", "val"):
             for video_id in splits[split]:
-                result[video_id] = source
-    return result
+                if video_id in official_splits:
+                    raise ValueError(
+                        f"video occurs more than once in official splits: {video_id}"
+                    )
+                official_splits[video_id] = split
+                sources[video_id] = source
+    return official_splits, sources
 
 
 def _experiment_splits(
@@ -296,8 +288,7 @@ def materialize_manifests(
     videos = {video["video_id"]: video for video in annotation["data"]}
     if set(videos) != set(manifest_by_video):
         raise ValueError("annotation and extraction manifest video IDs differ")
-    official_split = _official_splits(annotation)
-    source_by_video = _annotation_sources(annotation)
+    official_split, source_by_video = _annotation_video_tables(annotation)
     for video_id, video in videos.items():
         row = manifest_by_video[video_id]
         meta = video["meta"]
@@ -681,7 +672,7 @@ def materialize_manifests(
                 for _, _, predicate, _spans in video["relations"]
             }
         )
-        _write_json(
+        write_json(
             staging / "ontology.json",
             {
                 "schema_version": ONTOLOGY_SCHEMA_VERSION,
@@ -706,8 +697,8 @@ def materialize_manifests(
                 "identities": identities,
             },
         )
-        _write_json(staging / "object_hierarchy.json", hierarchy)
-        _write_json(
+        write_json(staging / "object_hierarchy.json", hierarchy)
+        write_json(
             staging / "splits.json",
             {
                 "schema_version": SPLIT_SCHEMA_VERSION,
@@ -730,8 +721,8 @@ def materialize_manifests(
                 },
             },
         )
-        _write_json(staging / "span_issues.json", span_issues)
-        _write_json(
+        write_json(staging / "span_issues.json", span_issues)
+        write_json(
             staging / "fewshot/base_training.json",
             {
                 "objects": "../heldout_video/train_objects.jsonl",
@@ -818,7 +809,7 @@ def materialize_manifests(
             ],
             "files": file_manifest,
         }
-        _write_json(staging / "provenance.json", provenance)
+        write_json(staging / "provenance.json", provenance)
         os.replace(staging, output_root)
         return provenance
     except Exception:

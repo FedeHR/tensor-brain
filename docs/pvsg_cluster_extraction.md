@@ -287,3 +287,34 @@ rm -rf -- /nfs/data8/harjes/MASTER/data/pvsg/manifests/section6-v1.previous
 
 Staging first means a failed materialization cannot damage the existing snapshot. The old
 snapshot remains recoverable until the candidate has been inspected and promoted successfully.
+
+## Run the tiny-data overfit gate
+
+The first learning job uses one fixed 200-pair batch, so it does not need a full-dataset
+`DataLoader` or additional baselines. Give every attempt a unique descriptive name; the runner
+refuses to replace an existing run directory. For the primary paper-motivated condition:
+
+```bash
+cd /nfs/data8/harjes/MASTER/tensor-brain
+PVSG_OVERFIT_RUN_NAME=integral-original-hierarchy-overfit-seed0 \
+  ./cluster/pvsg/submit_overfit.sh \
+  --partition=minor \
+  --gres=gpu:1 \
+  --cpus-per-task=2 \
+  --mem=8G \
+  --time=02:00:00
+```
+
+This trains Integral TB with the original recurrent dynamic context, a hidden dimension equal to
+the 768-dimensional DINO state, reviewed hierarchy supervision, Adam at `1e-3`, and at most 5,000
+updates. It exits nonzero if the exact-target plus `loss <= 0.01` gate is not reached, but still
+saves the checkpoint and complete diagnostic result under
+`$PVSG_RUN_ROOT/overfit/$PVSG_OVERFIT_RUN_NAME/`. The Slurm log also reports sampled GPU memory
+and utilization.
+
+The shell variables `PVSG_OVERFIT_EXAMPLES`, `PVSG_OVERFIT_LEARNING_RATE`,
+`PVSG_OVERFIT_MAX_STEPS`, `PVSG_OVERFIT_HIDDEN_DIM`, `PVSG_OVERFIT_MODEL`,
+`PVSG_OVERFIT_EVOLUTION`, `PVSG_OVERFIT_SEMANTIC`, and `PVSG_OVERFIT_SEED` expose only the named
+scientific and optimization choices already recorded in `config.json`. Do not change several of
+them in an unnamed retry. A failed primary run should first be read through its loss, gradient,
+CBS, neutral-score, and feedback traces rather than silently converted into a new architecture.

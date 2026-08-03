@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import json
 import os
 from pathlib import Path
 from typing import Any
@@ -12,6 +11,7 @@ from typing import Any
 import torch
 
 from experiments.pvsg.features import FrameRegionFeatures, extract_frame_regions
+from experiments.pvsg.io import read_jsonl
 from experiments.pvsg.prepare import PVSG_HUB_REVISION, PVSG_JSON_SHA256
 
 DINO_MODEL_ID = "facebook/dinov3-vitb16-pretrain-lvd1689m"
@@ -70,8 +70,7 @@ def split_dinov3_tokens(
 
 
 def _read_manifest(path: Path) -> list[dict[str, Any]]:
-    with path.open("r", encoding="utf-8") as handle:
-        rows = [json.loads(line) for line in handle if line.strip()]
+    rows = read_jsonl(path)
     keys = [(row["source"], row["video_id"]) for row in rows]
     if len(keys) != len(set(keys)):
         raise ValueError("the extraction manifest contains duplicate source/video IDs")

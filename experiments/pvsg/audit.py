@@ -20,9 +20,9 @@ from experiments.pvsg.extract import (
     FEATURE_SCHEMA_VERSION,
     load_feature_artifact,
 )
+from experiments.pvsg.io import read_json, read_jsonl, sha256_file
 from experiments.pvsg.prepare import PVSG_JSON_SHA256
 from experiments.pvsg.records import active_predicates, inclusive_clipped_frames, load_exclusions
-from experiments.pvsg.snapshot_io import read_json, read_jsonl, sha256_file
 
 SpanConvention = Literal["half_open", "inclusive", "inclusive_clipped"]
 FEATURE_TABLES = ("scene_features", "object_features", "union_features")

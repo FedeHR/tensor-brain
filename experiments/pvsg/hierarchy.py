@@ -6,8 +6,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from experiments.pvsg.io import read_json
 from experiments.pvsg.prepare import PVSG_JSON_SHA256
-from experiments.pvsg.snapshot_io import read_json
 
 OBJECT_HIERARCHY_PATH = Path(__file__).with_name("object_hierarchy.json")
 CATEGORY_LEVELS = ("fine", "basic", "coarse")

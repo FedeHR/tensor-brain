@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from experiments.pvsg.io import read_json
 
 EXCLUSIONS_PATH = Path(__file__).with_name("exclusions.json")
 
@@ -26,8 +27,7 @@ class SpanIssue:
 def load_exclusions(path: Path = EXCLUSIONS_PATH) -> dict[str, dict[str, Any]]:
     """Load and validate the reviewed source-video exclusion allowlist."""
 
-    with path.open("r", encoding="utf-8") as handle:
-        document = json.load(handle)
+    document = read_json(path)
     if document.get("schema_version") != 1 or not isinstance(document.get("videos"), list):
         raise ValueError(f"invalid PVSG exclusion document: {path}")
     exclusions = {}
