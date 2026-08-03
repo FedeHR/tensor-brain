@@ -6,10 +6,10 @@
 module boundaries, and `diagnostics.py`, which is precisely the instrument the S1 scale question
 needs. Rolling back costs days and gains nothing.
 
-**Do not send exactly as-is either** — not because the code is bad, but because of one fidelity
-problem that would make the pilot uninterpretable (**C1** below): the object experiment can only be
-run with `centered` or `softplus-bias`, and neither of those is the paper's score equation. You
-would be settling the scale question without the baseline in the comparison.
+**Do not send exactly as-is either** — not because the code is bad, but because the pilot's two
+score-mode arms (`centered` and `softplus-bias`) are *both* already corrected for the offset problem
+of issue M17, so the run cannot show what the correction buys. Adding the uncorrected original-TB
+arm (`direct`) costs one run and turns the pilot into a real contrast. See **C1b**.
 
 **The honest diagnosis is that the code is not chaotic — it is early.** The structure is right. The
 volume comes from three locatable places, and only one of them is worth fixing before the pilot.
@@ -62,35 +62,73 @@ of the scientific model.
 
 ## Correctness and fidelity issues
 
-### C1 — must fix before the pilot: the paper's score equation is not runnable
+### C1 — `softplus-bias` is the paper-faithful mode; only its equation number is wrong
 
-`src/tb/model.py` changed `a0` from an always-present learned parameter to one that exists **only**
-in `score_mode="learned-bias"`. The default is now `"direct"`, which registers `a0 = None` and
-returns a zero bias. So:
+*(Corrected after checking `papers/qtb_LATEST.pdf` directly. My first pass claimed the softplus form
+was a derived interpretation rather than a paper equation. It is a paper equation.)*
 
-- The name `direct` now denotes a **new no-bias ablation**, not the paper equation. Anyone reading
-  `score_mode: ScoreMode = "direct"` will reasonably assume the opposite.
-- `object_experiment.py:317` restricts `--score-mode` to `("centered", "softplus-bias")`. **The
-  paper-faithful arm cannot be selected at all**, so the first full run compares two non-paper
-  variants against each other.
+The chain in the latest QTB, verified on the PDF:
 
-QTB Equation (40) is `P(k) ← z_k softmax(a_{0,k} + Σ_ℓ γ_ℓ a_{ℓ,k})`, and Algorithm 2 line 821 has
-the same free `a_{0,k}`. That is `learned-bias`. It must be in the comparison, and it should
-probably be the default.
+- **Eq. (25), p. 49** — `q₀ = −Σ_ℓ log(1 + exp(q_ℓ))`, giving `Bern(i; γ) = exp(q₀ + qᵀi)`.
+  `log(1 + exp(·))` is softplus.
+- **Eq. (32)–(33), p. 51** — activating index `k` sets `q ← a_k`, inducing
+  `p_i ← Bern(i; sig(a_k)) ≡ b_{i,k}`.
+- **Eq. (34), p. 52** — "Using the identity in Equation (25), we obtain
+  `P(k | i) = softmax_k(a_{0,k} + a_kᵀ i)`."
 
-**Fix:** add `learned-bias` to the CLI choices, run it as the baseline arm, and either rename
-`direct` to `no-bias` or make `learned-bias` the default.
+Substituting `q → a_k` into (25) gives exactly
 
-### C2 — must fix: the softplus normalizer cites the wrong equation
+```
+a_{0,k} = −Σ_ℓ log(1 + exp(a_{ℓ,k})) = −Σ_ℓ softplus(a_{ℓ,k})
+```
 
-`src/tb/model.py:106-107` says `softplus-bias` is "QTB Equation (31)'s Bernoulli normalizer".
-Equation (31) is the **evolution** operator, `h = sig(v0 + Vγ), f_NN(γ) = Wh`.
+So in the latest QTB **`a_{0,k}` is derived, not free**, and `softplus-bias` is the faithful mode.
+`learned-bias` is the deviation — a free-parameter relaxation of the Bernoulli-consistent
+normalizer. That is still worth running, as an ablation asking whether the probabilistic
+interpretation costs accuracy.
 
-The mathematics is fine and worth keeping — `log(1 − sig(a)) = −softplus(a)`, so
-`a_k·γ − Σ_ℓ softplus(a_{ℓ,k})` is exactly the factorized-Bernoulli log-likelihood of `γ` under
-parameters `sig(a_k)`, which is a genuinely well-motivated variant. But it is a **derived
-interpretation**, not a paper equation, and citing (31) will not survive a careful reader. Re-label
-it and add a ledger row.
+**The only defect is the citation.** `src/tb/model.py:106-107` cites Equation (31), which is the
+evolution operator `h = sig(v₀ + Vγ), f_NN^evol(γ) = Wh` (p. 50, confirmed). It should cite
+**Equation (25), applied at Equation (34)**. One-token fix.
+
+**`direct` is also a paper equation** — the *original* TB has no index bias anywhere: Algorithm 1
+line 18 is `nS(s) ← a_sᵀ sig(q̃S)` and §5.3 is `qS ← q̃S + A softmax_β(Aᵀ sig(q̃S))`. So the four
+modes map cleanly onto sources, and the naming is defensible as it stands:
+
+| mode | source |
+|---|---|
+| `direct` | original TB (2021), no bias |
+| `softplus-bias` | latest QTB, Eq. (25)/(34) — derived normalizer |
+| `learned-bias` | free-parameter relaxation (deviation) |
+| `centered` | `γ − 0.5` ablation, least paper-grounded |
+
+### C1b — the real gap: the pilot's two arms are both already corrected
+
+Measured at init, `D = 768`, `K = 7143`, decomposing each score into its state-independent offset
+and its state-dependent part:
+
+| `score_mode` | logit sd | offset sd | data sd | offset / data |
+|---|---:|---:|---:|---:|
+| `direct` | 0.539 | 0.498 | 0.208 | **2.39** |
+| `learned-bias` | 0.539 | 0.498 | 0.208 | **2.39** |
+| `centered` | 0.208 | 0.000 | 0.208 | 0.00 |
+| `softplus-bias` | 0.208 | 0.006 | 0.208 | **0.03** |
+
+This is a genuinely nice result and it should go in the thesis. **The paper's softplus normalizer
+is, to first order, exactly the centering correction that issue M17 identified as necessary** — and
+it achieves it with no free parameters. Expanding `softplus(x) ≈ log 2 + x/2` gives
+`a_{0,k} ≈ −n log 2 − ½Σ_ℓ a_{ℓ,k}`, whose constant term cancels in the softmax and whose varying
+term cancels the `½Σ_ℓ a_{ℓ,k}` DC component of `a_kᵀγ`. Measured: an **83× reduction** in the
+offset, from 0.498 to 0.006.
+
+So M17 is not a defect of the framework — it is something the latest QTB already fixes, and this
+repository can demonstrate that empirically.
+
+But it means the currently configured pilot (`centered` and `softplus-bias`) runs **two corrected
+variants against each other** and cannot show what the correction buys. **Add `direct` as a third
+arm.** It is the original-TB equation, it is the uncorrected condition, and it costs one run.
+`learned-bias` as a fourth arm is optional but cheap, and answers whether a free bias beats the
+derived one.
 
 ### C3 — should fix: `identities` means three different things in `run_object_experiment`
 
@@ -130,7 +168,7 @@ In priority order. Stop when the pilot is interpretable; the rest can wait.
 
 | # | Change | Time | Why now |
 |---|---|---|---|
-| 1 | Add `learned-bias` to `--score-mode`; fix the eq-(31) citation; rename `direct` → `no-bias` | 30 min | **C1/C2** — without it the pilot has no paper baseline |
+| 1 | Add `direct` (and optionally `learned-bias`) to `--score-mode`; re-cite the normalizer to Eq. (25)/(34) | 20 min | **C1/C1b** — without `direct` the pilot cannot show what the normalizer buys |
 | 2 | Rename the three `identities` bindings | 10 min | **C3** — cheapest readability win in the repo |
 | 3 | Collapse per-window trace bookkeeping into one `_entity_trace(...)` helper called once per window | 30 min | restores the ~8-line paper schedule to visibility |
 | 4 | Add a "what is live right now" block to `experiments/pvsg/__init__.py` or a short `experiments/pvsg/README.md` | 15 min | the reader's real problem is not knowing which half is dormant |
