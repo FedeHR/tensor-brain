@@ -15,7 +15,13 @@
 |---|---|---|
 | **P1** | Input scale: plain L2 normalization pinned `σ(q)` at `0.5 ± 0.009` | **Fixed** in the working tree; the fix is correct |
 | **P2** | Feedback magnitude | **Open, not established.** Norm ratio was the wrong diagnostic — see §2.2 |
-| **P3** | Score offset from zero-initialized `a0` | **Real**, reproduced; but the fix requires a controlled choice among four options, not a one-liner |
+| **P3** | Score offset from zero-initialized `a0` | **Real**, reproduced. Recommended resolution: QTB's derived softplus bias plus a learned residual — see §3.2a |
+
+**Headline recommendation (§3.2a):** use the QTB-derived bias `a0,k = −Σ_ℓ softplus(a_ℓ,k)`. Its
+gradient is the Bernoulli residual `γ_ℓ − σ(a_ℓ,k)`, of which the centered score is the
+small-weight limit, and its fixed point `a = logit(γ)` sits at `‖q‖` — so it resolves the offset
+**and** removes the readout/write scale pressure that §1 describes. Much of the conflict analysed
+below is an artifact of dropping the log-normalizer from QTB's own derivation.
 
 The organizing hypothesis — that `A` serves a readout role and a write role whose scale
 requirements differ — remains useful and is worth measuring. It is **not** a proven architectural
@@ -202,9 +208,54 @@ Treat P3 as a suspected discrepancy with four named options:
 3. centered-CBS reparameterization `A^T(γ − 0.5) + b`;
 4. the QTB-derived `a0,k = −Σ_ℓ softplus(a_ℓ,k)`, optionally plus a learned residual.
 
-Option 4 has the strongest derivational claim and should probably be the reference. The primary
-source is `papers/qtb_current_arxiv.pdf` (Eqs. 29–31); the later WIP makes `a0` less explicit and
-should not settle the choice alone.
+The primary source is `papers/qtb_current_arxiv.pdf` (Eqs. 29–31); the later WIP makes `a0` less
+explicit and should not settle the choice alone.
+
+### 3.2a Option 4 does more than fix the offset — it dissolves the scale conflict
+
+This is the most consequential finding in this document, and it partly retires §1.
+
+Under the softplus bias, `score_k = γ^T a_k − Σ_ℓ softplus(a_ℓ,k)`. Differentiating:
+
+```
+∂score_k / ∂a_ℓ,k  =  γ_ℓ − σ(a_ℓ,k)
+```
+
+Two things follow, both verified numerically.
+
+**The gradient is a Bernoulli residual, and options 2–3 are its small-weight limit.** Since
+`σ(a) ≈ 0.5` for small `a`, the option-4 gradient reduces to `γ_ℓ − 0.5`, which *is* the
+centered-score gradient. Measured, the difference `grad₄ − grad₃` correlates with `−a/4` at
+**1.0000**. So option 3 approximates option 4's gradient exactly as option 2 approximates its bias.
+**Option 4 is the exact object that 2 and 3 are linearizations of.**
+
+**Its fixed point sits at the state scale, not the logit scale.** Setting the gradient to zero gives
+`a_ℓ,k = logit(γ_ℓ)`. Optimizing a single column against a realistic CBS (`‖q‖ = 27.71`) converges
+to
+
+```
+‖a‖ = 27.71        max|a − logit(γ)| = 7 × 10⁻³
+```
+
+— **exactly `‖q‖`.** The embedding is driven to the same scale as the pre-CBS state, which is
+precisely the *write*-role requirement that §1 claimed was incompatible with the readout role.
+
+The reason is that §1's analysis assumed an *unnormalized* bilinear score, where logit magnitude
+scales with `‖a‖` and therefore pressures `‖a‖` downward. With the log-normalizer restored, the
+score is scale-calibrated: growing `‖a‖` raises the linear term and the normalizer together, so
+there is no readout-side pressure toward small columns. Score differences become
+`score_k − score_j = KL(γ ‖ σ(a_j))` at the fixed point — a principled, dimension-scaling logit gap.
+
+**So the "dual-role scale conflict" of §1 is substantially an artifact of dropping the
+log-normalizer from QTB's derivation.** Restoring it is not a patch; it removes the tension at
+source, and it simultaneously fixes P3 and plausibly P2. This does not eliminate the need for the
+§5 diagnostics — it changes what they are expected to show.
+
+**Caveat.** A derived `a0(A)` has no freedom to absorb class priors, and both the identity and
+predicate distributions are heavily imbalanced. The practical default should therefore be
+**softplus bias plus a learned zero-initialized residual** `b_k`: the derived term handles the
+structural normalizer, the residual learns the prior. Plain softplus remains the theoretical
+reference condition.
 
 ### 3.3 Superposition capacity — a diagnostic, not a capacity constant
 
