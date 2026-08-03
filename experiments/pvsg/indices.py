@@ -1,4 +1,4 @@
-"""Build fixed index vocabularies for the initial PVSG experiments."""
+"""Define PVSG index labels and build the core Tensor Brain vocabulary."""
 
 from __future__ import annotations
 

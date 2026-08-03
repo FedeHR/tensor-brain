@@ -223,3 +223,9 @@ __marimo__/
 # directory contract, but never add converted tensors to Git.
 data/pvsg/features/
 .streamlit/secrets.toml
+
+# Claude / Miscelaneous
+.claude/
+papers/
+pvsg-audit/
+tmp/

@@ -43,8 +43,20 @@ def test_p_direct_scores_each_feature_independently() -> None:
     union = torch.tensor([[0.1, 0.9], [-0.8, 0.4]])
     identities = torch.tensor([0, 1])
     predicates = torch.tensor([2, 3, 4])
+    categories = {
+        "object_category/source": torch.tensor([2, 4]),
+        "object_category/coarse": torch.tensor([3, 4]),
+    }
 
-    scores = model(subject, object_, union, identities, predicates)
+    scores = model(
+        subject,
+        object_,
+        union,
+        identities,
+        predicates,
+        category_candidates=categories,
+        return_trace=True,
+    )
 
     assert model.brain.evolution is None
     torch.testing.assert_close(
@@ -56,6 +68,16 @@ def test_p_direct_scores_each_feature_independently() -> None:
     torch.testing.assert_close(
         scores["predicate_logits"], model.brain.index_scores(union, predicates)
     )
+    for level, candidates in categories.items():
+        torch.testing.assert_close(
+            scores["subject_category_logits"][level],
+            model.brain.index_scores(subject, candidates),
+        )
+        torch.testing.assert_close(
+            scores["object_category_logits"][level],
+            model.brain.index_scores(object_, candidates),
+        )
+    torch.testing.assert_close(scores["trace"]["subject"]["q_after_input"], subject)
 
 
 def test_integral_p_sa_matches_the_explicit_four_window_schedule() -> None:
@@ -67,21 +89,62 @@ def test_integral_p_sa_matches_the_explicit_four_window_schedule() -> None:
     union = torch.tensor([[0.1, -0.4]])
     identities = torch.tensor([0, 1])
     predicates = torch.tensor([2, 3, 4])
+    categories = {
+        "object_category/source": torch.tensor([2, 4]),
+        "object_category/coarse": torch.tensor([3, 4]),
+    }
 
-    scores = model(scene, subject, object_, union, identities, predicates)
+    scores = model(
+        scene,
+        subject,
+        object_,
+        union,
+        identities,
+        predicates,
+        category_candidates=categories,
+        return_trace=True,
+    )
 
     subject_q = 2.0 * scene + 1.0 + subject
     expected_subject = model.brain.index_scores(subject_q, identities)
+    traced_subject_input = subject_q
     subject_q, _ = model.brain.attend(subject_q, identities)
+    expected_subject_categories = {
+        level: model.brain.index_scores(subject_q, candidates)
+        for level, candidates in categories.items()
+    }
     object_q = 2.0 * subject_q + 2.0 + object_
     expected_object = model.brain.index_scores(object_q, identities)
+    traced_object_input = object_q
     object_q, _ = model.brain.attend(object_q, identities)
+    expected_object_categories = {
+        level: model.brain.index_scores(object_q, candidates)
+        for level, candidates in categories.items()
+    }
     predicate_q = 2.0 * object_q + 3.0 + union
     expected_predicate = model.brain.index_scores(predicate_q, predicates)
 
     torch.testing.assert_close(scores["subject_identity_logits"], expected_subject)
     torch.testing.assert_close(scores["object_identity_logits"], expected_object)
     torch.testing.assert_close(scores["predicate_logits"], expected_predicate)
+    torch.testing.assert_close(
+        scores["trace"]["subject"]["q_after_input"], traced_subject_input
+    )
+    torch.testing.assert_close(
+        scores["trace"]["object"]["q_after_input"], traced_object_input
+    )
+    torch.testing.assert_close(
+        scores["trace"]["subject"]["applied_feedback"], subject_q - traced_subject_input
+    )
+    for level in categories:
+        torch.testing.assert_close(
+            scores["subject_category_logits"][level],
+            expected_subject_categories[level],
+        )
+        torch.testing.assert_close(
+            scores["object_category_logits"][level],
+            expected_object_categories[level],
+        )
 
 
 def test_p_samp_is_an_evaluation_mode_of_the_integral_checkpoint() -> None:
@@ -105,6 +168,8 @@ def test_p_samp_is_an_evaluation_mode_of_the_integral_checkpoint() -> None:
     p_samp_scores = model(*inputs, feedback_mode="p-samp")
 
     assert {id(parameter) for parameter in model.parameters()} == parameter_ids
+    assert p_sa_scores["subject_category_logits"] == {}
+    assert p_samp_scores["subject_category_logits"] == {}
     assert not torch.equal(p_sa_scores["predicate_logits"], p_samp_scores["predicate_logits"])
 
 
@@ -123,6 +188,26 @@ def test_integral_predicate_loss_reaches_identity_embeddings_through_feedback() 
         predicates,
     )
     scores["predicate_logits"].sum().backward()
+
+    assert model.brain.A.grad is not None
+    assert model.brain.A.grad[:, identities].abs().sum() > 0
+
+
+def test_integral_category_loss_reaches_identity_embeddings_through_feedback() -> None:
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+    set_index_parameters(model)
+    identities = torch.tensor([0, 1])
+
+    scores = model(
+        torch.tensor([[0.2, -0.1]]),
+        torch.tensor([[0.4, 0.3]]),
+        torch.tensor([[-0.2, 0.5]]),
+        torch.tensor([[0.1, -0.4]]),
+        identities,
+        torch.tensor([2, 3, 4]),
+        category_candidates={"object_category/source": torch.tensor([2, 3, 4])},
+    )
+    scores["subject_category_logits"]["object_category/source"].sum().backward()
 
     assert model.brain.A.grad is not None
     assert model.brain.A.grad[:, identities].abs().sum() > 0

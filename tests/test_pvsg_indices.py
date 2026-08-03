@@ -1,6 +1,6 @@
 import pytest
 
-from experiments.pvsg.vocabulary import build_section6_vocabulary
+from experiments.pvsg.indices import build_section6_vocabulary
 
 
 def _ontology():

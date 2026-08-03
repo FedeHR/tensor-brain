@@ -294,32 +294,106 @@ For a positive-pair batch, the initial probabilistic objective is
 \mathcal L_{pair}
 =\frac1B\sum_b\sum_p\operatorname{BCE}(z_{b,p},y_{b,p})
 +\operatorname{CE}(z_S,s)
-+\operatorname{CE}(z_O,o).
++\operatorname{CE}(z_O,o)
++\sum_{g\in\mathcal G}\left[
+  \operatorname{CE}(z_{S,g},c_{S,g})
+  +\operatorname{CE}(z_{O,g},c_{O,g})
+\right].
 \]
 
 Summing the predicate Bernoulli terms, rather than silently averaging them over the vocabulary,
 makes this the negative log-likelihood of the multi-label target. The runner logs both the
-summed predicate loss and its per-label mean, both identity losses, and their gradient norms in
-the pilot. No configurable loss weights are introduced until these diagnostics show a concrete
-problem.
+summed predicate loss and its per-label mean and both identity losses; the scale trace records
+parameter gradients at the same checkpoints. `G` is empty for the identity-only condition,
+contains the official source category for that condition, and contains the four reviewed
+hierarchy levels for the hierarchy condition.
+An unavailable reviewed path uses the ordinary cross-entropy ignore index for that term only.
+No configurable loss weights are introduced until these diagnostics show a concrete problem.
 
-Object-observation batches train identity and later semantic readouts from every eligible
-visible-object exposure. Pair batches train the full sequential schedule. The exact number of
-examples contributed by both streams is reported; neither is silently resampled in the first
-baseline.
+The overfit gate uses only pair batches so that it exercises the complete sequential schedule.
+The subsequent full experiment combines those pair rows with object-observation batches, which
+train identity and semantic readouts from every eligible visible-object exposure. It reports the
+exact number of examples contributed by both streams; neither is silently resampled.
 
 ### Semantic conditions
 
-Semantic supervision is a central experiment, introduced in controlled stages:
+Unary semantic decoding is part of the original Tensor Brain perception experiment, not an
+unrelated downstream probe. In Algorithm 1, the subject identity is read, fed back into `q`, and
+then decoded into a unary label before evolution continues. Table 5 reports entity, B-Class,
+P-Class, G-Class, age, color, and activity readouts. The initial PVSG models therefore always
+support named category candidate groups. P-Direct scores each group from the corresponding object
+feature alone; Integral TB scores it from the post-identity-feedback subject or object state and
+does not feed the resulting category prediction back.
+
+The availability of a readout is distinct from applying its loss. Semantic supervision changes
+the shared `A` and can change later states through identity learning, so checkpoints use explicit
+conditions rather than silently enabling every target:
 
 1. actual identity only;
 2. identity plus the official PVSG category;
 3. identity plus the manually reviewed, versioned four-level
    [PVSG object hierarchy](pvsg_object_hierarchy.md).
 
-Semantic targets are read from the post-feedback object state, as in the paper's unary
-readouts. They do not replace identity feedback. Frozen probes on the identity-only model can
-test whether semantic structure emerged without direct supervision.
+The reviewed fine, basic, and coarse levels are the closest PVSG analogues of the paper's
+B-Class, P-Class, and G-Class; the domain level is an additional abstraction. Applying the same
+post-feedback unary readout to both directed-pair participants is the symmetric extension needed
+to evaluate both tracked entities. Records whose reviewed path is intentionally unresolved remain
+eligible for identity, source-category, and predicate losses; only their unavailable hierarchy
+losses are masked. The hierarchy condition is the paper-motivated primary semantic condition,
+while identity-only and official-category checkpoints are necessary ablations. Frozen probes on
+the identity-only model can later test whether semantic structure emerged without direct
+supervision.
+
+### Tiny-data overfit gate
+
+Before any comparison or full-data training, `experiments/pvsg/overfit.py` loads the first 200
+rows of the immutable, video-major `heldout_video/train_pairs.jsonl` manifest into one fixed
+batch. A manifest prefix is an I/O-efficient deterministic diagnostic selection, not an estimate
+of population performance. Its identity candidate set contains exactly the entities occurring in
+that batch; predicate candidates remain the complete train-supported closed set. The default
+condition is Integral TB with the original recurrent dynamic context and reviewed hierarchy
+supervision. Identity-only and official-source-category conditions are explicit alternatives.
+
+The optimizer is ordinary Adam over the complete model. The gate succeeds only when every
+enabled identity, predicate, and available category target is correct for every example and the
+unweighted total objective is at most `0.01`. Initialization, fixed early checkpoints, and the
+final state are diagnosed on this same batch. This runner intentionally contains no baseline
+composer, callback system, full-dataset sampler, or validation protocol; those belong to the
+subsequent experiment after the computational graph has passed the overfit gate.
+
+Each run directory is immutable and contains:
+
+- `config.json`, `vocabulary.json`, and `batch.jsonl` for exact reconstruction;
+- `training_trace.jsonl` and `scale_trace.jsonl` for optimization and scale analysis;
+- `checkpoint.pt`, `predictions.pt`, and `result.json` for the final P-SA checkpoint and its
+  evaluation-only P-Samp readout.
+
+### Input-scale and initialization trace
+
+The initial DINO mapping is a deliberate modernization rather than a paper reproduction. Every
+tiny overfit and full training run must therefore evaluate it on a fixed, versioned diagnostic
+batch and write `scale_trace.jsonl`. Each row identifies the run, checkpoint step, evidence
+window, candidate group, and feedback mode. It records:
+
+- input-drive and pre-CBS `q` norm, component RMS, mean, and standard deviation after integration,
+  index feedback, and evolution;
+- `gamma = sigmoid(q)` quantiles and the fractions below `0.01` and above `0.99`;
+- `A` column-norm and `a0` summaries for identity, category, and predicate groups;
+- the effective neutral-state score offset
+  `a0[k] + 0.5 * sum_i A[i, k]`, the centered data-dependent score
+  `A[:, k]^T (gamma - 0.5)`, and their dispersion ratio;
+- P-SA expected-feedback and winner-feedback norms relative to both the current input drive and
+  pre-feedback `q`, together with attention entropy and maximum probability;
+- gradient norms for `A`, `a0`, each evolution parameter, and any input or feedback gate present
+  in that named condition.
+
+The diagnostic batch stores its native video/frame/object addresses and is reused across steps,
+models, seeds, and normalization ablations. Required capture points are initialization before any
+optimizer step, fixed early steps, and the final checkpoint; the exact cadence belongs in
+`config.json`. Raw per-example tensors may be retained in `predictions.pt`, while
+`scale_trace.jsonl` contains aggregation-ready scalar summaries. Any future input mapping,
+centering, gate, or initialization change receives a new condition name and ledger entry and is
+compared on the same raw cached DINO features rather than replacing the feature snapshot.
 
 VLM-derived semantics from PVSG descriptions and captions form a later, separately named
 modality. Because language can reveal relations and future events, every derived feature must
@@ -400,6 +474,7 @@ split.json
 checkpoint.pt
 results.json
 predictions.pt
+scale_trace.jsonl
 tensorboard/
 ```
 
