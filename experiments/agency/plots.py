@@ -180,11 +180,14 @@ def _draw_grid(axis, episode: NarratedEpisode, step: int) -> None:
     )
 
 
-def trajectory_strip(episode: NarratedEpisode, path: Path, *, max_steps: int = 10) -> None:
+def trajectory_strip(episode: NarratedEpisode, path: Path, *, max_steps: int = 14) -> None:
     """Grid renderings annotated with the agent's own symbolic narration."""
 
+    # Show the whole episode when it fits, so the outcome in the caption is
+    # visible in the panels rather than only asserted.
     steps = list(range(min(max_steps, len(episode.agent_row))))
-    figure, axes = plt.subplots(1, len(steps), figsize=(1.75 * len(steps), 2.9))
+    truncated = len(steps) < len(episode.agent_row)
+    figure, axes = plt.subplots(1, len(steps), figsize=(1.6 * len(steps), 2.9))
     if len(steps) == 1:
         axes = [axes]
     for axis, step in zip(axes, steps, strict=True):
@@ -203,7 +206,8 @@ def trajectory_strip(episode: NarratedEpisode, path: Path, *, max_steps: int = 1
     figure.suptitle(
         f"Instruction: find the {episode.cue[0]} {episode.cue[1]}   "
         f"(black outline = target, shaded = field of view, X = agent)   "
-        f"outcome: {'success' if episode.success else 'no target collected'}",
+        f"outcome: {'success' if episode.success else 'no target collected'}"
+        + (f" (first {len(steps)} of {len(episode.agent_row)} steps)" if truncated else ""),
         fontsize=9,
     )
     figure.tight_layout(rect=(0, 0, 1, 0.97))
@@ -266,20 +270,32 @@ def similarity_heatmap(
 def cue_action_alignment(
     scores: np.ndarray, cue_labels: Sequence[str], action_labels: Sequence[str], path: Path
 ) -> None:
-    """How strongly each cue embedding alone excites each action index."""
+    """The action distribution produced by each cue embedding on its own."""
 
     figure, axis = plt.subplots(
-        figsize=(0.8 * len(action_labels) + 3, 0.42 * len(cue_labels) + 2.2)
+        figsize=(0.8 * len(action_labels) + 3, 0.42 * len(cue_labels) + 2.4)
     )
-    limit = float(np.abs(scores).max()) or 1.0
-    image = axis.imshow(scores, cmap="PuOr_r", vmin=-limit, vmax=limit)
+    image = axis.imshow(scores, cmap="magma", vmin=0.0, vmax=1.0)
+    for row in range(scores.shape[0]):
+        for column in range(scores.shape[1]):
+            axis.text(
+                column,
+                row,
+                f"{scores[row, column]:.2f}",
+                ha="center",
+                va="center",
+                fontsize=7,
+                color="white" if scores[row, column] < 0.6 else "black",
+            )
     axis.set_xticks(range(len(action_labels)))
     axis.set_xticklabels(action_labels, rotation=30, ha="right", fontsize=8)
     axis.set_yticks(range(len(cue_labels)))
     axis.set_yticklabels(cue_labels, fontsize=8)
     figure.colorbar(image, ax=axis, fraction=0.046)
     axis.set_title(
-        r"action score from a pure cue state: $a_{action}^\top\sigma(a_{cue})$", fontsize=10
+        "action distribution from a pure cue state, $q = a_{cue}$\n"
+        "(top-down instruction with no perceptual evidence)",
+        fontsize=10,
     )
     figure.tight_layout()
     figure.savefig(path, dpi=160)

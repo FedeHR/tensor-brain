@@ -175,16 +175,23 @@ def index_similarity(agent: GridAgent) -> tuple[Float[Tensor, "indices indices"]
 def action_alignment(
     agent: GridAgent,
 ) -> tuple[Float[Tensor, "cues actions"], list[str], list[str]]:
-    """How much each cue embedding excites each action index.
+    """The action distribution the agent would emit from a pure cue state.
 
-    ``a_action^T sigma(a_cue)`` is the score the action layer would give if the
-    representation layer contained nothing but the cue embedding. It is the most
-    direct readable statement of "this symbol pushes towards that action".
+    The representation layer is set to contain nothing but one cue embedding,
+    ``q = a_cue``, and the ordinary action measurement is read out. It is the
+    most direct readable statement of "this symbol, alone, pushes towards that
+    action" -- top-down instruction with no perceptual evidence at all.
+
+    Probabilities rather than raw scores are returned because the raw scale is
+    dominated by the strong suppression of ``collect``, which is correct
+    behaviour (nothing is underfoot) but hides the movement structure.
     """
 
     cue_indices = torch.cat([agent.color_indices, agent.shape_indices])
     cue_states = torch.sigmoid(agent.brain.A[:, cue_indices].T)
-    scores = agent.brain.index_scores(cue_states, agent.action_indices)
+    scores = torch.softmax(
+        agent.brain.index_scores(cue_states, agent.action_indices), dim=-1
+    )
     cue_labels = [agent.vocabulary.label(int(index)) for index in cue_indices]
     action_labels = [agent.vocabulary.label(int(index)) for index in agent.action_indices]
     return scores, cue_labels, action_labels

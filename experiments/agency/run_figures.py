@@ -135,7 +135,7 @@ def write_summary(finals: dict, results: dict, path: Path) -> str:
 
 
 def qualitative_figures(
-    grid_root: Path, figure_root: Path, *, condition: str, seed: int
+    grid_root: Path, figure_root: Path, *, condition: str, seed: int, prefix: str = ""
 ) -> None:
     """Regenerate the narration, raster, geometry and value figures."""
 
@@ -158,22 +158,27 @@ def qualitative_figures(
             if episode.success:
                 break
             episode = narrate_episode(environment, agent)
-        trajectory_strip(episode, figure_root / f"qualitative_trajectory_{split}.png")
-        index_rasters(episode, figure_root / f"qualitative_rasters_{split}.png")
+        trajectory_strip(episode, figure_root / f"{prefix}trajectory_{split}.png")
+        index_rasters(episode, figure_root / f"{prefix}rasters_{split}.png")
         if split == "train-cue":
             landscape = value_landscape(environment, agent)
-            value_map(landscape.numpy(), episode, figure_root / "value_landscape.png")
+            value_map(
+                landscape.numpy(), episode, figure_root / f"{prefix}value_landscape.png"
+            )
 
     similarity, labels = index_similarity(agent)
     similarity_heatmap(
         similarity.numpy(),
         labels,
-        figure_root / "index_geometry.png",
+        figure_root / f"{prefix}index_geometry.png",
         "cosine similarity between columns of the shared index matrix $A$",
     )
     scores, cue_labels, action_labels = action_alignment(agent)
     cue_action_alignment(
-        scores.numpy(), cue_labels, action_labels, figure_root / "cue_action_alignment.png"
+        scores.numpy(),
+        cue_labels,
+        action_labels,
+        figure_root / f"{prefix}cue_action_alignment.png",
     )
 
 
@@ -263,12 +268,18 @@ def main() -> None:
             conditions=conditions,
             title=claim,
         )
-    qualitative_figures(
-        arguments.grid_root,
-        arguments.figure_root,
-        condition=arguments.qualitative_condition,
-        seed=arguments.qualitative_seed,
-    )
+    # The reference agent, and the condition that follows the instruction best.
+    for condition, prefix in (
+        (arguments.qualitative_condition, "tbfull_"),
+        ("deliberate-3-attend", "deliberate3_"),
+    ):
+        qualitative_figures(
+            arguments.grid_root,
+            arguments.figure_root,
+            condition=condition,
+            seed=arguments.qualitative_seed,
+            prefix=prefix,
+        )
 
 
 if __name__ == "__main__":
