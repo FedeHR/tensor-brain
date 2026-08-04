@@ -105,7 +105,7 @@ def run_episodes(
     first_choice_correct = torch.zeros(num_envs, dtype=torch.bool, device=device)
     first_choice_made = torch.zeros(num_envs, dtype=torch.bool, device=device)
     episode_length = torch.zeros(num_envs, dtype=torch.long, device=device)
-    for step_index in range(config.max_steps):
+    for _step_index in range(config.max_steps):
         # Read the cue every step: with a volatility hazard the target, and
         # therefore the instruction, can change mid-episode.
         cue_color = agent.color_indices[environment.state.cue_color()]
@@ -115,9 +115,9 @@ def run_episodes(
         true_color, true_shape = agent.percept_targets(
             visible_slot, environment.state.object_color, environment.state.object_shape
         )
-        is_first_step = torch.full(
-            (num_envs,), step_index == 0, dtype=torch.bool, device=device
-        )
+        # `is_first_step` doubles as the cue-visibility mask: a policy may inject
+        # the instruction only while the environment is still showing it.
+        is_first_step = environment.cue_visible()
         action_teacher = (
             agent.action_indices[environment.oracle_action()] if teacher_forcing else None
         )

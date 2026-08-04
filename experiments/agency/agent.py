@@ -394,6 +394,8 @@ class TensorBrainAgent(nn.Module):
             if config.cue_mode != "none":
                 cue_drive = self.brain.A.T[cue_color] + self.brain.A.T[cue_shape]
                 if config.cue_mode == "initial":
+                    # Only inject while the environment is still showing it; the
+                    # dynamic context must carry it from then on.
                     assert is_first_step is not None
                     cue_drive = cue_drive * is_first_step[:, None].float()
                 gate = self.cue_gate if self.cue_gate is not None else config.cue_gate

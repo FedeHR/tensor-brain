@@ -100,13 +100,17 @@ class GRUPolicy(nn.Module):
     ) -> WindowTrace:
         """One recurrent step, matching the Tensor Brain agent's interface."""
 
-        del is_first_step, percept_teacher
+        del percept_teacher
         colors = torch.zeros(q.shape[0], self.grid.num_colors, device=q.device)
         shapes = torch.zeros(q.shape[0], self.grid.num_shapes, device=q.device)
         # Global index -> factor position: the colour group occupies the first
         # `num_colors` global indices and the shape group follows it.
         colors.scatter_(1, (cue_color - int(self.color_indices[0]))[:, None], 1.0)
         shapes.scatter_(1, (cue_shape - int(self.shape_indices[0]))[:, None], 1.0)
+        if is_first_step is not None:
+            # Blind the control exactly as the Tensor Brain is blinded.
+            visible = is_first_step[:, None].float()
+            colors, shapes = colors * visible, shapes * visible
         features = torch.cat([observation, colors, shapes, previous_reward[:, None]], dim=1)
         state = self.cell(torch.relu(self.encoder(features)), q)
         probabilities = torch.softmax(self.action_head(state), dim=-1)
@@ -177,6 +181,59 @@ class LSTMPolicy(GRUPolicy):
             action_position=position,
             action_probabilities=probabilities,
             value=self.value_head(hidden).squeeze(-1),
+            percept_color_probabilities=None,
+            percept_shape_probabilities=None,
+            percept_color_index=None,
+            percept_shape_index=None,
+        )
+
+
+class MemorylessPolicy(GRUPolicy):
+    """A feedforward control: same inputs, same heads, **no recurrent state**.
+
+    This is the baseline that lacks the capability under test. It cannot retain
+    an instruction that the environment has stopped showing, so on a delayed-cue
+    task it must sit at chance no matter how well it is trained. Any architecture
+    that beats it there is demonstrably using memory rather than reacting.
+    """
+
+    def window_cycle(
+        self,
+        q: Float[Tensor, "envs state"],
+        context: Float[Tensor, "envs context"] | None,
+        observation: Float[Tensor, "envs observation"],
+        previous_reward: Float[Tensor, " envs"],
+        cue_color: Int[Tensor, " envs"],
+        cue_shape: Int[Tensor, " envs"],
+        *,
+        is_first_step: Bool[Tensor, " envs"] | None = None,
+        action_teacher: Int[Tensor, " envs"] | None = None,
+        percept_teacher: tuple[Int[Tensor, " envs"], Int[Tensor, " envs"]] | None = None,
+    ) -> WindowTrace:
+        del percept_teacher
+        colors = torch.zeros(q.shape[0], self.grid.num_colors, device=q.device)
+        shapes = torch.zeros(q.shape[0], self.grid.num_shapes, device=q.device)
+        colors.scatter_(1, (cue_color - int(self.color_indices[0]))[:, None], 1.0)
+        shapes.scatter_(1, (cue_shape - int(self.shape_indices[0]))[:, None], 1.0)
+        if is_first_step is not None:
+            visible = is_first_step[:, None].float()
+            colors, shapes = colors * visible, shapes * visible
+        features = torch.cat([observation, colors, shapes, previous_reward[:, None]], dim=1)
+        # The state is recomputed from the current observation alone; nothing
+        # carries across steps.
+        state = torch.relu(self.encoder(features))
+        probabilities = torch.softmax(self.action_head(state), dim=-1)
+        if action_teacher is not None:
+            position = action_teacher - int(self.action_indices[0])
+        else:
+            position = torch.distributions.Categorical(probabilities).sample()
+        return WindowTrace(
+            q=torch.zeros_like(q),
+            context=None,
+            action_index=self.action_indices[position],
+            action_position=position,
+            action_probabilities=probabilities,
+            value=self.value_head(state).squeeze(-1),
             percept_color_probabilities=None,
             percept_shape_probabilities=None,
             percept_color_index=None,

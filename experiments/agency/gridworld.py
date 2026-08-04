@@ -60,6 +60,13 @@ class GridConfig:
     # conjunction of both cue factors is still necessary -- while leaving the
     # positive outcome reachable.
     distractor_terminates: bool = False
+    # Stepping onto an object resolves the episode, so there is no `collect`
+    # action to suppress. This removes the sparse-reward local optimum that
+    # dominated the REINFORCE studies and made baseline comparisons unreliable.
+    auto_collect: bool = False
+    # The instruction is shown only for the first `cue_visible_steps` steps.
+    # After that the agent must have retained it; `None` means always visible.
+    cue_visible_steps: int | None = None
 
     def __post_init__(self) -> None:
         if self.num_objects > self.size * self.size - 1:
@@ -300,6 +307,14 @@ class SymbolicForaging:
         view[env_ids, row_ids, col_ids, config.num_colors + config.num_shapes] = 1.0
         return view.reshape(self.num_envs, -1)
 
+    def cue_visible(self) -> Bool[Tensor, " envs"]:
+        """Whether the instruction is still being shown this step."""
+
+        limit = self.config.cue_visible_steps
+        if limit is None:
+            return torch.ones(self.num_envs, dtype=torch.bool, device=self.device)
+        return self.state.step_count < limit
+
     def observed_attributes(
         self,
     ) -> tuple[Int[Tensor, "envs objects"], Int[Tensor, "envs objects"]]:
@@ -345,7 +360,7 @@ class SymbolicForaging:
             (state.object_row == state.agent_row[:, None])
             & (state.object_col == state.agent_col[:, None])
         )
-        is_collect = action == COLLECT
+        is_collect = (action == COLLECT) | config.auto_collect
         collected_any = is_collect & on_object.any(dim=1)
         on_target = on_object.gather(1, state.target_slot[:, None]).squeeze(1)
         collected_target = collected_any & on_target
@@ -358,7 +373,9 @@ class SymbolicForaging:
         reward = reward + collected_distractor.float() * config.distractor_reward
         reward = reward - (is_collect & ~collected_any).float() * config.empty_collect_penalty
 
-        terminated = collected_target | (collected_distractor & config.distractor_terminates)
+        terminated = collected_target | (
+            collected_distractor & (config.distractor_terminates or config.auto_collect)
+        )
         truncated = (state.step_count >= config.max_steps) & ~terminated
         return StepResult(reward, terminated, truncated, collected_target, collected_distractor)
 

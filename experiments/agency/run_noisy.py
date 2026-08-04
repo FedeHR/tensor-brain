@@ -30,7 +30,7 @@ from pathlib import Path
 import torch
 
 from experiments.agency.agent import AgentConfig, GridAgent
-from experiments.agency.baselines import GRUPolicy, LSTMPolicy
+from experiments.agency.baselines import GRUPolicy, LSTMPolicy, MemorylessPolicy
 from experiments.agency.conditions import REFERENCE, TASK
 from experiments.agency.gridworld import latin_square_holdout, train_cues
 from experiments.agency.noisy import NoisyConfig, NoisyForaging
@@ -52,13 +52,30 @@ CONDITIONS: dict[str, AgentConfig | None] = {
     "alpha-0.5": replace(REFERENCE, action_retain_gate=0.5),
     "alpha-0.0": replace(REFERENCE, action_retain_gate=0.0),
     "alpha-learned": replace(REFERENCE, learn_action_retain_gate=True),
+    # --- M/C: memory and chain-of-thought, against baselines that lack them ---
+    # The instruction is shown only briefly, so it must be *retained*. `cue-none`
+    # is the floor (never sees it) and `memoryless-control` is the baseline that
+    # structurally cannot retain it.
+    "mem-tb-1window": replace(REFERENCE, cue_mode="initial"),
+    "mem-tb-3window": replace(REFERENCE, cue_mode="initial", deliberation_windows=3),
+    "mem-tb-no-evolution": replace(REFERENCE, cue_mode="initial", evolution="none"),
+    "mem-tb-pvm": replace(REFERENCE, cue_mode="initial", action_retain_gate=0.0),
+    "mem-gru-control": None,
+    "mem-lstm-control": None,
+    "mem-memoryless-control": None,
+    "mem-cue-none": replace(REFERENCE, cue_mode="none"),
 }
 
 
 def build_policy(condition: str, config: AgentConfig | None, grid) -> object:
     if config is not None:
         return GridAgent(grid, config)
-    control = LSTMPolicy if condition.startswith("lstm") else GRUPolicy
+    if "memoryless" in condition:
+        control = MemorylessPolicy
+    elif "lstm" in condition:
+        control = LSTMPolicy
+    else:
+        control = GRUPolicy
     return control(grid, state_dim=REFERENCE.state_dim)
 
 
@@ -146,27 +163,30 @@ def run(
     noise: float,
     hazard: float,
     updates: int,
+    delay: int | None = None,
+    auto_collect: bool = False,
     num_envs: int = 128,
 ) -> dict:
     """Train one condition at one seed under one noise/hazard setting."""
 
-    tag = f"noise{noise:g}_hazard{hazard:g}"
+    task = replace(TASK, cue_visible_steps=delay, auto_collect=auto_collect)
+    tag = f"noise{noise:g}_hazard{hazard:g}_delay{'inf' if delay is None else delay}"
     directory = output_root / tag / condition / f"seed{seed}"
     directory.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(seed)
     noisy = NoisyConfig(observation_noise=noise, hazard_rate=hazard)
-    colours, shapes = TASK.num_colors, TASK.num_shapes
+    colours, shapes = task.num_colors, task.num_shapes
     train_environment = NoisyForaging(
-        TASK, num_envs, seed=seed, allowed_cues=train_cues(colours, shapes), noisy=noisy
+        task, num_envs, seed=seed, allowed_cues=train_cues(colours, shapes), noisy=noisy
     )
     holdout_environment = NoisyForaging(
-        TASK,
+        task,
         num_envs,
         seed=seed + 10_000,
         allowed_cues=latin_square_holdout(colours, shapes),
         noisy=noisy,
     )
-    policy = build_policy(condition, CONDITIONS[condition], TASK)
+    policy = build_policy(condition, CONDITIONS[condition], task)
     config = ReinforceConfig(
         updates=updates, learning_rate=3e-3, entropy_weight=0.01,
         evaluate_every=max(1, updates // 20), evaluate_repeats=2,
@@ -185,6 +205,7 @@ def run(
     )
     result = {
         "condition": condition, "seed": seed, "noise": noise, "hazard": hazard,
+        "delay": delay, "auto_collect": auto_collect,
         "seconds": round(time.time() - started, 1),
         "final": final, "calibration": belief, "learned_alpha": learned_alpha,
         "log": log.as_dict(),
@@ -208,15 +229,18 @@ def main() -> None:
     parser.add_argument("--noise", type=float, default=0.0)
     parser.add_argument("--hazard", type=float, default=0.0)
     parser.add_argument("--updates", type=int, default=3000)
+    parser.add_argument("--delay", type=int, help="steps the cue stays visible")
+    parser.add_argument("--auto-collect", action="store_true")
     parser.add_argument("--output-root", type=Path, default=Path("runs/agency/noisy"))
     arguments = parser.parse_args()
     result = run(
         arguments.condition, arguments.seed, arguments.output_root,
         noise=arguments.noise, hazard=arguments.hazard, updates=arguments.updates,
+        delay=arguments.delay, auto_collect=arguments.auto_collect,
     )
     alpha = result["learned_alpha"]
     print(
-        f"noise={result['noise']:g} hazard={result['hazard']:g} "
+        f"delay={result['delay']} "
         f"{result['condition']} seed{result['seed']}: "
         f"first_choice={result['final']['first_choice_accuracy']:.3f} "
         f"return={result['final']['mean_return']:+.3f} "

@@ -20,15 +20,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from typing import Any
 
 import torch
 from jaxtyping import Float
 from torch import Tensor
 
-from experiments.agency.minigrid.agent import MiniGridAgent, RecurrentControl
-from experiments.agency.minigrid.env import VectorMiniGrid
-
-Policy = MiniGridAgent | RecurrentControl
+# Deliberately duck-typed rather than imported: this optimizer is environment
+# agnostic. It needs only `window_cycle`, `initial_state`, `reset_finished`,
+# `brain.A` and `config` from a policy, and `observation`, `cue_indices` and
+# `step` from an environment, so it also trains the Memory Maze agents without
+# dragging in a MiniGrid dependency.
+Policy = Any
+VectorMiniGrid = Any
 
 
 @dataclass(frozen=True)
