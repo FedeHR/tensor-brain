@@ -306,6 +306,7 @@ causal control: its predicate decision sees the union, whereas the TB transports
 subject, and object evidence into that decision. The first full comparison therefore also uses:
 
 - a conventional local frozen-DINO linear probe;
+- a linear head over the same four concatenated feature sources;
 - a flat-fusion MLP that receives the same four feature sources without TB operations;
 - a separately trained Integral schedule with dynamic context but no index feedback;
 - predicate-frequency and directed category-pair priors fitted only on training targets.
@@ -356,9 +357,11 @@ A separately named Bernoulli-BCE condition remains a possible later extension if
 predicate calibration becomes a research target; it is not the initial objective.
 
 The overfit gate uses only pair batches so that it exercises the complete sequential schedule.
-The subsequent full experiment combines those pair rows with object-observation batches, which
-train identity and semantic readouts from every eligible visible-object exposure. It reports the
-exact number of examples contributed by both streams; neither is silently resampled.
+The first thesis experiments keep unary object semantics and pair predicate recognition as
+separate tasks. The pair comparison uses predicate cross-entropy and the two identity terms but
+does not add the eight hierarchy losses; those belong to the unary experiment. A later joint
+multitask condition may combine pair and object-observation batches, but must report the exact
+number of examples contributed by each stream rather than silently resampling either one.
 
 ### Semantic conditions
 
@@ -442,6 +445,23 @@ native evaluation mode.
 This first seed establishes that every condition trains correctly and estimates effect sizes. A
 final claim about stochastic model differences should use additional seeds; a single seed remains
 exploratory even when its gap is large.
+
+### First pair predicate-recognition comparison
+
+The pair experiment trains on all complete-evidence model-selection training pairs and selects
+each checkpoint by predicate KL on a deterministic 20,000-row development subset. It fixes QTB
+evolution, `softplus-bias`, Adam at `1e-3`, and the same 1,024-row chunk sampler. One count-baseline
+task reports both frequency and directed category-pair priors; six learned tasks cover a local
+DINO linear probe, a full-evidence fused linear head, a full-evidence fusion MLP, P-Direct,
+Integral without feedback, and Integral P-SA. P-Samp reuses the P-SA checkpoint.
+
+Development identities are novel and are not evaluated as closed-set predictions. Identity
+cross-entropies remain training factors because identity recognition and feedback define the
+Integral schedule. The headline outputs are predicate cross-entropy and KL, example-, assignment-,
+class-, and video-aggregated Recall@1/5/10, Precision@K, exact target-set accuracy, per-predicate
+average precision, mAP, and seen/unseen category-predicate-category recall. Unsupported predicate
+assignments are removed from mixed development targets, and rows with no supported target are
+excluded before evaluation. Official evaluation videos remain untouched.
 
 ### Tiny-data overfit gate
 

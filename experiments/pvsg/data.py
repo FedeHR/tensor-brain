@@ -12,7 +12,7 @@ import torch
 import torch.nn.functional as F
 from jaxtyping import Float
 from torch import Tensor
-from torch.utils.data import Dataset, Sampler, default_collate
+from torch.utils.data import DataLoader, Dataset, Sampler, Subset, default_collate
 
 from experiments.pvsg.extract import FEATURE_SCHEMA_VERSION, load_feature_artifact
 from experiments.pvsg.io import read_jsonl
@@ -176,3 +176,49 @@ def collate_pair_batch(examples: Sequence[dict[str, Any]]) -> dict[str, Any]:
     )
     collated["predicates"] = predicates
     return collated
+
+
+def role_indices(records: Sequence[dict[str, Any]], role: str) -> list[int]:
+    """Return manifest positions assigned to one experiment role."""
+
+    indices = [
+        index
+        for index, record in enumerate(records)
+        if record["experiment_split"] == role
+    ]
+    if not indices:
+        raise ValueError(f"manifest contains no {role!r} rows")
+    return indices
+
+
+def experiment_loader(
+    dataset: PVSGObjectDataset | PVSGPairDataset,
+    indices: Sequence[int],
+    *,
+    batch_size: int,
+    chunk_size: int,
+    seed: int,
+    num_workers: int,
+    pin_memory: bool,
+    train: bool = False,
+) -> DataLoader:
+    """Build the common video-chunked loader for one materialized view."""
+
+    sampler = (
+        VideoChunkSampler(
+            [dataset.records[index] for index in indices],
+            chunk_size=chunk_size,
+            generator=torch.Generator().manual_seed(seed),
+        )
+        if train
+        else None
+    )
+    return DataLoader(
+        Subset(dataset, indices),
+        batch_size=batch_size,
+        sampler=sampler,
+        collate_fn=collate_pair_batch if isinstance(dataset, PVSGPairDataset) else None,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=num_workers > 0,
+    )

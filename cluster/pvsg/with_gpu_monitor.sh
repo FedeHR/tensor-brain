@@ -20,6 +20,9 @@ else
 fi
 
 nvidia-smi "${NVIDIA_SMI_DEVICE[@]}" \
+  --query-gpu=name,compute_cap,driver_version,memory.total \
+  --format=csv,noheader
+nvidia-smi "${NVIDIA_SMI_DEVICE[@]}" \
   --query-gpu=memory.used,memory.total,utilization.gpu \
   --format=csv,noheader,nounits \
   --loop-ms=1000 >"$SAMPLE_FILE" &

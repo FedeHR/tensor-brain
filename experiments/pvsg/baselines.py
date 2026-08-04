@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from jaxtyping import Float, Int
@@ -112,6 +113,44 @@ class FusedLinear(nn.Module):
             },
         }
 
+    def forward(
+        self,
+        scene_features: Float[Tensor, "*batch state"],
+        subject_features: Float[Tensor, "*batch state"],
+        object_features: Float[Tensor, "*batch state"],
+        union_features: Float[Tensor, "*batch state"],
+        identity_candidates: Int[Tensor, " identities"],
+        predicate_candidates: Int[Tensor, " predicates"],
+        *,
+        category_candidates: CategoryCandidates | None = None,
+    ) -> PerceptionOutputs:
+        subject_state = self._fuse(
+            scene_features, subject_features, object_features, union_features
+        )
+        object_state = self._fuse(
+            scene_features, object_features, subject_features, union_features
+        )
+        categories = category_candidates or {}
+        return {
+            "subject_identity_logits": _readout(
+                self.readout, subject_state, identity_candidates
+            ),
+            "object_identity_logits": _readout(
+                self.readout, object_state, identity_candidates
+            ),
+            "subject_category_logits": {
+                group: _readout(self.readout, subject_state, candidates)
+                for group, candidates in categories.items()
+            },
+            "object_category_logits": {
+                group: _readout(self.readout, object_state, candidates)
+                for group, candidates in categories.items()
+            },
+            "predicate_logits": _readout(
+                self.readout, subject_state, predicate_candidates
+            ),
+        }
+
 
 class FlatFusion(nn.Module):
     """Non-TB MLP control receiving all evidence in one flat computation."""
@@ -200,6 +239,35 @@ class PredicatePriors:
             category_pair_logits={
                 pair: logits(distributions[rows]) for pair, rows in grouped.items()
             },
+        )
+
+    @classmethod
+    def fit_records(
+        cls,
+        records: Sequence[Mapping[str, Any]],
+        predicate_names: Sequence[str],
+        *,
+        smoothing: float = 1.0,
+    ) -> PredicatePriors:
+        """Fit the same priors directly from symbolic manifest rows."""
+
+        if smoothing <= 0:
+            raise ValueError("smoothing must be positive")
+        positions = {name: position for position, name in enumerate(predicate_names)}
+        frequency = torch.full((len(predicate_names),), smoothing)
+        grouped: dict[tuple[str, str], Tensor] = {}
+        for record in records:
+            active = [positions[name] for name in record["predicates"] if name in positions]
+            if not active:
+                continue
+            pair = (str(record["subject_category"]), str(record["object_category"]))
+            counts = grouped.setdefault(pair, torch.full_like(frequency, smoothing))
+            weight = 1.0 / len(active)
+            frequency[active] += weight
+            counts[active] += weight
+        return cls(
+            frequency_logits=frequency.log(),
+            category_pair_logits={pair: counts.log() for pair, counts in grouped.items()},
         )
 
     def logits(

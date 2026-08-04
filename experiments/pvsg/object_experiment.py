@@ -9,10 +9,10 @@ from typing import Any, Literal
 
 import torch
 from torch import Tensor, nn
-from torch.utils.data import DataLoader, Subset, default_collate
+from torch.utils.data import DataLoader, default_collate
 
 from experiments.pvsg.baselines import FusedLinear, LinearProbe
-from experiments.pvsg.data import PVSGObjectDataset, VideoChunkSampler
+from experiments.pvsg.data import PVSGObjectDataset, experiment_loader, role_indices
 from experiments.pvsg.diagnostics import object_scale_trace_rows
 from experiments.pvsg.evaluation import evaluate_objects
 from experiments.pvsg.hierarchy import load_object_hierarchy
@@ -82,13 +82,6 @@ class ObjectExperimentConfig:
             raise ValueError("learning-rate, batch, chunk, and step values must be positive")
 
 
-def _role_indices(records: Sequence[dict[str, Any]], role: str) -> list[int]:
-    indices = [i for i, record in enumerate(records) if record["experiment_split"] == role]
-    if not indices:
-        raise ValueError(f"manifest contains no {role!r} rows")
-    return indices
-
-
 def _loader(
     dataset: PVSGObjectDataset,
     indices: Sequence[int],
@@ -96,22 +89,15 @@ def _loader(
     *,
     train: bool = False,
 ) -> DataLoader:
-    sampler = (
-        VideoChunkSampler(
-            [dataset.records[index] for index in indices],
-            chunk_size=config.chunk_size,
-            generator=torch.Generator().manual_seed(config.seed),
-        )
-        if train
-        else None
-    )
-    return DataLoader(
-        Subset(dataset, indices),
+    return experiment_loader(
+        dataset,
+        indices,
         batch_size=config.batch_size,
-        sampler=sampler,
+        chunk_size=config.chunk_size,
+        seed=config.seed,
         num_workers=config.num_workers,
         pin_memory=config.device.startswith("cuda"),
-        persistent_workers=config.num_workers > 0,
+        train=train,
     )
 
 
@@ -187,9 +173,9 @@ def run_object_experiment(
     development_data = PVSGObjectDataset(
         manifest_root / "heldout_video" / "development_objects.jsonl", feature_root
     )
-    train_indices = _role_indices(train_data.records, "train")
-    blocked_indices = _role_indices(blocked_data.records, "train")
-    development_indices = _role_indices(development_data.records, "development")
+    train_indices = role_indices(train_data.records, "train")
+    blocked_indices = role_indices(blocked_data.records, "train")
+    development_indices = role_indices(development_data.records, "development")
 
     ontology = read_json(manifest_root / "ontology.json")
     hierarchy = (

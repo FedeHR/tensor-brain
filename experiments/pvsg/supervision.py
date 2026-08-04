@@ -289,9 +289,32 @@ def build_pair_targets(
         object_identities, object_categories, vocabulary, hierarchy
     )
 
-    predicate_names = batch["predicates"]
+    predicate_names = batch.get("predicates")
     if not isinstance(predicate_names, Sequence) or len(predicate_names) != batch_size:
         raise ValueError("batch['predicates'] must contain one label sequence per example")
+    predicate_targets = build_predicate_targets(batch, vocabulary)
+
+    return PairTargets(
+        subject_identity=subject_targets.identity,
+        object_identity=object_targets.identity,
+        predicates=predicate_targets,
+        subject_categories=subject_targets.categories,
+        object_categories=object_targets.categories,
+    )
+
+
+def build_predicate_targets(
+    batch: Mapping[str, Any],
+    vocabulary: IndexVocabulary,
+    *,
+    allow_unknown: bool = False,
+) -> Float[Tensor, "batch predicates"]:
+    """Map predicate sets without requiring entity identities to be candidates."""
+
+    predicate_names = batch["predicates"]
+    if not isinstance(predicate_names, Sequence):
+        raise ValueError("batch['predicates'] must contain one label sequence per example")
+    batch_size = len(predicate_names)
     predicate_targets = torch.zeros(
         batch_size, len(vocabulary.group_labels("predicate")), dtype=torch.float32
     )
@@ -304,17 +327,16 @@ def build_pair_targets(
             raise ValueError("every predicate target must be a sequence of strings")
         for predicate in predicates:
             label = predicate_label(predicate)
-            predicate_targets[
-                row, _candidate_position(vocabulary, "predicate", label)
-            ] = 1.0
-
-    return PairTargets(
-        subject_identity=subject_targets.identity,
-        object_identity=object_targets.identity,
-        predicates=predicate_targets,
-        subject_categories=subject_targets.categories,
-        object_categories=object_targets.categories,
-    )
+            try:
+                position = _candidate_position(vocabulary, "predicate", label)
+            except ValueError:
+                if allow_unknown:
+                    continue
+                raise
+            predicate_targets[row, position] = 1.0
+    if bool((predicate_targets.sum(dim=-1) == 0).any()):
+        raise ValueError("every pair row must retain at least one supported predicate")
+    return predicate_targets
 
 
 def _masked_cross_entropy(

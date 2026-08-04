@@ -403,3 +403,29 @@ sbatch \
 Outputs are immutable directories below `$PVSG_RUN_ROOT/unary-seed0/`. Array tasks 0 through 4
 correspond respectively to `linear-probe`, `fused-linear`, `p-direct`, `integral-none`, and
 `integral-p-sa`.
+
+## Run the seed-0 pair predicate-recognition comparison
+
+The seven tasks are the count priors, local DINO linear probe, fused linear head, fusion MLP,
+P-Direct, Integral without feedback, and Integral P-SA. All learned conditions use the selected
+QTB/softplus/`1e-3` setup where applicable; P-Samp reuses the Integral P-SA checkpoint.
+
+```bash
+cd /nfs/data8/harjes/MASTER/tensor-brain
+source cluster/pvsg/common.sh
+mkdir -p "$SLURM_LOG_ROOT"
+sbatch \
+  --partition=minor \
+  --gres=gpu:1 \
+  --cpus-per-task=3 \
+  --mem=16G \
+  --time=2-00:00:00 \
+  --output="$SLURM_LOG_ROOT/%x-%A_%a.out" \
+  --error="$SLURM_LOG_ROOT/%x-%A_%a.err" \
+  cluster/pvsg/pair_baselines.sbatch
+```
+
+The models do not require the larger-memory partition at batch size 128. If `major` is used,
+prefer a cluster-specific GPU constraint so every learned condition uses one GPU family. Each
+`config.json` records the CUDA device and compute capability, and each Slurm log records the GPU
+name and driver. Results are written below `$PVSG_RUN_ROOT/pair-seed0/`.

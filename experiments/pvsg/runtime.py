@@ -11,13 +11,15 @@ from typing import Any, Literal
 import torch
 from torch import Tensor, nn
 
-from experiments.pvsg.baselines import FusedLinear, LinearProbe
+from experiments.pvsg.baselines import FlatFusion, FusedLinear, LinearProbe
 from experiments.pvsg.io import write_json
 from experiments.pvsg.models import IntegralTB, PDirect
 from tb import IndexVocabulary, ScoreMode
 from tb.evolution import OriginalTBDynamicContext, QTBEvolution, ReLUEvolution
 
-ModelName = Literal["integral", "p-direct", "linear-probe", "fused-linear"]
+ModelName = Literal[
+    "integral", "p-direct", "linear-probe", "fused-linear", "flat-fusion"
+]
 EvolutionName = Literal["original", "qtb", "relu"]
 
 
@@ -55,6 +57,27 @@ def prepare_device(name: str, seed: int) -> torch.device:
     return torch.device(name)
 
 
+def runtime_metadata(device: torch.device) -> dict[str, Any]:
+    """Record the numerical runtime, including heterogeneous cluster GPUs."""
+
+    metadata: dict[str, Any] = {
+        "torch": torch.__version__,
+        "cuda_runtime": torch.version.cuda,
+        "device": str(device),
+    }
+    if device.type == "cuda":
+        properties = torch.cuda.get_device_properties(device)
+        metadata.update(
+            {
+                "device_name": properties.name,
+                "compute_capability": f"{properties.major}.{properties.minor}",
+                "device_memory_bytes": properties.total_memory,
+                "cudnn": torch.backends.cudnn.version(),
+            }
+        )
+    return metadata
+
+
 def move_features(
     batch: Mapping[str, Any], keys: Sequence[str], device: torch.device
 ) -> dict[str, Any]:
@@ -90,6 +113,7 @@ def build_model(
     evolution: EvolutionName,
     score_mode: ScoreMode,
     hidden_dim: int | None = None,
+    num_sources: int = 2,
 ) -> nn.Module:
     """Construct a named model without hiding its forward schedule."""
 
@@ -98,7 +122,9 @@ def build_model(
     if model == "linear-probe":
         return LinearProbe(state_dim, num_indices)
     if model == "fused-linear":
-        return FusedLinear(state_dim, num_indices, num_sources=2)
+        return FusedLinear(state_dim, num_indices, num_sources=num_sources)
+    if model == "flat-fusion":
+        return FlatFusion(state_dim, num_indices, hidden_dim or state_dim)
     evolution_type = {
         "original": OriginalTBDynamicContext,
         "qtb": QTBEvolution,
@@ -136,6 +162,7 @@ def start_training(
     learning_rate: float,
     weight_decay: float = 0.0,
     hidden_dim: int | None = None,
+    num_sources: int = 2,
 ) -> TrainingRun:
     """Resolve the repetitive state surrounding a concrete training loop."""
 
@@ -150,6 +177,7 @@ def start_training(
         evolution=evolution,
         score_mode=score_mode,
         hidden_dim=hidden_dim,
+        num_sources=num_sources,
     ).to(device)
     optimizer = torch.optim.Adam(
         network.parameters(), lr=learning_rate, weight_decay=weight_decay
@@ -162,6 +190,7 @@ def start_training(
             "state_dim": state_dim,
             "num_indices": len(vocabulary),
             "num_parameters": sum(parameter.numel() for parameter in network.parameters()),
+            "runtime": runtime_metadata(device),
         },
         sort_keys=True,
     )

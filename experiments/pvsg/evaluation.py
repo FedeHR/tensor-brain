@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from statistics import fmean
 from typing import Any
@@ -10,12 +10,13 @@ from typing import Any
 import torch
 from torch.nn import functional as F
 
-from experiments.pvsg.models import ObjectOutputs
+from experiments.pvsg.models import ObjectOutputs, PerceptionOutputs
 from experiments.pvsg.runtime import candidate_tensors, category_candidates, move_features
 from experiments.pvsg.supervision import (
     IGNORE_INDEX,
     build_category_targets,
     build_object_targets,
+    build_predicate_targets,
 )
 from tb import IndexVocabulary
 
@@ -178,3 +179,172 @@ def evaluate_objects(
         result["identities/identity"] = len(identity_totals.by_identity)
         result["videos/identity"] = len(identity_totals.by_video)
     return result
+
+
+def predicate_metrics(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    predicate_names: Sequence[str],
+    subject_categories: Sequence[str],
+    object_categories: Sequence[str],
+    videos: Sequence[tuple[str, str]],
+    *,
+    seen_triples: set[tuple[str, str, str]],
+) -> dict[str, float | int]:
+    """Aggregate positive-pair ranking metrics from one set of predictions."""
+
+    if logits.shape != targets.shape or logits.ndim != 2:
+        raise ValueError("predicate logits and targets must be equally shaped matrices")
+    examples, candidate_count = logits.shape
+    if not examples or len(predicate_names) != candidate_count:
+        raise ValueError("predicate evaluation requires examples and one name per candidate")
+    if not all(
+        len(values) == examples
+        for values in (subject_categories, object_categories, videos)
+    ):
+        raise ValueError("predicate metadata must align with the prediction rows")
+    targets = targets.bool()
+    target_counts = targets.sum(dim=-1)
+    if bool((target_counts == 0).any()):
+        raise ValueError("every evaluated pair must have a supported predicate")
+
+    log_probabilities = logits.log_softmax(dim=-1)
+    distributions = targets.float() / target_counts.unsqueeze(-1)
+    cross_entropy = -(distributions * log_probabilities).sum(dim=-1).mean()
+    target_entropy = -torch.xlogy(distributions, distributions).sum(dim=-1).mean()
+    result: dict[str, float | int] = {
+        "examples": examples,
+        "predicate_candidates": candidate_count,
+        "predicate_assignments": int(target_counts.sum()),
+        "loss/predicate_cross_entropy": float(cross_entropy),
+        "loss/predicate_target_entropy": float(target_entropy),
+        "loss/predicate_kl": float(cross_entropy - target_entropy),
+    }
+
+    max_target_count = int(target_counts.max())
+    target_count_winners = logits.topk(max_target_count, dim=-1).indices
+    exact = []
+    for row, count in enumerate(target_counts.tolist()):
+        predicted = set(target_count_winners[row, :count].tolist())
+        expected = set(targets[row].nonzero(as_tuple=False).flatten().tolist())
+        exact.append(predicted == expected)
+    result["accuracy/predicate_exact_at_target_count"] = sum(exact) / examples
+
+    for requested_k in (1, 5, 10):
+        k = min(requested_k, candidate_count)
+        winners = logits.topk(k, dim=-1).indices
+        predicted = torch.zeros_like(targets).scatter(1, winners, True)
+        hits = predicted & targets
+        hits_by_row = hits.sum(dim=-1)
+        recall_by_row = hits_by_row / target_counts
+        result[f"recall/predicate_example_macro@{requested_k}"] = float(
+            recall_by_row.float().mean()
+        )
+        result[f"recall/predicate_assignment_micro@{requested_k}"] = float(
+            hits.sum() / target_counts.sum()
+        )
+        result[f"precision/predicate@{requested_k}"] = float(
+            (hits_by_row.float() / k).mean()
+        )
+        class_recalls = []
+        for predicate, name in enumerate(predicate_names):
+            support = int(targets[:, predicate].sum())
+            if not support:
+                continue
+            recall = float(hits[:, predicate].sum() / support)
+            result[f"recall/predicate@{requested_k}/{name}"] = recall
+            if requested_k == 1:
+                result[f"support/predicate/{name}"] = support
+            class_recalls.append(recall)
+        result[f"recall/predicate_class_macro@{requested_k}"] = fmean(class_recalls)
+
+        by_video: dict[tuple[str, str], list[float]] = {}
+        for video, recall in zip(videos, recall_by_row.tolist(), strict=True):
+            by_video.setdefault(video, []).append(recall)
+        result[f"recall/predicate_video_macro@{requested_k}"] = fmean(
+            fmean(values) for values in by_video.values()
+        )
+
+        triple_totals = {"seen": [0, 0], "unseen": [0, 0]}
+        for row, (subject, object_) in enumerate(
+            zip(subject_categories, object_categories, strict=True)
+        ):
+            for predicate in targets[row].nonzero(as_tuple=False).flatten().tolist():
+                split = (
+                    "seen"
+                    if (subject, predicate_names[predicate], object_) in seen_triples
+                    else "unseen"
+                )
+                triple_totals[split][0] += int(predicted[row, predicate])
+                triple_totals[split][1] += 1
+        for split, (correct, support) in triple_totals.items():
+            result[f"support/triple_{split}"] = support
+            if support:
+                result[f"recall/triple_{split}@{requested_k}"] = correct / support
+
+    average_precisions = []
+    for predicate, name in enumerate(predicate_names):
+        truth = targets[:, predicate]
+        support = int(truth.sum())
+        if not support:
+            continue
+        order = logits[:, predicate].argsort(descending=True)
+        ranked_truth = truth[order].float()
+        precision = ranked_truth.cumsum(dim=0) / torch.arange(
+            1, examples + 1, device=logits.device
+        )
+        average_precision = float((precision * ranked_truth).sum() / support)
+        result[f"average_precision/predicate/{name}"] = average_precision
+        average_precisions.append(average_precision)
+    result["mean_average_precision/predicate"] = fmean(average_precisions)
+    return result
+
+
+@torch.inference_mode()
+def evaluate_pairs(
+    forward_pair: Callable[
+        [Mapping[str, Any], Mapping[str, torch.Tensor]], PerceptionOutputs
+    ],
+    batches: Iterable[Mapping[str, Any]],
+    vocabulary: IndexVocabulary,
+    *,
+    device: torch.device,
+    seen_triples: set[tuple[str, str, str]],
+) -> dict[str, float | int]:
+    """Evaluate predicate recognition without requiring held-out identities."""
+
+    candidates = candidate_tensors(vocabulary, device)
+    logits = []
+    targets = []
+    subject_categories = []
+    object_categories = []
+    videos = []
+    feature_keys = (
+        "scene_features",
+        "subject_features",
+        "object_features",
+        "union_features",
+    )
+    for cpu_batch in batches:
+        batch = move_features(cpu_batch, feature_keys, device)
+        outputs = forward_pair(batch, candidates)
+        logits.append(outputs["predicate_logits"].detach().cpu())
+        targets.append(
+            build_predicate_targets(
+                cpu_batch, vocabulary, allow_unknown=True
+            )
+        )
+        subject_categories.extend(cpu_batch["subject_category"])
+        object_categories.extend(cpu_batch["object_category"])
+        videos.extend(zip(cpu_batch["source"], cpu_batch["video_id"], strict=True))
+    if not logits:
+        raise ValueError("evaluation requires at least one pair")
+    return predicate_metrics(
+        torch.cat(logits),
+        torch.cat(targets),
+        vocabulary.group_labels("predicate"),
+        subject_categories,
+        object_categories,
+        videos,
+        seen_triples=seen_triples,
+    )
