@@ -21,6 +21,10 @@ pvsg = [
   "torchvision==0.22.1",
   "transformers==5.14.1",
 ]
+agency = [
+  "matplotlib>=3.8",
+  "numpy>=1.26",
+]
 dev = [
   "beartype>=0.19",
   "pytest>=8",

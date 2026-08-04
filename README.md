@@ -18,6 +18,10 @@ The first-principles video experiment design is documented in
 The pinned dataset preparation and cluster extraction commands are in
 [PVSG cluster feature extraction](docs/pvsg_cluster_extraction.md).
 
+The agency research line - action indices, environment coupling, and planning - is designed in
+[Agency and action indices](docs/agency_design.md) and reported in
+[Agency results](docs/agency_results.md).
+
 The repository and distribution are named `tensor-brain`; the import package is the shorter
 `tb` and lives under `src/tb`:
 
@@ -128,6 +132,38 @@ HB-POVM update. `(0, 1)` is the neural PVM update and `(1, 0)` removes index fee
 winner-take-all decoding, and `selection="teacher"` uses the supplied global `outcome` for
 teacher-forced measurement. Gates may also be tensors or learned parameters; the experiment is
 responsible for any range-constraining parameterization.
+
+## Action indices and agency
+
+QTB Section 13 asserts that "actions are generated as any other indices" and that activating an
+index changes not only the brain but the world. It gives no algorithm for this. The `agency`
+experiments implement the assertion literally, and required **no change to `src/tb`**: an action
+candidate group is measured by the same `TensorBrain.measure` call as any perceptual group, and
+its returned global index is executed in the environment.
+
+```python
+q, action_index, probabilities = tb.measure(q, vocabulary.indices("action"))
+reward, observation = environment.step(action_index)
+```
+
+Everything the papers place outside the core stays outside it - the perceptual mapping `g(nu)`,
+the reward module's gated input drive, and the environment coupling all live in
+`experiments/agency`. Three further ideas fall out of operations that already exist:
+
+- the policy's log-probability is the measurement probability, so REINFORCE needs no new module;
+- the "internal reward function" of Section 13.5.2 can be a `reward_positive` *index*, whose
+  ordinary score `a_0,r + a_r^T sigmoid(q)` is a value estimate costing one column of `A`;
+- near-term planning is `evolve` applied to a hypothetical `q + a_action` and read back through
+  that reward index, which is one-step model-predictive control using only paper operations.
+
+The same column is both the perceptual label "I see red" and the instruction "find something
+red". Whether that sharing is load-bearing is a measured question, not an assumption:
+`decoupled-feedback` gives the top-down path its own matrix as a control.
+
+Within one concept window the map from input to index scores passes exactly one nonlinearity, so
+a reactive agent is a perceptron over `sigmoid(q)` and all depth comes from the evolution
+operator. `deliberation_windows` runs extra internal windows per environment step, which is the
+chain-of-thought reading of Section 13.5.2.
 
 ## Index initialization
 
