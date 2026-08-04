@@ -96,6 +96,16 @@ class AgentConfig:
     # Control for the paper's shared bidirectional matrix: when true, top-down
     # feedback uses a second, independently trained matrix.
     decouple_feedback: bool = False
+    # QTB Equation 46 gates every input source separately, `g(nu) = sum_k mu_k
+    # g(nu_k)`, and the paper leaves the gates to the experiment. They matter:
+    # the top-down instruction enters as a column of `A`, whose norm is fixed by
+    # initialization, while the perceptual drive's scale is whatever the encoder
+    # produces. On MiniGrid the encoder drive is 6x the cue at initialization and
+    # 28x after training, so the instruction is drowned unless it is gated up or
+    # the drive is normalized.
+    cue_gate: float = 1.0
+    learn_cue_gate: bool = False
+    normalize_drive: bool = False
 
 
 @dataclass
@@ -210,6 +220,11 @@ class TensorBrainAgent(nn.Module):
         self.reward_projection = nn.Linear(1, config.state_dim, bias=False)
         self.value_head = (
             nn.Linear(config.state_dim, 1) if config.critic == "linear" else None
+        )
+        self.cue_gate = (
+            nn.Parameter(torch.tensor(float(config.cue_gate)))
+            if config.learn_cue_gate
+            else None
         )
         # Buffers use internal names so that `action_indices` can stay a
         # readable public property without shadowing its own storage.
@@ -351,9 +366,15 @@ class TensorBrainAgent(nn.Module):
                 q, context = self.brain.evolve(q, context)
 
             # --- Algorithm 2 / Equation 46: gated inputs from modules ----
-            q = self.brain.integrate_input(
-                q, self.encoder(observation), input_gate=config.view_gate
-            )
+            drive = self.encoder(observation)
+            if config.normalize_drive:
+                # The repository's PVSG convention: `sqrt(D) * L2-normalize(x)`,
+                # so every nonzero input has component RMS one. Here it puts the
+                # perceptual drive on the same scale as an index embedding.
+                drive = drive * (config.state_dim**0.5) / drive.norm(
+                    dim=-1, keepdim=True
+                ).clamp_min(1e-6)
+            q = self.brain.integrate_input(q, drive, input_gate=config.view_gate)
             q = self.brain.integrate_input(
                 q,
                 self.reward_projection(previous_reward[:, None]),
@@ -366,7 +387,8 @@ class TensorBrainAgent(nn.Module):
                 if config.cue_mode == "initial":
                     assert is_first_step is not None
                     cue_drive = cue_drive * is_first_step[:, None].float()
-                q = q + cue_drive
+                gate = self.cue_gate if self.cue_gate is not None else config.cue_gate
+                q = q + gate * cue_drive
 
             if window == 0 and config.measure_percepts:
                 # --- Algorithm 3, perceptual naming of the attended region
@@ -437,6 +459,15 @@ class TensorBrainAgent(nn.Module):
         return q, context
 
 
+def _remap_legacy_encoder_keys(state_dict, prefix, *_arguments) -> None:
+    """Accept checkpoints that still call the encoder ``view_projection``."""
+
+    for suffix in ("weight", "bias"):
+        legacy = f"{prefix}view_projection.{suffix}"
+        if legacy in state_dict:
+            state_dict[f"{prefix}encoder.{suffix}"] = state_dict.pop(legacy)
+
+
 class GridAgent(TensorBrainAgent):
     """The Tensor Brain agent for the symbolic-foraging gridworld."""
 
@@ -449,6 +480,10 @@ class GridAgent(TensorBrainAgent):
             config,
         )
         self.grid = grid
+        # Checkpoints written before `view_projection` was renamed to `encoder`
+        # must keep loading, because the gridworld study's figures are
+        # regenerated from them.
+        self._register_load_state_dict_pre_hook(_remap_legacy_encoder_keys)
         self.register_buffer(
             "color_indices", vocabulary.indices("color"), persistent=False
         )

@@ -38,6 +38,15 @@ CONDITIONS: dict[str, AgentConfig | None] = {
     # The QTB normalizer that never escaped under REINFORCE. Does a stronger
     # estimator rescue it, or is the failure a property of the score mode?
     "score-softplus-bias": replace(REFERENCE, score_mode="softplus-bias"),
+    # --- input balance (QTB Equation 46's gates) --------------------------
+    # Measured at initialization on this level: the encoder drive has component
+    # RMS 1.04 while the two summed cue columns have RMS 0.17, and after
+    # training the ratio grows to 28x. In the gridworld the same two quantities
+    # were 0.16 and 0.18 -- balanced by accident of the one-hot view. These
+    # three conditions ask whether the instruction is simply being drowned.
+    "cue-gain-8": replace(REFERENCE, cue_gate=8.0),
+    "cue-gate-learned": replace(REFERENCE, learn_cue_gate=True),
+    "normalized-drive": replace(REFERENCE, normalize_drive=True),
 }
 
 
