@@ -417,6 +417,7 @@ def _parse_args() -> tuple[Path, Path, Path, ObjectExperimentConfig]:
             "integral-p-sa",
         ),
     )
+    parser.add_argument("--semantic-condition", choices=("source", "hierarchy"))
     for name in (
         "batch-size",
         "max-steps",

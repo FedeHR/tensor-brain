@@ -1,10 +1,12 @@
 import json
+import sys
 
 import pytest
 import torch
 
 from experiments.pvsg.object_experiment import (
     ObjectExperimentConfig,
+    _parse_args,
     run_object_experiment,
 )
 
@@ -52,6 +54,36 @@ def _record(video_id, row, identity, category, role):
         "object_row": row,
         "mask_area": 10,
     }
+
+
+def test_object_experiment_cli_accepts_semantic_condition(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "object_experiment",
+            "--manifest-root",
+            str(tmp_path / "manifests"),
+            "--feature-root",
+            str(tmp_path / "features"),
+            "--output-root",
+            str(tmp_path / "runs"),
+            "--run-name",
+            "unary",
+            "--evolution",
+            "qtb",
+            "--score-mode",
+            "softplus-bias",
+            "--learning-rate",
+            "0.001",
+            "--semantic-condition",
+            "hierarchy",
+        ],
+    )
+
+    _manifest_root, _feature_root, _output_root, config = _parse_args()
+
+    assert config.semantic_condition == "hierarchy"
 
 
 @pytest.mark.parametrize(
