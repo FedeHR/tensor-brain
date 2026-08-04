@@ -75,6 +75,12 @@ def test_object_evaluation_scores_known_identities() -> None:
         "accuracy/category_class_macro/object_category/source"
     ] == 1.0
     assert result["support/category/object_category/source"] == 2
+    assert result[
+        "support/category_given_identity_correct/object_category/source"
+    ] == 2
+    assert result[
+        "support/category_given_identity_incorrect/object_category/source"
+    ] == 0
 
 
 def test_object_evaluation_ignores_unsupported_novel_categories() -> None:
@@ -141,3 +147,21 @@ def test_object_evaluation_distinguishes_micro_and_macro_accuracies() -> None:
     ] == pytest.approx(1 / 3)
     assert result["accuracy/category_level_mean_observation_micro"] == 0.5
     assert result["accuracy/category_level_mean_class_macro"] == pytest.approx(1 / 3)
+    assert result[
+        "support/category_given_identity_correct/object_category/source"
+    ] == 2
+    assert result[
+        "accuracy/category_given_identity_correct/object_category/source"
+    ] == 1.0
+    assert result[
+        "support/category_given_identity_incorrect/object_category/source"
+    ] == 2
+    assert result[
+        "accuracy/category_given_identity_incorrect/object_category/source"
+    ] == 0.0
+    assert result[
+        "accuracy/category_level_mean_observation_micro_given_identity_correct"
+    ] == 1.0
+    assert result[
+        "accuracy/category_level_mean_observation_micro_given_identity_incorrect"
+    ] == 0.0

@@ -404,6 +404,27 @@ Outputs are immutable directories below `$PVSG_RUN_ROOT/unary-seed0/`. Array tas
 correspond respectively to `linear-probe`, `fused-linear`, `p-direct`, `integral-none`, and
 `integral-p-sa`.
 
+Rerun seed 0 together with four additional seeds as one 25-task array. The rerun keeps every
+condition on the same evaluation implementation, including the conditional identity/category
+diagnostic:
+
+```bash
+sbatch \
+  --partition=minor \
+  --gres=gpu:1 \
+  --cpus-per-task=3 \
+  --mem=16G \
+  --time=2-00:00:00 \
+  --output="$SLURM_LOG_ROOT/%x-%A_%a.out" \
+  --error="$SLURM_LOG_ROOT/%x-%A_%a.err" \
+  cluster/pvsg/unary_multiseed.sbatch
+```
+
+Tasks 0--4 use seed 0, 5--9 seed 1, and so on through tasks 20--24 at seed 4; condition order
+within each block matches the first seed-0 run. Outputs go to the separate immutable directories
+`$PVSG_RUN_ROOT/unary-multiseed/seed0/` through `seed4/`. The array defaults to five concurrent
+jobs.
+
 ## Run the seed-0 pair predicate-recognition comparison
 
 The seven tasks are the count priors, local DINO linear probe, fused linear head, fusion MLP,

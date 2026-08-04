@@ -74,6 +74,39 @@ class _AccuracyTotals:
         return sum(correct for correct, _total in self.by_class.values()) / self.support
 
 
+@dataclass
+class _ConditionalCategoryTotals:
+    """Category accuracy after partitioning rows by identity correctness."""
+
+    by_class: dict[int, list[int]] = field(default_factory=dict)
+
+    def update(
+        self,
+        logits: torch.Tensor,
+        targets: torch.Tensor,
+        selected: torch.Tensor,
+    ) -> None:
+        valid = (targets != IGNORE_INDEX) & selected
+        predictions = logits[valid].argmax(dim=-1).cpu().tolist()
+        target_values = targets[valid].cpu().tolist()
+        for prediction, target in zip(predictions, target_values, strict=True):
+            counts = self.by_class.setdefault(target, [0, 0])
+            counts[0] += int(prediction == target)
+            counts[1] += 1
+
+    @property
+    def support(self) -> int:
+        return sum(total for _correct, total in self.by_class.values())
+
+    @property
+    def micro(self) -> float:
+        return sum(correct for correct, _total in self.by_class.values()) / self.support
+
+    @property
+    def class_macro(self) -> float:
+        return fmean(correct / total for correct, total in self.by_class.values())
+
+
 @torch.inference_mode()
 def evaluate_objects(
     forward_object: Callable[
@@ -91,6 +124,16 @@ def evaluate_objects(
     candidates = candidate_tensors(vocabulary, device)
     categories = category_candidates(candidates)
     totals = {group: _AccuracyTotals() for group in categories}
+    conditional = (
+        {
+            condition: {
+                group: _ConditionalCategoryTotals() for group in categories
+            }
+            for condition in ("identity_correct", "identity_incorrect")
+        }
+        if identities
+        else None
+    )
     identity_totals = _AccuracyTotals()
     examples = 0
     for cpu_batch in batches:
@@ -108,8 +151,12 @@ def evaluate_objects(
                 batch_identities,
                 batch_videos,
             )
+            identity_correct = (
+                outputs["identity_logits"].argmax(dim=-1) == targets.identity
+            )
             category_targets = targets.categories
         else:
+            identity_correct = None
             category_targets = {
                 group: target.to(device)
                 for group, target in build_category_targets(
@@ -127,6 +174,14 @@ def evaluate_objects(
                 batch_identities,
                 batch_videos,
             )
+            if conditional is not None and identity_correct is not None:
+                for condition, selected in (
+                    ("identity_correct", identity_correct),
+                    ("identity_incorrect", ~identity_correct),
+                ):
+                    conditional[condition][group].update(
+                        outputs["category_logits"][group], target, selected
+                    )
 
     if not examples:
         raise ValueError("evaluation requires at least one example")
@@ -178,6 +233,27 @@ def evaluate_objects(
         )
         result["identities/identity"] = len(identity_totals.by_identity)
         result["videos/identity"] = len(identity_totals.by_video)
+        assert conditional is not None
+        for condition, totals_by_group in conditional.items():
+            conditional_micro = []
+            conditional_class_macro = []
+            for group, total in totals_by_group.items():
+                result[f"support/category_given_{condition}/{group}"] = total.support
+                if not total.support:
+                    continue
+                result[f"accuracy/category_given_{condition}/{group}"] = total.micro
+                result[
+                    f"accuracy/category_class_macro_given_{condition}/{group}"
+                ] = total.class_macro
+                conditional_micro.append(total.micro)
+                conditional_class_macro.append(total.class_macro)
+            if conditional_micro:
+                result[
+                    f"accuracy/category_level_mean_observation_micro_given_{condition}"
+                ] = fmean(conditional_micro)
+                result[
+                    f"accuracy/category_level_mean_class_macro_given_{condition}"
+                ] = fmean(conditional_class_macro)
     return result
 
 

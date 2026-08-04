@@ -442,9 +442,13 @@ evaluation videos remain untouched. The P-SA checkpoint is evaluated as parallel
 P-Samp, sequential-hierarchy P-SA, and sequential-hierarchy P-Samp. The other conditions have one
 native evaluation mode.
 
-This first seed establishes that every condition trains correctly and estimates effect sizes. A
-final claim about stochastic model differences should use additional seeds; a single seed remains
-exploratory even when its gap is large.
+Seed 0 establishes that every condition trains correctly and estimates effect sizes. The complete
+comparison reruns all five trained conditions at seeds 0 through 4 without changing the selected
+configuration. On the blocked split, category accuracy and class-macro recall are additionally
+computed on the disjoint subsets where identity top-1 is correct and incorrect. This diagnoses
+whether semantic accuracy survives an identity error; it does not by itself prove that identity
+feedback caused a particular prediction. The existing category cross-entropy remains the direct
+diagnostic for confident errors in the evaluation-only sequential hierarchy rollout.
 
 ### First pair predicate-recognition comparison
 
@@ -581,6 +585,11 @@ For object semantics and known-identity recognition, report observation-micro ac
 with class-, identity-, and video-macro accuracy. Report each hierarchy level separately and name
 any average across levels explicitly. Identity results additionally require the scene controls
 defined by the blocked protocol.
+
+Report category accuracy and supported-class macro recall conditional on identity top-1
+correctness for the blocked protocol. These are aggregate diagnostics; paired per-observation
+artifacts remain a separate option if a later analysis requires resampling or intervention-level
+attribution.
 
 For positive-pair predicate recognition, report:
 
