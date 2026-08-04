@@ -11,6 +11,9 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from experiments.agency.agent import AgentConfig
+from experiments.agency.minigrid.levels import STRICT_PICKUP_ID, register_levels
+
+register_levels()
 
 REFERENCE = AgentConfig(
     state_dim=64,
@@ -86,10 +89,25 @@ LEVELS: dict[str, Level] = {
         num_envs=16,
         updates=2500,   # 2.56M frames; a random policy scores 0.02 here
     ),
+    # A single room where picking up the wrong object ends the episode with zero
+    # reward. The stock GoTo/Pickup levels do not penalise a wrong choice, and a
+    # shuffled-mission control showed that no policy uses the instruction there,
+    # so this is the level on which instruction grounding is actually testable.
+    "pickupstrict": Level(
+        env_id=STRICT_PICKUP_ID,
+        tests="instruction grounding when choosing wrong is punished",
+        compositional=True,
+        num_envs=16,
+        updates=1000,   # 1.02M frames; a random policy scores 0.10 here
+    ),
 }
 
 # `no-cue` is only meaningful where the mission varies per episode.
 LEVEL_CONDITIONS: dict[str, tuple[str, ...]] = {
     "gotolocal": tuple(CONDITIONS),
     "doorkey": tuple(name for name in CONDITIONS if name != "no-cue"),
+    "pickupstrict": (
+        "tb-full", "no-cue", "gru-control", "lstm-control",
+        "deliberate-3-attend", "no-percept-measure", "decoupled-feedback",
+    ),
 }

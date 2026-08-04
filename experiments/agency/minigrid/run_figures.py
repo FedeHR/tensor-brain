@@ -28,7 +28,7 @@ from experiments.agency.minigrid.plots import (
 from experiments.agency.minigrid.run import build_policy, cue_split
 
 # Measured with a uniform random policy over several hundred episodes.
-RANDOM_SUCCESS = {"gotolocal": 0.31, "doorkey": 0.02}
+RANDOM_SUCCESS = {"gotolocal": 0.31, "doorkey": 0.02, "pickupstrict": 0.10}
 
 
 def load(grid_root: Path, level: str, condition: str) -> list[dict]:
@@ -102,15 +102,18 @@ def qualitative(grid_root: Path, figure_root: Path, level: str, condition: str, 
     environment = VectorMiniGrid(
         specification.env_id, 1, seed=17, allowed_cues=train_cues, render=True
     )
-    episode = best_episode(environment, policy, attempts=40)
     stem = f"{level}_{condition}"
-    trajectory_overlay(episode, figure_root / f"{stem}_trajectory.png")
-    filmstrip(episode, figure_root / f"{stem}_filmstrip.png")
+    # The trajectory figure wants the episode with the most to show; the
+    # filmstrip wants one short enough to fit on a page.
+    rich = best_episode(environment, policy, attempts=40, prefer="richest")
+    trajectory_overlay(rich, figure_root / f"{stem}_trajectory.png")
     index_raster(
-        episode,
+        rich,
         figure_root / f"{stem}_raster.png",
         list(policy.vocabulary.group_labels("action")),
     )
+    brief = best_episode(environment, policy, attempts=20, prefer="shortest")
+    filmstrip(brief, figure_root / f"{stem}_filmstrip.png")
     environment.close()
 
 

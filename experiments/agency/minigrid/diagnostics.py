@@ -116,15 +116,25 @@ def best_episode(
     policy: MiniGridAgent | RecurrentControl,
     *,
     attempts: int = 40,
+    prefer: str = "richest",
 ) -> NarratedEpisode:
-    """Return the shortest successful episode from a sample, or the longest try.
+    """Pick one episode to illustrate, from a sample of rollouts.
 
-    A successful episode is what the figure is meant to explain; among successes
-    the shortest one keeps the filmstrip readable.
+    ``prefer="richest"`` returns the successful episode that exhibits the most
+    sub-goal events, longest first. On DoorKey the shortest success is often a
+    lucky layout in which the agent starts beside an already-reachable goal,
+    which shows none of the behaviour worth showing; the richest one contains
+    the whole fetch-key, open-door, reach-goal chain.
+
+    ``prefer="shortest"`` returns the shortest success, which keeps a filmstrip
+    readable. If nothing succeeded, the longest attempt is returned so the
+    figure still shows what the policy does.
     """
 
     episodes = [narrate_episode(environment, policy) for _ in range(attempts)]
     successful = [item for item in episodes if item.success]
-    if successful:
+    if not successful:
+        return max(episodes, key=lambda item: item.length)
+    if prefer == "shortest":
         return min(successful, key=lambda item: item.length)
-    return max(episodes, key=lambda item: item.length)
+    return max(successful, key=lambda item: (len(item.events()), item.length))
