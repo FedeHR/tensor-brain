@@ -292,12 +292,24 @@ class SymbolicForaging:
             & (state.object_col[:, :, None, None] == view_cols[:, None])
         )
         env_ids, slot_ids, row_ids, col_ids = matches.nonzero(as_tuple=True)
-        colors = state.object_color[env_ids, slot_ids]
-        shapes = state.object_shape[env_ids, slot_ids]
+        reported_color, reported_shape = self.observed_attributes()
+        colors = reported_color[env_ids, slot_ids]
+        shapes = reported_shape[env_ids, slot_ids]
         view[env_ids, row_ids, col_ids, colors] = 1.0
         view[env_ids, row_ids, col_ids, config.num_colors + shapes] = 1.0
         view[env_ids, row_ids, col_ids, config.num_colors + config.num_shapes] = 1.0
         return view.reshape(self.num_envs, -1)
+
+    def observed_attributes(
+        self,
+    ) -> tuple[Int[Tensor, "envs objects"], Int[Tensor, "envs objects"]]:
+        """Attributes as *reported* by the sensor; here, the true ones.
+
+        Subclasses corrupt this to make perception unreliable without
+        duplicating the view-rendering logic.
+        """
+
+        return self.state.object_color, self.state.object_shape
 
     def visible_object_slot(self) -> Int[Tensor, " envs"]:
         """Slot of the nearest visible object, or ``-1`` when none is in view.

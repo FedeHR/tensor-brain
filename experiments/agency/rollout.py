@@ -105,10 +105,11 @@ def run_episodes(
     first_choice_correct = torch.zeros(num_envs, dtype=torch.bool, device=device)
     first_choice_made = torch.zeros(num_envs, dtype=torch.bool, device=device)
     episode_length = torch.zeros(num_envs, dtype=torch.long, device=device)
-    cue_color = agent.color_indices[environment.state.cue_color()]
-    cue_shape = agent.shape_indices[environment.state.cue_shape()]
-
     for step_index in range(config.max_steps):
+        # Read the cue every step: with a volatility hazard the target, and
+        # therefore the instruction, can change mid-episode.
+        cue_color = agent.color_indices[environment.state.cue_color()]
+        cue_shape = agent.shape_indices[environment.state.cue_shape()]
         observation = environment.observation()
         visible_slot = environment.visible_object_slot()
         true_color, true_shape = agent.percept_targets(

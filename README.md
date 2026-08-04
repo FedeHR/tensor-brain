@@ -20,8 +20,9 @@ The pinned dataset preparation and cluster extraction commands are in
 
 The agency research line - action indices, environment coupling, and planning - is designed in
 [Agency and action indices](docs/agency_design.md), reported on a controlled gridworld in
-[Agency results](docs/agency_results.md), and carried to a published benchmark in
-[Action indices on BabyAI / MiniGrid](docs/agency_minigrid.md).
+[Agency results](docs/agency_results.md), carried to a published benchmark in
+[Action indices on BabyAI / MiniGrid](docs/agency_minigrid.md), and tested as a Bayes filter in
+[Is the measurement update a useful Bayes filter?](docs/agency_bayes.md).
 
 The repository and distribution are named `tensor-brain`; the import package is the shorter
 `tb` and lives under `src/tb`:

@@ -106,6 +106,10 @@ class AgentConfig:
     cue_gate: float = 1.0
     learn_cue_gate: bool = False
     normalize_drive: bool = False
+    # `alpha` is the weight on the log-prior in the measurement update
+    # `q <- alpha q + beta a_k`. Making it learnable lets an experiment ask what
+    # prior weight an environment's volatility actually calls for.
+    learn_action_retain_gate: bool = False
 
 
 @dataclass
@@ -224,6 +228,11 @@ class TensorBrainAgent(nn.Module):
         self.cue_gate = (
             nn.Parameter(torch.tensor(float(config.cue_gate)))
             if config.learn_cue_gate
+            else None
+        )
+        self.action_retain_gate = (
+            nn.Parameter(torch.tensor(float(config.action_retain_gate)))
+            if config.learn_action_retain_gate
             else None
         )
         # Buffers use internal names so that `action_indices` can stay a
@@ -422,7 +431,11 @@ class TensorBrainAgent(nn.Module):
             self.action_indices,
             outcome=outcome,
             selection=selection,
-            retain_gate=config.action_retain_gate,
+            retain_gate=(
+                self.action_retain_gate
+                if self.action_retain_gate is not None
+                else config.action_retain_gate
+            ),
             feedback_gate=config.action_feedback_gate,
         )
         action_position = get_candidate_positions(self.action_indices, action_index)
