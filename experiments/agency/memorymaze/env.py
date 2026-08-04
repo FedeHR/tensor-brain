@@ -14,15 +14,26 @@ Environment recipe, which is fiddly enough to be worth recording:
 
 * Python **3.12** -- ``labmaze`` (a ``dm_control`` dependency) has no 3.13 wheel.
 * the legacy ``gym`` package, not ``gymnasium``; Memory Maze registers there.
-* ``MUJOCO_GL=glfw`` -- offscreen rendering works headless on macOS this way,
-  while ``egl`` and ``osmesa`` are unavailable.
+* a MuJoCo rendering backend, which differs by platform and is the one setting
+  that does not travel: ``glfw`` on macOS, where ``egl`` and ``osmesa`` are
+  unavailable, and ``egl`` on a headless Linux node, where ``glfw`` needs a
+  display that a batch job does not have. ``MUJOCO_GL`` is only defaulted here,
+  so a caller or an ``sbatch`` script can override it; ``osmesa`` is the
+  software fallback for a node without a usable GPU.
 * ``np.bool8`` must be shimmed and ``disable_env_checker=True`` passed, because
   gym 0.26's passive checker predates NumPy 2.
+
+Rendering is also the throughput limit, and it does not parallelise inside a
+process: the environments are stepped in one Python loop, so a batch of eight
+runs no faster in wall-clock terms than a batch of one (measured: ~205
+environment steps per second either way, on an M3 Pro). Scale comes from running
+separate processes -- one Slurm array task per condition and seed.
 """
 
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 
 import numpy as np
@@ -32,7 +43,9 @@ from torch import Tensor
 
 from tb import IndexVocabulary
 
-os.environ.setdefault("MUJOCO_GL", "glfw")
+# `setdefault`, so that a batch script can select `osmesa` on a node whose GPU
+# has no EGL device without editing the module.
+os.environ.setdefault("MUJOCO_GL", "glfw" if sys.platform == "darwin" else "egl")
 if not hasattr(np, "bool8"):  # pragma: no cover - NumPy 2 compatibility shim
     np.bool8 = np.bool_
 

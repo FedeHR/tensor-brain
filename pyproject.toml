@@ -30,6 +30,17 @@ minigrid = [
   "minigrid>=3.1",
   "numpy>=1.26",
 ]
+# Memory Maze needs Python 3.12: `labmaze`, a `dm_control` dependency, ships no
+# 3.13 wheel. It also needs the legacy `gym`, not `gymnasium`, because that is
+# where Memory Maze registers its levels. Sync this group with
+# `uv sync --python 3.12 --extra memorymaze`.
+memorymaze = [
+  "gym==0.26.2",
+  "matplotlib>=3.8",
+  "memory-maze==1.0.3",
+  "mujoco>=3.1",
+  "numpy>=1.26",
+]
 dev = [
   "beartype>=0.19",
   "pytest>=8",
