@@ -10,18 +10,37 @@ The adapter exposes exactly the contract ``experiments/agency/minigrid/ppo.py``
 already consumes, so the same recurrent PPO trains the Tensor Brain and the
 controls here without modification.
 
-Environment recipe, which is fiddly enough to be worth recording:
+This adapter talks to Memory Maze through its **native ``dm_env`` interface**
+rather than through the ``gym`` environments the package also registers. That is
+worth a note, because the obvious move -- migrating to ``gymnasium``, which is
+the maintained replacement for ``gym`` -- does not work here:
+
+* ``memory_maze`` imports ``gym`` specifically, registers its levels in *gym's*
+  registry, and its ``GymWrapper`` subclasses ``gym.Env`` with the pre-0.26
+  four-tuple ``step``. ``gymnasium.make`` would not find the levels, and the
+  wrapper would not satisfy gymnasium's API. Version 1.0.3 is the latest
+  release, so this is not something a version bump fixes.
+* The ``gym`` layer is a thin convenience over a ``dm_env`` that this adapter
+  re-wraps anyway, so bypassing it costs nothing and removes the dependency from
+  our code path entirely -- along with ``gym.make``, the passive environment
+  checker, and the ``np.bool8`` shim that checker needed under NumPy 2.
+* It also buys correctness: ``dm_env`` task factories take a ``seed`` argument,
+  so each environment in the batch is seeded properly instead of by reseeding
+  the global NumPy RNG before construction.
+
+``gym`` nonetheless remains an *installed* dependency, because
+``memory_maze/__init__.py`` imports it unconditionally and re-raises if it is
+missing. Nothing in this repository imports it.
+
+The remaining environment recipe:
 
 * Python **3.12** -- ``labmaze`` (a ``dm_control`` dependency) has no 3.13 wheel.
-* the legacy ``gym`` package, not ``gymnasium``; Memory Maze registers there.
 * a MuJoCo rendering backend, which differs by platform and is the one setting
   that does not travel: ``glfw`` on macOS, where ``egl`` and ``osmesa`` are
   unavailable, and ``egl`` on a headless Linux node, where ``glfw`` needs a
   display that a batch job does not have. ``MUJOCO_GL`` is only defaulted here,
   so a caller or an ``sbatch`` script can override it; ``osmesa`` is the
   software fallback for a node without a usable GPU.
-* ``np.bool8`` must be shimmed and ``disable_env_checker=True`` passed, because
-  gym 0.26's passive checker predates NumPy 2.
 
 Rendering is also the throughput limit, and it does not parallelise inside a
 process: the environments are stepped in one Python loop, so a batch of eight
@@ -44,10 +63,9 @@ from torch import Tensor
 from tb import IndexVocabulary
 
 # `setdefault`, so that a batch script can select `osmesa` on a node whose GPU
-# has no EGL device without editing the module.
+# has no EGL device without editing the module. This must happen before
+# `memory_maze` is imported, which is why the import below is deferred.
 os.environ.setdefault("MUJOCO_GL", "glfw" if sys.platform == "darwin" else "egl")
-if not hasattr(np, "bool8"):  # pragma: no cover - NumPy 2 compatibility shim
-    np.bool8 = np.bool_
 
 IMAGE_SIDE = 64
 NUM_TARGETS = 3
@@ -57,6 +75,17 @@ NOTHING = "nothing_visible"
 REWARD_POSITIVE = "reward_positive"
 ACTION_NAMES = ("noop", "forward", "back", "left", "right", "turn")
 NEAR_RADIUS = 3.0
+
+# The maze sizes Memory Maze ships, named by the `memory_maze.tasks` factory that
+# builds each one. Every level in this study is built with
+# `global_observables=True`, which is what the registered `ExtraObs` ids select
+# and what exposes the ground truth the probe consumes.
+LEVEL_TASKS = {
+    "9x9": "memory_maze_9x9",
+    "11x11": "memory_maze_11x11",
+    "13x13": "memory_maze_13x13",
+    "15x15": "memory_maze_15x15",
+}
 
 
 def build_vocabulary() -> IndexVocabulary:
@@ -97,23 +126,27 @@ class VectorMemoryMaze:
         self,
         num_envs: int,
         *,
-        level: str = "memory_maze:MemoryMaze-9x9-ExtraObs-v0",
+        level: str = "9x9",
         seed: int = 0,
         max_steps: int = 1000,
     ) -> None:
-        import gym  # imported lazily so the rest of the package stays importable
+        # Deferred so that `MUJOCO_GL` above is set before MuJoCo initialises,
+        # and so the rest of the package stays importable without a maze install.
+        from memory_maze import tasks
 
+        if level not in LEVEL_TASKS:
+            raise KeyError(f"unknown level {level!r}; expected one of {sorted(LEVEL_TASKS)}")
         self.level = level
         self.num_envs = num_envs
         self.max_steps = max_steps
         self.vocabulary = build_vocabulary()
-        # Memory Maze's wrapper predates the seeded-reset API, so per-environment
-        # variation comes from seeding the global RNG before each construction.
-        self.envs = []
-        for index in range(num_envs):
-            np.random.seed(seed + index)
-            self.envs.append(gym.make(level, disable_env_checker=True))
-        self.num_actions = int(self.envs[0].action_space.n)
+        # Each environment is seeded through the task factory, so the batch is
+        # reproducible without touching the global NumPy RNG.
+        build = getattr(tasks, LEVEL_TASKS[level])
+        self.envs = [
+            build(global_observables=True, seed=seed + index) for index in range(num_envs)
+        ]
+        self.num_actions = int(self.envs[0].action_spec().num_values)
         self._rng = np.random.default_rng(seed)
         self._observations: list[dict] = [{} for _ in range(num_envs)]
         self._steps = np.zeros(num_envs, dtype=np.int64)
@@ -132,10 +165,9 @@ class VectorMemoryMaze:
         self._observations[slot] = dict(observation)
 
     def _reset_one(self, slot: int) -> None:
-        observation = self.envs[slot].reset()
-        if isinstance(observation, tuple):
-            observation = observation[0]
-        self._store(slot, observation)
+        # `dm_env.Environment.reset` returns a TimeStep, whose `observation` is
+        # the dict of image plus global observables.
+        self._store(slot, self.envs[slot].reset().observation)
         self._steps[slot] = 0
 
     def reset(self) -> None:
@@ -225,26 +257,29 @@ class VectorMemoryMaze:
     def step(self, actions: Int[Tensor, " envs"]) -> MazeStep:
         chosen = actions.detach().cpu().numpy()
         rewards = np.zeros(self.num_envs, dtype=np.float32)
-        done = np.zeros(self.num_envs, dtype=bool)
+        terminated = np.zeros(self.num_envs, dtype=bool)
+        truncated = np.zeros(self.num_envs, dtype=bool)
         for slot in range(self.num_envs):
-            outcome = self.envs[slot].step(int(chosen[slot]))
-            observation, reward = outcome[0], float(outcome[1])
-            finished = bool(outcome[2])
-            rewards[slot] = reward
+            timestep = self.envs[slot].step(int(chosen[slot]))
+            # `reward` is None on a TimeStep that follows a reset; everywhere
+            # else it is a float.
+            rewards[slot] = 0.0 if timestep.reward is None else float(timestep.reward)
             self._steps[slot] += 1
-            truncated = self._steps[slot] >= self.max_steps
-            if finished or truncated:
-                done[slot] = True
+            # The level's own time limit ends the episode; `max_steps` is this
+            # adapter's separate cap, so the two are reported apart.
+            terminated[slot] = bool(timestep.last())
+            truncated[slot] = self._steps[slot] >= self.max_steps
+            if terminated[slot] or truncated[slot]:
                 self._reset_one(slot)
             else:
-                self._store(slot, observation)
+                self._store(slot, timestep.observation)
         # Memory Maze pays +1 each time the requested target is reached; there is
         # no terminal success, so "success" is the per-step pickup event.
         success = rewards > 0.0
         return MazeStep(
             torch.from_numpy(rewards),
-            torch.from_numpy(done),
-            torch.zeros(self.num_envs, dtype=torch.bool),
+            torch.from_numpy(terminated),
+            torch.from_numpy(truncated),
             torch.from_numpy(success),
         )
 

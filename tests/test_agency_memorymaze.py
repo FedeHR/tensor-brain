@@ -260,6 +260,68 @@ def test_native_readout_needs_no_fitted_parameters() -> None:
 # --------------------------------------------------- live environment (3.12)
 
 
+def test_the_adapter_does_not_import_gym() -> None:
+    """`gym` is installed only to satisfy `memory_maze`'s own import.
+
+    The adapter talks to Memory Maze through its native `dm_env` interface, so
+    no module in this package may reach for `gym`. Migrating to `gymnasium` is
+    not possible -- memory_maze registers into gym's registry and subclasses
+    `gym.Env` -- so the next best thing is to depend on neither.
+    """
+
+    import ast
+    from pathlib import Path
+
+    package = Path(__file__).resolve().parents[1] / "experiments" / "agency" / "memorymaze"
+    for source in package.glob("*.py"):
+        # Parsed rather than grepped: the docstrings discuss `gym` at length,
+        # and a text scan would match the explanation instead of the code.
+        tree = ast.parse(source.read_text())
+        imported: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported += [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.append(node.module)
+        offenders = [
+            name for name in imported if name == "gym" or name.startswith("gym.")
+        ]
+        assert not offenders, f"{source.name} imports {offenders}"
+
+
+@needs_maze
+def test_levels_are_maze_sizes_rather_than_gym_ids() -> None:
+    from experiments.agency.memorymaze.env import LEVEL_TASKS
+
+    assert LEVELS["9x9"].env_id in LEVEL_TASKS
+
+
+@needs_maze
+def test_unknown_level_fails_loudly() -> None:
+    from experiments.agency.memorymaze.env import VectorMemoryMaze
+
+    with pytest.raises(KeyError):
+        VectorMemoryMaze(1, level="memory_maze:MemoryMaze-9x9-ExtraObs-v0")
+
+
+@needs_maze
+def test_same_seed_builds_the_same_maze_and_different_seeds_do_not() -> None:
+    """Seeding now goes through the task factory, not the global NumPy RNG."""
+
+    from experiments.agency.memorymaze.env import VectorMemoryMaze
+
+    first = VectorMemoryMaze(1, seed=3)
+    second = VectorMemoryMaze(1, seed=3)
+    other = VectorMemoryMaze(1, seed=4)
+    try:
+        layout = first._observations[0]["maze_layout"]
+        assert (layout == second._observations[0]["maze_layout"]).all()
+        assert (layout != other._observations[0]["maze_layout"]).any()
+    finally:
+        for environment in (first, second, other):
+            environment.close()
+
+
 @needs_maze
 def test_environment_exposes_ground_truth_the_agent_never_sees() -> None:
     from experiments.agency.memorymaze.env import VectorMemoryMaze

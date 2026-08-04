@@ -31,9 +31,13 @@ minigrid = [
   "numpy>=1.26",
 ]
 # Memory Maze needs Python 3.12: `labmaze`, a `dm_control` dependency, ships no
-# 3.13 wheel. It also needs the legacy `gym`, not `gymnasium`, because that is
-# where Memory Maze registers its levels. Sync this group with
-# `uv sync --python 3.12 --extra memorymaze`.
+# 3.13 wheel. Sync this group with `uv sync --python 3.12 --extra memorymaze`.
+#
+# `gym` is here only because `memory_maze/__init__.py` imports it unconditionally
+# and re-raises if it is missing. Nothing in this repository imports it: the
+# adapter uses Memory Maze's native `dm_env` interface. It cannot be replaced by
+# `gymnasium` -- memory_maze registers into gym's registry and subclasses
+# `gym.Env` with the pre-0.26 step API, and 1.0.3 is the final release.
 memorymaze = [
   "gym==0.26.2",
   "matplotlib>=3.8",

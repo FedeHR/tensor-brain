@@ -56,13 +56,28 @@ This is fiddly and does not travel between machines, so it is recorded in
 `experiments/agency/memorymaze/env.py` as well as here.
 
 - **Python 3.12.** `labmaze`, a `dm_control` dependency, ships no 3.13 wheel.
-- The **legacy `gym`**, not `gymnasium` — that is where Memory Maze registers its levels.
 - A **MuJoCo rendering backend**, which is the one setting that differs by platform:
   `MUJOCO_GL=glfw` on macOS, where `egl` and `osmesa` are unavailable; `MUJOCO_GL=egl` on a
   headless Linux node, where `glfw` needs a display a batch job does not have. `osmesa` is the
   software fallback for a node with no usable EGL device.
-- `np.bool8` is shimmed and `disable_env_checker=True` passed, because gym 0.26's passive checker
-  predates NumPy 2.
+### Why not gymnasium
+
+`gym` has been unmaintained since 2022 and prints a banner recommending `gymnasium` as a drop-in
+replacement. That advice does not apply to this package, and the banner is misleading here:
+`memory_maze` imports `gym` by name, registers its levels in *gym's* registry, and its `GymWrapper`
+subclasses `gym.Env` with the pre-0.26 four-tuple `step`. `gymnasium.make` would not find the
+levels. Version 1.0.3 is the final release, so no version bump fixes it.
+
+The adapter therefore uses neither. It talks to Memory Maze through its **native `dm_env`
+interface** — `memory_maze.tasks.memory_maze_9x9(global_observables=True, seed=...)` — which is what
+the `gym` layer wraps anyway. That removes `gym.make`, the passive environment checker and the
+`np.bool8` shim the checker needed under NumPy 2, and it fixes a real wart: the task factories take
+a `seed`, so each environment in the batch is seeded properly rather than by reseeding the global
+NumPy RNG before construction.
+
+`gym` remains an *installed* dependency, because `memory_maze/__init__.py` imports it
+unconditionally and re-raises if it is absent. Nothing in this repository imports it, and a test
+parses the package's ASTs to keep it that way.
 
 ## 3. Throughput, and why this belongs on a cluster
 

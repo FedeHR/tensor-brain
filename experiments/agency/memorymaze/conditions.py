@@ -53,6 +53,8 @@ CONDITIONS: dict[str, AgentConfig | None] = {
 class MazeLevel:
     """One Memory Maze level and the budget spent on it."""
 
+    # The maze size, naming a `memory_maze.tasks` factory rather than a gym id:
+    # the adapter builds the `dm_env` directly. See `env.LEVEL_TASKS`.
     env_id: str
     tests: str
     num_envs: int
@@ -71,7 +73,7 @@ LEVELS: dict[str, MazeLevel] = {
     # spends, so task score here is *not* a competitive claim and is reported
     # only as evidence that the policies learned something to probe.
     "9x9": MazeLevel(
-        env_id="memory_maze:MemoryMaze-9x9-ExtraObs-v0",
+        env_id="9x9",
         tests="retention of target locations across an episode",
         num_envs=8,
         updates=1000,  # 512k frames
