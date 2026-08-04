@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from statistics import fmean
-from typing import Any, Literal
+from typing import Any
 
 import torch
 from torch.nn import functional as F
 
-from experiments.pvsg.models import IntegralTB
+from experiments.pvsg.models import ObjectOutputs
 from experiments.pvsg.runtime import candidate_tensors, category_candidates, move_features
 from experiments.pvsg.supervision import (
     IGNORE_INDEX,
@@ -75,13 +75,14 @@ class _AccuracyTotals:
 
 @torch.inference_mode()
 def evaluate_objects(
-    model: IntegralTB,
+    forward_object: Callable[
+        [Mapping[str, Any], Mapping[str, torch.Tensor]], ObjectOutputs
+    ],
     batches: Iterable[Mapping[str, Any]],
     vocabulary: IndexVocabulary,
     *,
     device: torch.device,
     hierarchy: Mapping[str, Any] | None,
-    feedback_mode: Literal["p-sa", "p-samp"],
     identities: bool,
 ) -> dict[str, float | int]:
     """Aggregate identity and category metrics without retaining predictions."""
@@ -91,17 +92,9 @@ def evaluate_objects(
     totals = {group: _AccuracyTotals() for group in categories}
     identity_totals = _AccuracyTotals()
     examples = 0
-    model.eval()
-
     for cpu_batch in batches:
         batch = move_features(cpu_batch, ("scene_features", "object_features"), device)
-        outputs = model.forward_object(
-            batch["scene_features"],
-            batch["object_features"],
-            candidates["identity"],
-            category_candidates=categories,
-            feedback_mode=feedback_mode,
-        )
+        outputs = forward_object(batch, candidates)
         batch_size = len(batch["scene_features"])
         examples += batch_size
         batch_identities = tuple(cpu_batch["identity"])

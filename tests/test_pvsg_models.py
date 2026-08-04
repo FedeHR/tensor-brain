@@ -3,7 +3,7 @@ import torch
 from jaxtyping import Float
 from torch import Tensor
 
-from experiments.pvsg.baselines import FlatFusion, LinearProbe
+from experiments.pvsg.baselines import FlatFusion, FusedLinear, LinearProbe
 from experiments.pvsg.diagnostics import object_scale_trace_rows
 from experiments.pvsg.models import IntegralTB, PDirect
 from tb.evolution import Evolution
@@ -271,6 +271,52 @@ def test_no_feedback_control_keeps_the_post_input_state() -> None:
     )
 
 
+def test_sequential_hierarchy_feedback_conditions_later_levels() -> None:
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+    set_index_parameters(model)
+    scene = torch.tensor([[0.2, -0.1]])
+    object_ = torch.tensor([[0.4, 0.3]])
+    identities = torch.tensor([0, 1])
+    categories = {
+        "object_category/fine": torch.tensor([2, 3]),
+        "object_category/coarse": torch.tensor([3, 4]),
+    }
+
+    model.eval()
+    outputs = model.forward_object(
+        scene,
+        object_,
+        identities,
+        category_candidates=categories,
+        sequential_categories=True,
+    )
+    q = 2.0 * scene + 1.0 + object_
+    q, _ = model.brain.attend(q, identities)
+    expected_fine = model.brain.index_scores(q, categories["object_category/fine"])
+    q, _ = model.brain.attend(q, categories["object_category/fine"])
+
+    torch.testing.assert_close(
+        outputs["category_logits"]["object_category/fine"], expected_fine
+    )
+    torch.testing.assert_close(
+        outputs["category_logits"]["object_category/coarse"],
+        model.brain.index_scores(q, categories["object_category/coarse"]),
+    )
+
+
+def test_sequential_hierarchy_feedback_is_evaluation_only() -> None:
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+
+    with pytest.raises(ValueError, match="evaluation-only"):
+        model.forward_object(
+            torch.zeros(1, 2),
+            torch.zeros(1, 2),
+            torch.tensor([0, 1]),
+            category_candidates={"object_category/source": torch.tensor([2, 3])},
+            sequential_categories=True,
+        )
+
+
 @pytest.mark.parametrize("model_type", (LinearProbe, FlatFusion))
 def test_non_tb_baselines_return_pair_readouts(model_type) -> None:
     model = (
@@ -320,3 +366,17 @@ def test_linear_probe_returns_object_readouts() -> None:
 
     assert single["identity_logits"].shape == (1, 2)
     assert single["category_logits"]["object_category/source"].shape == (1, 2)
+
+
+def test_fused_linear_object_readout_uses_scene_and_object_evidence() -> None:
+    model = FusedLinear(state_dim=2, num_indices=5, num_sources=2)
+    outputs = model.forward_object(
+        torch.tensor([[0.2, -0.1]]),
+        torch.tensor([[-0.2, 0.5]]),
+        torch.tensor([0, 1]),
+        category_candidates={"object_category/source": torch.tensor([2, 4])},
+    )
+
+    assert model.readout.in_features == 4
+    assert outputs["identity_logits"].shape == (1, 2)
+    assert outputs["category_logits"]["object_category/source"].shape == (1, 2)

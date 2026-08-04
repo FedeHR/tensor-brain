@@ -25,6 +25,20 @@ class _FixedObjectModel(nn.Module):
         }
 
 
+def _forward(model):
+    return lambda batch, candidates: model.forward_object(
+        batch["scene_features"],
+        batch["object_features"],
+        candidates["identity"],
+        category_candidates={
+            group: indices
+            for group, indices in candidates.items()
+            if group.startswith("object_category/")
+        },
+        feedback_mode="p-sa",
+    )
+
+
 def _vocabulary():
     return IndexVocabulary.from_groups(
         {
@@ -45,12 +59,11 @@ def test_object_evaluation_scores_known_identities() -> None:
     }
 
     result = evaluate_objects(
-        _FixedObjectModel(),
+        _forward(_FixedObjectModel()),
         [batch],
         _vocabulary(),
         device=torch.device("cpu"),
         hierarchy=None,
-        feedback_mode="p-sa",
         identities=True,
     )
 
@@ -75,12 +88,11 @@ def test_object_evaluation_ignores_unsupported_novel_categories() -> None:
     }
 
     result = evaluate_objects(
-        _FixedObjectModel(),
+        _forward(_FixedObjectModel()),
         [batch],
         _vocabulary(),
         device=torch.device("cpu"),
         hierarchy=None,
-        feedback_mode="p-samp",
         identities=False,
     )
 
@@ -107,12 +119,11 @@ def test_object_evaluation_distinguishes_micro_and_macro_accuracies() -> None:
     }
 
     result = evaluate_objects(
-        _FixedObjectModel(),
+        _forward(_FixedObjectModel()),
         [batch],
         _vocabulary(),
         device=torch.device("cpu"),
         hierarchy=None,
-        feedback_mode="p-sa",
         identities=True,
     )
 

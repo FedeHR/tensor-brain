@@ -8,16 +8,17 @@ from pathlib import Path
 from typing import Any, Literal
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 from torch.utils.data import DataLoader, Subset, default_collate
 
+from experiments.pvsg.baselines import FusedLinear, LinearProbe
 from experiments.pvsg.data import PVSGObjectDataset, VideoChunkSampler
 from experiments.pvsg.diagnostics import object_scale_trace_rows
 from experiments.pvsg.evaluation import evaluate_objects
 from experiments.pvsg.hierarchy import load_object_hierarchy
 from experiments.pvsg.indices import build_section6_vocabulary
 from experiments.pvsg.io import read_json, write_json, write_jsonl
-from experiments.pvsg.models import IntegralTB
+from experiments.pvsg.models import FeedbackMode, IntegralTB, ObjectOutputs, PDirect
 from experiments.pvsg.runtime import (
     category_candidates,
     experiment_parser,
@@ -29,6 +30,9 @@ from experiments.pvsg.runtime import (
 from experiments.pvsg.supervision import build_object_targets, object_losses, object_metrics
 
 SemanticCondition = Literal["source", "hierarchy"]
+UnaryCondition = Literal[
+    "linear-probe", "fused-linear", "p-direct", "integral-none", "integral-p-sa"
+]
 CAPTURE_STEPS = {0, 1, 10, 100, 1_000, 5_000, 10_000}
 LEVELS = {"source": ("source",), "hierarchy": ("fine", "basic", "coarse", "domain")}
 
@@ -39,6 +43,7 @@ class ObjectExperimentConfig:
     evolution: Literal["original", "qtb"]
     score_mode: Literal["centered", "softplus-bias"]
     learning_rate: float
+    condition: UnaryCondition = "integral-p-sa"
     semantic_condition: SemanticCondition = "hierarchy"
     batch_size: int = 128
     max_steps: int = 10_000
@@ -57,6 +62,14 @@ class ObjectExperimentConfig:
             raise ValueError(f"unknown evolution: {self.evolution}")
         if self.score_mode not in ("centered", "softplus-bias"):
             raise ValueError(f"unknown score mode: {self.score_mode}")
+        if self.condition not in (
+            "linear-probe",
+            "fused-linear",
+            "p-direct",
+            "integral-none",
+            "integral-p-sa",
+        ):
+            raise ValueError(f"unknown unary condition: {self.condition}")
         if min(
             self.learning_rate,
             self.batch_size,
@@ -103,20 +116,60 @@ def _loader(
 
 
 def _forward(
-    model: IntegralTB,
+    model: nn.Module,
     batch: Mapping[str, Any],
     candidates: Mapping[str, Tensor],
     *,
+    feedback_mode: FeedbackMode | None,
+    sequential_categories: bool = False,
     trace: bool = False,
-):
-    return model.forward_object(
-        batch["scene_features"],
-        batch["object_features"],
-        candidates["identity"],
-        category_candidates=category_candidates(candidates),
-        feedback_mode="p-sa",
-        return_trace=trace,
-    )
+) -> ObjectOutputs:
+    categories = category_candidates(candidates)
+    if isinstance(model, IntegralTB):
+        if feedback_mode is None:
+            raise ValueError("Integral TB requires an explicit feedback mode")
+        return model.forward_object(
+            batch["scene_features"],
+            batch["object_features"],
+            candidates["identity"],
+            category_candidates=categories,
+            feedback_mode=feedback_mode,
+            sequential_categories=sequential_categories,
+            return_trace=trace,
+        )
+    if sequential_categories:
+        raise ValueError("sequential category feedback requires Integral TB")
+    if isinstance(model, PDirect):
+        return model.forward_object(
+            batch["object_features"],
+            candidates["identity"],
+            category_candidates=categories,
+            return_trace=trace,
+        )
+    if trace:
+        raise ValueError("scale traces are defined only for Tensor Brain models")
+    if isinstance(model, LinearProbe):
+        return model.forward_object(
+            batch["object_features"],
+            candidates["identity"],
+            category_candidates=categories,
+        )
+    if isinstance(model, FusedLinear):
+        return model.forward_object(
+            batch["scene_features"],
+            batch["object_features"],
+            candidates["identity"],
+            category_candidates=categories,
+        )
+    raise TypeError(f"unsupported unary model: {type(model).__name__}")
+
+
+def _condition(config: ObjectExperimentConfig) -> tuple[str, FeedbackMode | None]:
+    if config.condition == "integral-none":
+        return "integral", "none"
+    if config.condition == "integral-p-sa":
+        return "integral", "p-sa"
+    return config.condition, None
 
 
 def run_object_experiment(
@@ -176,6 +229,7 @@ def run_object_experiment(
     validation_loader = _loader(development_data, validation_indices, config)
 
     state_dim = int(diagnostic_cpu["object_features"].shape[-1])
+    model_name, training_feedback = _condition(config)
     run = start_training(
         output_root,
         config.run_name,
@@ -188,13 +242,12 @@ def run_object_experiment(
         },
         vocabulary,
         state_dim,
-        model="integral",
+        model=model_name,
         evolution=config.evolution,
         score_mode=config.score_mode,
         learning_rate=config.learning_rate,
     )
     model, optimizer, candidates = run.model, run.optimizer, run.candidates
-    assert isinstance(model, IntegralTB)
     device, output_dir = run.device, run.directory
     diagnostic_batch = move_features(
         diagnostic_cpu, ("scene_features", "object_features"), device
@@ -202,9 +255,17 @@ def run_object_experiment(
     trace_path = output_dir / "scale_trace.jsonl"
 
     def diagnose(step: int, checkpoint: str | None = None) -> None:
+        if not isinstance(model, (IntegralTB, PDirect)):
+            return
         model.train()
         optimizer.zero_grad(set_to_none=True)
-        outputs = _forward(model, diagnostic_batch, candidates, trace=True)
+        outputs = _forward(
+            model,
+            diagnostic_batch,
+            candidates,
+            feedback_mode=training_feedback,
+            trace=True,
+        )
         object_losses(
             outputs,
             build_object_targets(
@@ -215,6 +276,7 @@ def run_object_experiment(
             "run_name": config.run_name,
             "evolution": config.evolution,
             "score_mode": config.score_mode,
+            "condition": config.condition,
             "step": step,
         }
         if checkpoint:
@@ -235,17 +297,24 @@ def run_object_experiment(
 
     def evaluate(
         loader: DataLoader,
-        mode: Literal["p-sa", "p-samp"] = "p-sa",
+        mode: FeedbackMode | None = training_feedback,
         *,
         identities: bool = False,
+        sequential_categories: bool = False,
     ) -> dict[str, float | int]:
+        model.eval()
         return evaluate_objects(
-            model,
+            lambda batch, evaluation_candidates: _forward(
+                model,
+                batch,
+                evaluation_candidates,
+                feedback_mode=mode,
+                sequential_categories=sequential_categories,
+            ),
             loader,
             vocabulary,
             device=device,
             hierarchy=hierarchy,
-            feedback_mode=mode,
             identities=identities,
         )
 
@@ -261,7 +330,9 @@ def run_object_experiment(
             targets = build_object_targets(cpu_batch, vocabulary, hierarchy=hierarchy).to(device)
             model.train()
             optimizer.zero_grad(set_to_none=True)
-            outputs = _forward(model, batch, candidates)
+            outputs = _forward(
+                model, batch, candidates, feedback_mode=training_feedback
+            )
             losses = object_losses(outputs, targets)
             if not torch.isfinite(losses.total):
                 raise FloatingPointError(f"non-finite loss at step {step}")
@@ -299,14 +370,30 @@ def run_object_experiment(
     diagnose(best_step, "best")
     assert best_metrics is not None
     evaluation = {}
+    if config.condition == "integral-p-sa":
+        evaluation_modes = (
+            ("p-sa", "p-sa", False),
+            ("p-samp", "p-samp", False),
+            ("p-sa-sequential", "p-sa", True),
+            ("p-samp-sequential", "p-samp", True),
+        )
+    elif config.condition == "integral-none":
+        evaluation_modes = (("none", "none", False),)
+    else:
+        evaluation_modes = (("default", None, False),)
     for name, data, indices, identities in (
         ("development", development_data, development_indices, False),
         ("blocked", blocked_data, blocked_indices, True),
     ):
         loader = _loader(data, indices, config)
         evaluation[name] = {
-            mode: evaluate(loader, mode, identities=identities)
-            for mode in ("p-sa", "p-samp")
+            label: evaluate(
+                loader,
+                mode,
+                identities=identities,
+                sequential_categories=sequential,
+            )
+            for label, mode, sequential in evaluation_modes
         }
     result = {"best_step": best_step, "selection": best_metrics, "evaluation": evaluation}
     write_json(output_dir / "result.json", result, sort_keys=True)
@@ -320,6 +407,16 @@ def _parse_args() -> tuple[Path, Path, Path, ObjectExperimentConfig]:
         "--score-mode", choices=("centered", "softplus-bias"), required=True
     )
     parser.add_argument("--learning-rate", type=float, required=True)
+    parser.add_argument(
+        "--condition",
+        choices=(
+            "linear-probe",
+            "fused-linear",
+            "p-direct",
+            "integral-none",
+            "integral-p-sa",
+        ),
+    )
     for name in (
         "batch-size",
         "max-steps",

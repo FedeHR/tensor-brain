@@ -1,5 +1,6 @@
 import json
 
+import pytest
 import torch
 
 from experiments.pvsg.object_experiment import (
@@ -53,7 +54,23 @@ def _record(video_id, row, identity, category, role):
     }
 
 
-def test_full_object_runner_writes_selected_and_final_evaluations(tmp_path) -> None:
+@pytest.mark.parametrize(
+    ("condition", "evaluation_modes", "has_scale_trace"),
+    (
+        ("linear-probe", {"default"}, False),
+        ("fused-linear", {"default"}, False),
+        ("p-direct", {"default"}, True),
+        ("integral-none", {"none"}, True),
+        (
+            "integral-p-sa",
+            {"p-sa", "p-samp", "p-sa-sequential", "p-samp-sequential"},
+            True,
+        ),
+    ),
+)
+def test_full_object_runner_writes_selected_and_final_evaluations(
+    tmp_path, condition, evaluation_modes, has_scale_trace
+) -> None:
     manifest_root = tmp_path / "snapshot"
     feature_root = tmp_path / "features"
     train_rows = [
@@ -99,10 +116,11 @@ def test_full_object_runner_writes_selected_and_final_evaluations(tmp_path) -> N
         feature_root,
         tmp_path / "runs",
         ObjectExperimentConfig(
-            run_name="smoke",
+            run_name=condition,
             evolution="qtb",
-            score_mode="centered",
+            score_mode="softplus-bias",
             learning_rate=1e-3,
+            condition=condition,
             semantic_condition="source",
             batch_size=2,
             max_steps=2,
@@ -114,19 +132,22 @@ def test_full_object_runner_writes_selected_and_final_evaluations(tmp_path) -> N
         ),
     )
 
-    run_dir = tmp_path / "runs" / "smoke"
+    run_dir = tmp_path / "runs" / condition
     assert set(result["evaluation"]) == {"development", "blocked"}
-    assert set(result["evaluation"]["blocked"]) == {"p-sa", "p-samp"}
-    assert result["evaluation"]["blocked"]["p-sa"]["examples"] == 2
-    assert result["evaluation"]["development"]["p-sa"][
+    assert set(result["evaluation"]["blocked"]) == evaluation_modes
+    first_mode = next(iter(evaluation_modes))
+    assert result["evaluation"]["blocked"][first_mode]["examples"] == 2
+    assert result["evaluation"]["development"][first_mode][
         "ignored/category/object_category/source"
     ] == 1
-    assert {
+    expected_files = {
         "checkpoint.pt",
         "config.json",
         "result.json",
-        "scale_trace.jsonl",
         "training_trace.jsonl",
         "validation_trace.jsonl",
         "vocabulary.json",
-    } == {path.name for path in run_dir.iterdir()}
+    }
+    if has_scale_trace:
+        expected_files.add("scale_trace.jsonl")
+    assert expected_files == {path.name for path in run_dir.iterdir()}

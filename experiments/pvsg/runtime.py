@@ -11,12 +11,13 @@ from typing import Any, Literal
 import torch
 from torch import Tensor, nn
 
+from experiments.pvsg.baselines import FusedLinear, LinearProbe
 from experiments.pvsg.io import write_json
 from experiments.pvsg.models import IntegralTB, PDirect
 from tb import IndexVocabulary, ScoreMode
 from tb.evolution import OriginalTBDynamicContext, QTBEvolution, ReLUEvolution
 
-ModelName = Literal["integral", "p-direct"]
+ModelName = Literal["integral", "p-direct", "linear-probe", "fused-linear"]
 EvolutionName = Literal["original", "qtb", "relu"]
 
 
@@ -89,11 +90,15 @@ def build_model(
     evolution: EvolutionName,
     score_mode: ScoreMode,
     hidden_dim: int | None = None,
-) -> PDirect | IntegralTB:
+) -> nn.Module:
     """Construct a named model without hiding its forward schedule."""
 
     if model == "p-direct":
         return PDirect(state_dim, num_indices, score_mode=score_mode)
+    if model == "linear-probe":
+        return LinearProbe(state_dim, num_indices)
+    if model == "fused-linear":
+        return FusedLinear(state_dim, num_indices, num_sources=2)
     evolution_type = {
         "original": OriginalTBDynamicContext,
         "qtb": QTBEvolution,
@@ -113,7 +118,7 @@ class TrainingRun:
 
     directory: Path
     device: torch.device
-    model: PDirect | IntegralTB
+    model: nn.Module
     optimizer: torch.optim.Optimizer
     candidates: dict[str, Tensor]
 

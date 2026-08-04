@@ -256,7 +256,7 @@ only agreement with human or annotation boundaries.
 
 ### First comparison
 
-Only two models need to be trained for the first paper-parallel result:
+The paper-reference comparison trains P-Direct and Integral TB:
 
 1. **P-Direct** independently decodes identity and semantics from each object feature and
    predicates from the union feature. It has no dynamic context and no index feedback.
@@ -313,6 +313,19 @@ subject, and object evidence into that decision. The first full comparison there
 P-SA and P-Samp remain two inference modes of one checkpoint. The no-feedback control is trained
 separately because removing feedback changes the learned solution. Model parameter counts are
 reported; flat fusion matches information, not exact parameterization.
+
+For the first thesis unary comparison, the complete training set is therefore:
+
+1. a local frozen-DINO linear probe using only object evidence;
+2. a fused linear head using concatenated scene and object evidence;
+3. P-Direct using object evidence and the shared Tensor Brain score matrix;
+4. an Integral QTB checkpoint trained with identity feedback disabled;
+5. an Integral QTB checkpoint trained with P-SA identity feedback.
+
+P-Samp remains an evaluation of condition 5 rather than a sixth checkpoint. The local and fused
+linear heads establish what is available through conventional linear decoding; P-Direct preserves
+the paper comparison; and the separately trained no-feedback condition is the causal feedback
+ablation because it retains scene input, QTB evolution, and the sequential schedule.
 
 ### Training targets
 
@@ -376,6 +389,16 @@ while identity-only and official-category checkpoints are necessary ablations. F
 the identity-only model can later test whether semantic structure emerged without direct
 supervision.
 
+The trained hierarchy readouts remain parallel: fine, basic, coarse, and domain candidates are
+all scored from the same state after identity feedback. As a nearly free evaluation-only
+extension, the Integral P-SA checkpoint is also rolled out in the fixed order
+`fine -> basic -> coarse -> domain`. After scoring each non-final group, its predicted index is
+fed into `q`; P-SA uses its expected embedding and P-Samp uses its winner embedding. There is no
+teacher forcing and no evolution between these category operations. Comparing parallel and
+sequential metrics tests whether the learned bidirectional category embeddings support semantic
+completion. It does not change checkpoint selection and is not described as the original
+paper's Table 5 protocol.
+
 ### First full object grid
 
 The first full-data screen deliberately uses only the paper-aligned scene-to-object schedule,
@@ -406,6 +429,19 @@ The fixed diagnostic batch is independent of the optimization batches and is reu
 saturation, score, feedback, attention, and gradient quantities defined in the fidelity ledger.
 The experiment is therefore informative about TB mechanisms while still serving its immediate
 purpose: choose one score/evolution/learning-rate configuration before paper-ready experiments.
+
+### First unary semantic-feedback comparison
+
+The selected configuration is QTB evolution, `softplus-bias` scoring, Adam at `1e-3`, hierarchy
+supervision, and the chunked sampler from the screening grid. Seed 0 first trains the five
+conditions above for 10,000 updates. Development category loss selects each checkpoint; official
+evaluation videos remain untouched. The P-SA checkpoint is evaluated as parallel P-SA, parallel
+P-Samp, sequential-hierarchy P-SA, and sequential-hierarchy P-Samp. The other conditions have one
+native evaluation mode.
+
+This first seed establishes that every condition trains correctly and estimates effect sizes. A
+final claim about stochastic model differences should use additional seeds; a single seed remains
+exploratory even when its gap is large.
 
 ### Tiny-data overfit gate
 

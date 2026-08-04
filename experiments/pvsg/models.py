@@ -46,20 +46,39 @@ def _category_logits(
     }
 
 
-def _identity_feedback(
+def _index_feedback(
     brain: TensorBrain,
     q: Float[Tensor, "*batch state"],
-    identity_candidates: Int[Tensor, " identities"],
+    candidates: Int[Tensor, " indices"],
     feedback_mode: FeedbackMode,
-) -> tuple[Float[Tensor, "*batch state"], Float[Tensor, "*batch identities"]]:
+) -> tuple[Float[Tensor, "*batch state"], Float[Tensor, "*batch indices"]]:
     if feedback_mode == "p-sa":
-        return brain.attend(q, identity_candidates)
+        return brain.attend(q, candidates)
     if feedback_mode == "none":
-        return q, brain.index_scores(q, identity_candidates).softmax(dim=-1)
+        return q, brain.index_scores(q, candidates).softmax(dim=-1)
     q_next, _outcome, probabilities = brain.measure(
-        q, identity_candidates, selection="argmax"
+        q, candidates, selection="argmax"
     )
     return q_next, probabilities
+
+
+def _sequential_category_logits(
+    brain: TensorBrain,
+    q: Float[Tensor, "*batch state"],
+    candidates_by_level: CategoryCandidates,
+    feedback_mode: Literal["p-sa", "p-samp"],
+) -> dict[str, Tensor]:
+    """Decode ordered hierarchy levels, feeding each prediction into the next."""
+
+    logits = {}
+    levels = tuple(candidates_by_level.items())
+    for position, (level, candidates) in enumerate(levels):
+        logits[level] = brain.index_scores(q, candidates)
+        if position + 1 < len(levels):
+            q, _probabilities = _index_feedback(
+                brain, q, candidates, feedback_mode
+            )
+    return logits
 
 
 def _feedback_vectors(
@@ -269,7 +288,7 @@ class IntegralTB(nn.Module):
         q = self.brain.integrate_input(q, subject_features)
         q_after_input = q
         subject_identity_logits = self.brain.index_scores(q, identity_candidates)
-        q, subject_probabilities = _identity_feedback(
+        q, subject_probabilities = _index_feedback(
             self.brain, q, identity_candidates, feedback_mode
         )
         q_after_feedback = q
@@ -286,7 +305,7 @@ class IntegralTB(nn.Module):
         q = self.brain.integrate_input(q, object_features)
         q_after_input = q
         object_identity_logits = self.brain.index_scores(q, identity_candidates)
-        q, object_probabilities = _identity_feedback(
+        q, object_probabilities = _index_feedback(
             self.brain, q, identity_candidates, feedback_mode
         )
         q_after_feedback = q
@@ -323,6 +342,7 @@ class IntegralTB(nn.Module):
         *,
         category_candidates: CategoryCandidates | None = None,
         feedback_mode: FeedbackMode = "p-sa",
+        sequential_categories: bool = False,
         return_trace: bool = False,
     ) -> ObjectOutputs:
         """Run the paper's scene-to-entity identity and unary-readout schedule."""
@@ -331,6 +351,12 @@ class IntegralTB(nn.Module):
             raise ValueError("P-Samp is evaluation-only; train the checkpoint with P-SA")
         if feedback_mode not in ("p-sa", "p-samp", "none"):
             raise ValueError("feedback_mode must be 'p-sa', 'p-samp', or 'none'")
+        if sequential_categories and self.training:
+            raise ValueError("sequential category feedback is evaluation-only")
+        if sequential_categories and feedback_mode == "none":
+            raise ValueError("sequential category feedback requires P-SA or P-Samp")
+        if sequential_categories and return_trace:
+            raise ValueError("sequential category traces are not implemented")
 
         trace: Trace | None = {} if return_trace else None
         q_before_input = scene_features.new_zeros(scene_features.shape)
@@ -346,10 +372,16 @@ class IntegralTB(nn.Module):
         q = self.brain.integrate_input(q, object_features)
         q_after_input = q
         identity_logits = self.brain.index_scores(q, identity_candidates)
-        q, probabilities = _identity_feedback(
+        q, probabilities = _index_feedback(
             self.brain, q, identity_candidates, feedback_mode
         )
-        category_logits = _category_logits(self.brain, q, category_candidates)
+        category_logits = (
+            _sequential_category_logits(
+                self.brain, q, category_candidates or {}, feedback_mode
+            )
+            if sequential_categories
+            else _category_logits(self.brain, q, category_candidates)
+        )
         _record_identity_window(
             trace, "object", self.brain, identity_candidates, object_features,
             q_before_input, q_after_input, q, probabilities,

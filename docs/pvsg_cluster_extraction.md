@@ -377,3 +377,29 @@ P-Samp metrics. Semantic evaluation separates observation-micro, supported-class
 identity-macro, and video-macro accuracy. Development videos select the checkpoint through hierarchy loss. The final
 within-training blocked interval supplies known-identity re-identification metrics; official
 evaluation videos remain untouched for later confirmatory experiments.
+
+## Run the seed-0 unary semantic-feedback comparison
+
+The first thesis comparison fixes QTB evolution, `softplus-bias`, Adam at `1e-3`, hierarchy
+supervision, and the 1,024-observation chunk sampler. Its five array tasks train the local DINO
+linear probe, fused scene/object linear head, P-Direct, Integral without feedback, and Integral
+P-SA. P-Samp and the fine-to-domain sequential hierarchy rollout reuse the P-SA checkpoint.
+
+```bash
+cd /nfs/data8/harjes/MASTER/tensor-brain
+source cluster/pvsg/common.sh
+mkdir -p "$SLURM_LOG_ROOT"
+sbatch \
+  --partition=minor \
+  --gres=gpu:1 \
+  --cpus-per-task=3 \
+  --mem=16G \
+  --time=2-00:00:00 \
+  --output="$SLURM_LOG_ROOT/%x-%A_%a.out" \
+  --error="$SLURM_LOG_ROOT/%x-%A_%a.err" \
+  cluster/pvsg/unary_baselines.sbatch
+```
+
+Outputs are immutable directories below `$PVSG_RUN_ROOT/unary-seed0/`. Array tasks 0 through 4
+correspond respectively to `linear-probe`, `fused-linear`, `p-direct`, `integral-none`, and
+`integral-p-sa`.

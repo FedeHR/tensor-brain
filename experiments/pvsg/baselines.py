@@ -80,6 +80,39 @@ class LinearProbe(nn.Module):
         }
 
 
+class FusedLinear(nn.Module):
+    """Linear readouts on the concatenation of all supplied evidence."""
+
+    def __init__(self, state_dim: int, num_indices: int, *, num_sources: int) -> None:
+        super().__init__()
+        self.num_sources = num_sources
+        self.readout = nn.Linear(num_sources * state_dim, num_indices)
+
+    def _fuse(self, *features: Tensor) -> Tensor:
+        if len(features) != self.num_sources:
+            raise ValueError(
+                f"expected {self.num_sources} feature sources, received {len(features)}"
+            )
+        return torch.cat(features, dim=-1)
+
+    def forward_object(
+        self,
+        scene_features: Float[Tensor, "*batch state"],
+        object_features: Float[Tensor, "*batch state"],
+        identity_candidates: Int[Tensor, " identities"],
+        *,
+        category_candidates: CategoryCandidates | None = None,
+    ) -> ObjectOutputs:
+        fused = self._fuse(scene_features, object_features)
+        return {
+            "identity_logits": _readout(self.readout, fused, identity_candidates),
+            "category_logits": {
+                group: _readout(self.readout, fused, candidates)
+                for group, candidates in (category_candidates or {}).items()
+            },
+        }
+
+
 class FlatFusion(nn.Module):
     """Non-TB MLP control receiving all evidence in one flat computation."""
 
