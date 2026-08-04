@@ -105,7 +105,7 @@ CNN. That is a real risk and is the reason the benchmark question is deferred ra
    laptop CPU. Its job is to establish whether the *mechanism* works at all, and to produce the
    diagnostics (index-probability traces, embedding geometry, value landscapes) that a large
    environment would make illegible.
-2. **Next — BabyAI/MiniGrid**, because it converts our hand-made cue vocabulary into a real
+2. **Done — BabyAI/MiniGrid** (see [`agency_minigrid.md`](agency_minigrid.md)), because it converts our hand-made cue vocabulary into a real
    compositional instruction benchmark with published splits and published baselines. This is
    where C4 becomes a claim someone else can check.
 3. **Then — ObjectNav with the existing frozen DINOv3 features**, because it is the only step that

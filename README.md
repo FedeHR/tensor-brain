@@ -19,8 +19,9 @@ The pinned dataset preparation and cluster extraction commands are in
 [PVSG cluster feature extraction](docs/pvsg_cluster_extraction.md).
 
 The agency research line - action indices, environment coupling, and planning - is designed in
-[Agency and action indices](docs/agency_design.md) and reported in
-[Agency results](docs/agency_results.md).
+[Agency and action indices](docs/agency_design.md), reported on a controlled gridworld in
+[Agency results](docs/agency_results.md), and carried to a published benchmark in
+[Action indices on BabyAI / MiniGrid](docs/agency_minigrid.md).
 
 The repository and distribution are named `tensor-brain`; the import package is the shorter
 `tb` and lives under `src/tb`:

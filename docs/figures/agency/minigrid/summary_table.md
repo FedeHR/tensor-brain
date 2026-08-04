@@ -27,3 +27,15 @@
 | `decoupled-feedback` | 3 | 1.000 ± 0.000 | 0.966 | 13.6 |
 | `pvm-action` | 3 | 1.000 ± 0.000 | 0.966 | 13.5 |
 | `score-softplus-bias` | 3 | 0.204 ± 0.058 | 0.099 | 328.6 |
+
+### pickupstrict (`TB-PickupLocStrict-v0`)
+
+| condition | seeds | success | held-out missions | return | steps |
+|---|---|---|---|---|---|
+| `tb-full` | 3 | 0.198 ± 0.011 | 0.174 ± 0.004 | 0.175 | 9.6 |
+| `no-cue` | 3 | 0.202 ± 0.004 | 0.149 ± 0.004 | 0.173 | 9.7 |
+| `gru-control` | 3 | 0.190 ± 0.013 | 0.150 ± 0.033 | 0.169 | 7.6 |
+| `lstm-control` | 3 | 0.210 ± 0.008 | 0.181 ± 0.006 | 0.185 | 8.6 |
+| `deliberate-3-attend` | 3 | 0.182 ± 0.007 | 0.155 ± 0.016 | 0.159 | 9.5 |
+| `no-percept-measure` | 3 | 0.210 ± 0.009 | 0.156 ± 0.039 | 0.184 | 8.6 |
+| `decoupled-feedback` | 3 | 0.197 ± 0.018 | 0.193 ± 0.019 | 0.171 | 8.8 |
