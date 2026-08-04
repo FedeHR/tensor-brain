@@ -287,6 +287,11 @@ k^*=\arg\max_{k\in I}z_k,\qquad q'=q+a_{k^*}.
 
 P-Samp is an inference condition, not a separately trained model.
 
+The initial object-grid screen suggests that expected P-SA feedback may be more robust than a
+single winner when a held-out identity is uncertain, whereas winner feedback may benefit known,
+confident identities. This is a hypothesis for a seeded P-SA/P-Samp/no-feedback comparison, not
+a conclusion from the screening run.
+
 Index scoring is crossed with named neutral-offset conditions. `direct` uses the original TB
 perception score `A.T @ gamma`; `softplus-bias` uses QTB's factorized-Bernoulli log-normalizer;
 `centered` uses `A.T @ (gamma - 0.5)` as a diagnostic control; and `learned-bias` adds an ordinary
@@ -377,7 +382,10 @@ The first full-data screen deliberately uses only the paper-aligned scene-to-obj
 not relation batches. It crosses original recurrent and QTB evolution with `centered` and
 `softplus-bias` scoring at learning rates `1e-4`, `3e-4`, and `1e-3`. Every other choice is
 fixed: RMS-normalized DINO input, activation-matched initialization, P-SA training, Adam without
-weight decay, batch size 128, seed 0, and 10,000 updates.
+weight decay, batch size 128, seed 0, and 10,000 updates. The initial whole-video-block run
+showed synchronized validation oscillations. The exact grid is therefore rerun without
+overwriting it using globally shuffled chunks of at most 1,024 observations, with rows shuffled
+within each source video before chunking.
 
 The model-selection signal is the sum of the four hierarchy cross-entropies on a deterministic
 20,000-observation subset of held-out development videos every 1,000 updates. Novel development
@@ -386,6 +394,12 @@ training-supported candidate groups are counted and ignored. After selecting the
 checkpoint, the runner evaluates P-SA and P-Samp on all development observations for semantic
 transfer and on the training-role blocked interval for known-identity re-identification. The
 official evaluation videos are not consumed by this screen.
+
+Evaluation reports observation-micro, supported-class macro, identity-macro, and video-macro
+accuracy separately for every hierarchy level. Any mean across fine, basic, coarse, and domain
+is named explicitly as a level mean. Known-identity evaluation likewise separates observation-,
+identity-, and video-aggregated accuracy so long tracks and long videos cannot silently dominate
+the result.
 
 The fixed diagnostic batch is independent of the optimization batches and is reused at steps
 0, 1, 10, 100, 1,000, 5,000, 10,000, and the selected checkpoint. Its trace records the scale,
@@ -482,6 +496,9 @@ both participants were observed in the prefix. Distance from each evaluation fra
 training exposure is stored and stratified.
 
 This protocol is causal: evaluation never includes frames earlier than the training encounter.
+Because the scene CLS token can identify a repeated video, known-identity results are not treated
+as entity re-identification evidence until scene-omitted and scene-shuffled controls show how much
+accuracy comes from the tracked object rather than video context.
 
 ### `fewshot`
 
@@ -503,6 +520,11 @@ evidence. Pair queries are an optional later test after both participants have b
 Random frame splitting is only a leakage diagnostic and is never a headline result.
 
 ## Metrics and saved evidence
+
+For object semantics and known-identity recognition, report observation-micro accuracy together
+with class-, identity-, and video-macro accuracy. Report each hierarchy level separately and name
+any average across levels explicitly. Identity results additionally require the scene controls
+defined by the blocked protocol.
 
 For positive-pair predicate recognition, report:
 

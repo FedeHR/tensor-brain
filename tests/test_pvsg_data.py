@@ -9,7 +9,7 @@ from experiments.pvsg import data as pvsg_data
 from experiments.pvsg.data import (
     PVSGObjectDataset,
     PVSGPairDataset,
-    VideoBlockSampler,
+    VideoChunkSampler,
     collate_pair_batch,
     normalize_dino,
 )
@@ -177,27 +177,35 @@ def test_dataset_prepares_only_addressed_rows_and_reuses_video_tables(
     assert prepared_shapes == [(2,), (2,), (2,), (2,)]
 
 
-def test_video_block_sampler_keeps_each_video_contiguous() -> None:
+def test_video_chunk_sampler_shuffles_bounded_video_chunks() -> None:
     records = [
-        {"source": "vidor", "video_id": "a"},
-        {"source": "vidor", "video_id": "b"},
-        {"source": "vidor", "video_id": "a"},
-        {"source": "ego4d", "video_id": "c"},
-        {"source": "vidor", "video_id": "b"},
-        {"source": "vidor", "video_id": "a"},
+        {"source": "vidor", "video_id": video_id}
+        for video_id in ("a", "b", "c")
+        for _ in range(6)
     ]
-    sampler = VideoBlockSampler(records, generator=torch.Generator().manual_seed(7))
+    sampler = VideoChunkSampler(
+        records, chunk_size=2, generator=torch.Generator().manual_seed(7)
+    )
 
     order = list(sampler)
 
     assert sorted(order) == list(range(len(records)))
-    for key in {(record["source"], record["video_id"]) for record in records}:
-        positions = [
-            position
-            for position, index in enumerate(order)
-            if (records[index]["source"], records[index]["video_id"]) == key
+    assert any(
+        positions != list(range(min(positions), max(positions) + 1))
+        for video_id in ("a", "b", "c")
+        for positions in [
+            [
+                position
+                for position, index in enumerate(order)
+                if records[index]["video_id"] == video_id
+            ]
         ]
-        assert positions == list(range(min(positions), max(positions) + 1))
+    )
+
+
+def test_video_chunk_sampler_rejects_nonpositive_chunk_size() -> None:
+    with pytest.raises(ValueError, match="chunk_size must be positive"):
+        VideoChunkSampler([], chunk_size=0)
 
 
 def test_pair_dataset_rejects_incomplete_canonical_rows(tmp_path) -> None:

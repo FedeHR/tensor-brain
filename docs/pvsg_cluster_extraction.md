@@ -319,7 +319,7 @@ scientific and optimization choices already recorded in `config.json`. Do not ch
 them in an unnamed retry. A failed primary run should first be read through its loss, gradient,
 CBS, neutral-score, and feedback traces rather than silently converted into a new architecture.
 
-## Run the first full object grid
+## Rerun the first full object grid with chunked sampling
 
 After the overfit gate passes, submit exactly 12 object-only conditions:
 
@@ -332,7 +332,9 @@ learning rate: 1e-4, 3e-4, 1e-3
 All other choices are fixed in `object_grid.sbatch`: RMS-normalized DINO evidence, current
 activation-matched initialization, P-SA training, Adam without weight decay, batch size 128,
 seed 0, 10,000 updates, development validation every 1,000 updates, and a deterministic
-20,000-observation validation subset. Submit the complete array with:
+20,000-observation validation subset. Rows are shuffled within each video, divided into chunks
+of at most 1,024 observations, and the chunks are shuffled globally. This reruns the original
+whole-video-block grid without overwriting it. Submit the complete array with:
 
 ```bash
 cd /nfs/data8/harjes/MASTER/tensor-brain
@@ -367,8 +369,11 @@ that limit; this changes scheduling only. Array tasks are assigned as follows:
 | 10 | qtb | softplus-bias | `3e-4` |
 | 11 | qtb | softplus-bias | `1e-3` |
 
-Each result is written under `$PVSG_RUN_ROOT/object-grid/` with its configuration, vocabulary,
+Each result is written under `$PVSG_RUN_ROOT/object-grid-chunked/` with a run name beginning
+`object-chunked-`, leaving `$PVSG_RUN_ROOT/object-grid/` untouched. Every run contains its
+configuration, vocabulary,
 best checkpoint, train/validation traces, scale diagnostics, and aggregate P-SA and
-P-Samp metrics. Development videos select the checkpoint through hierarchy loss. The final
+P-Samp metrics. Semantic evaluation separates observation-micro, supported-class macro,
+identity-macro, and video-macro accuracy. Development videos select the checkpoint through hierarchy loss. The final
 within-training blocked interval supplies known-identity re-identification metrics; official
 evaluation videos remain untouched for later confirmatory experiments.

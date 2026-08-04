@@ -56,28 +56,38 @@ def _video_feature_tables(
     return {name: artifact[name] for name in _FEATURE_TABLES}
 
 
-class VideoBlockSampler(Sampler[int]):
-    """Shuffle videos and their rows while keeping each video's I/O contiguous."""
+class VideoChunkSampler(Sampler[int]):
+    """Shuffle bounded within-video chunks while retaining useful I/O locality."""
 
     def __init__(
         self,
         records: Sequence[dict[str, Any]],
         *,
+        chunk_size: int = 1024,
         generator: torch.Generator | None = None,
     ) -> None:
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
         blocks: dict[tuple[str, str], list[int]] = {}
         for index, record in enumerate(records):
             key = (record["source"], record["video_id"])
             blocks.setdefault(key, []).append(index)
         self.blocks = tuple(tuple(indices) for indices in blocks.values())
+        self.chunk_size = chunk_size
         self.generator = generator
 
     def __iter__(self) -> Iterator[int]:
-        block_order = torch.randperm(len(self.blocks), generator=self.generator).tolist()
-        for block_index in block_order:
-            block = self.blocks[block_index]
+        chunks = []
+        for block in self.blocks:
             row_order = torch.randperm(len(block), generator=self.generator).tolist()
-            yield from (block[position] for position in row_order)
+            shuffled = tuple(block[position] for position in row_order)
+            chunks.extend(
+                shuffled[start : start + self.chunk_size]
+                for start in range(0, len(shuffled), self.chunk_size)
+            )
+        chunk_order = torch.randperm(len(chunks), generator=self.generator).tolist()
+        for chunk_index in chunk_order:
+            yield from chunks[chunk_index]
 
     def __len__(self) -> int:
         return sum(len(block) for block in self.blocks)

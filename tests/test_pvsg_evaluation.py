@@ -1,3 +1,4 @@
+import pytest
 import torch
 from torch import nn
 
@@ -39,6 +40,8 @@ def test_object_evaluation_scores_known_identities() -> None:
         "object_features": torch.tensor([[4.0, 0.0], [0.0, 4.0]]),
         "identity": ("identity:dog", "identity:ball"),
         "category": ("dog", "ball"),
+        "source": ("vidor", "vidor"),
+        "video_id": ("a", "b"),
     }
 
     result = evaluate_objects(
@@ -52,7 +55,12 @@ def test_object_evaluation_scores_known_identities() -> None:
     )
 
     assert result["accuracy/identity"] == 1.0
+    assert result["accuracy/identity_macro"] == 1.0
+    assert result["accuracy/identity_video_macro"] == 1.0
     assert result["accuracy/category/object_category/source"] == 1.0
+    assert result[
+        "accuracy/category_class_macro/object_category/source"
+    ] == 1.0
     assert result["support/category/object_category/source"] == 2
 
 
@@ -62,6 +70,8 @@ def test_object_evaluation_ignores_unsupported_novel_categories() -> None:
         "object_features": torch.tensor([[4.0, 0.0], [0.0, 4.0]]),
         "identity": ("identity:novel-dog", "identity:novel-gift"),
         "category": ("dog", "gift"),
+        "source": ("vidor", "vidor"),
+        "video_id": ("a", "b"),
     }
 
     result = evaluate_objects(
@@ -77,3 +87,46 @@ def test_object_evaluation_ignores_unsupported_novel_categories() -> None:
     assert result["support/category/object_category/source"] == 1
     assert result["ignored/category/object_category/source"] == 1
     assert result["accuracy/category/object_category/source"] == 1.0
+
+
+def test_object_evaluation_distinguishes_micro_and_macro_accuracies() -> None:
+    batch = {
+        "scene_features": torch.zeros(4, 2),
+        "object_features": torch.tensor(
+            [[4.0, 0.0], [4.0, 0.0], [0.0, 4.0], [4.0, 0.0]]
+        ),
+        "identity": (
+            "identity:dog",
+            "identity:dog",
+            "identity:dog",
+            "identity:ball",
+        ),
+        "category": ("dog", "dog", "dog", "ball"),
+        "source": ("vidor",) * 4,
+        "video_id": ("a", "a", "a", "b"),
+    }
+
+    result = evaluate_objects(
+        _FixedObjectModel(),
+        [batch],
+        _vocabulary(),
+        device=torch.device("cpu"),
+        hierarchy=None,
+        feedback_mode="p-sa",
+        identities=True,
+    )
+
+    assert result["accuracy/identity"] == 0.5
+    assert result["accuracy/identity_macro"] == pytest.approx(1 / 3)
+    assert result["accuracy/identity_video_macro"] == pytest.approx(1 / 3)
+    assert result[
+        "accuracy/category_class_macro/object_category/source"
+    ] == pytest.approx(1 / 3)
+    assert result[
+        "accuracy/category_identity_macro/object_category/source"
+    ] == pytest.approx(1 / 3)
+    assert result[
+        "accuracy/category_video_macro/object_category/source"
+    ] == pytest.approx(1 / 3)
+    assert result["accuracy/category_level_mean_observation_micro"] == 0.5
+    assert result["accuracy/category_level_mean_class_macro"] == pytest.approx(1 / 3)

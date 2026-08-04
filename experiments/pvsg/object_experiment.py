@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Subset, default_collate
 
-from experiments.pvsg.data import PVSGObjectDataset, VideoBlockSampler
+from experiments.pvsg.data import PVSGObjectDataset, VideoChunkSampler
 from experiments.pvsg.diagnostics import object_scale_trace_rows
 from experiments.pvsg.evaluation import evaluate_objects
 from experiments.pvsg.hierarchy import load_object_hierarchy
@@ -44,6 +44,7 @@ class ObjectExperimentConfig:
     max_steps: int = 10_000
     validation_every: int = 1_000
     validation_examples: int = 20_000
+    chunk_size: int = 1024
     log_every: int = 100
     num_workers: int = 2
     seed: int = 0
@@ -62,9 +63,10 @@ class ObjectExperimentConfig:
             self.max_steps,
             self.validation_every,
             self.validation_examples,
+            self.chunk_size,
             self.log_every,
         ) <= 0:
-            raise ValueError("learning-rate, batch, and step values must be positive")
+            raise ValueError("learning-rate, batch, chunk, and step values must be positive")
 
 
 def _role_indices(records: Sequence[dict[str, Any]], role: str) -> list[int]:
@@ -82,8 +84,9 @@ def _loader(
     train: bool = False,
 ) -> DataLoader:
     sampler = (
-        VideoBlockSampler(
+        VideoChunkSampler(
             [dataset.records[index] for index in indices],
+            chunk_size=config.chunk_size,
             generator=torch.Generator().manual_seed(config.seed),
         )
         if train
@@ -322,6 +325,7 @@ def _parse_args() -> tuple[Path, Path, Path, ObjectExperimentConfig]:
         "max-steps",
         "validation-every",
         "validation-examples",
+        "chunk-size",
         "log-every",
         "num-workers",
     ):
