@@ -46,6 +46,22 @@ CriticName = Literal["reward-index", "linear", "none"]
 
 
 @dataclass(frozen=True)
+class IndexLayout:
+    """Which vocabulary groups play which role in the concept-window schedule.
+
+    The schedule itself is task independent: two cue factors are injected
+    top-down, the same two factors are named bottom-up over candidate groups
+    that additionally contain an "unobserved" label, one group holds the action
+    indices, and one holds the reward index. Only the *names* differ between the
+    gridworld (colour/shape) and MiniGrid (colour/object).
+    """
+
+    percept_factors: tuple[str, str]
+    action: str = "action"
+    reward: str = "reward"
+
+
+@dataclass(frozen=True)
 class AgentConfig:
     """Every controlled variable of the agent, in one place."""
 
@@ -159,53 +175,65 @@ class DecoupledTensorBrain(TensorBrain):
         return q + probabilities @ self.A_feedback[:, indices].T, probabilities
 
 
-class GridAgent(nn.Module):
-    """A Tensor Brain wired to a gridworld through action indices.
+class TensorBrainAgent(nn.Module):
+    """A Tensor Brain wired to an environment through action indices.
 
     The Tensor Brain core is untouched. This class owns only the parts the
-    papers place *outside* it: the perceptual mapping ``g(nu)``, the reward
-    module's input drive, and the environment coupling of the action index.
+    papers place *outside* it: the perceptual mapping ``g(nu)`` supplied as an
+    ``encoder`` module, the reward module's input drive, and the environment
+    coupling of the action index. Subclasses build the vocabulary and encoder
+    for a concrete environment; the concept-window schedule lives here once.
     """
 
-    def __init__(self, grid: GridConfig, config: AgentConfig) -> None:
+    def __init__(
+        self,
+        vocabulary: IndexVocabulary,
+        encoder: nn.Module,
+        layout: IndexLayout,
+        config: AgentConfig,
+    ) -> None:
         super().__init__()
-        self.grid = grid
         self.config = config
-        self.vocabulary: IndexVocabulary = build_vocabulary(grid)
+        self.layout = layout
+        self.vocabulary = vocabulary
         brain_type = DecoupledTensorBrain if config.decouple_feedback else TensorBrain
         self.brain = brain_type(
             config.state_dim,
-            len(self.vocabulary),
+            len(vocabulary),
             build_evolution(config.evolution, config.state_dim, config.hidden_dim),
             score_mode=config.score_mode,
         )
-        # g(nu) for the visual module: the dimensional part of input integration
-        # lives in the experiment, not in the Tensor Brain.
-        self.view_projection = nn.Linear(grid.observation_dim, config.state_dim)
+        # g(nu): the dimensional part of input integration lives in the
+        # experiment, not in the Tensor Brain.
+        self.encoder = encoder
         # The reward module writes a single scaled direction into the CBS.
         self.reward_projection = nn.Linear(1, config.state_dim, bias=False)
         self.value_head = (
             nn.Linear(config.state_dim, 1) if config.critic == "linear" else None
         )
+        # Buffers use internal names so that `action_indices` can stay a
+        # readable public property without shadowing its own storage.
         self.register_buffer(
-            "action_indices", self.vocabulary.indices("action"), persistent=False
+            "action_bank", vocabulary.indices(layout.action), persistent=False
         )
         self.register_buffer(
-            "percept_color_indices", self.vocabulary.indices("percept_color"), persistent=False
+            "reward_bank", vocabulary.indices(layout.reward), persistent=False
         )
-        self.register_buffer(
-            "percept_shape_indices", self.vocabulary.indices("percept_shape"), persistent=False
-        )
-        self.register_buffer(
-            "color_indices", self.vocabulary.indices("color"), persistent=False
-        )
-        self.register_buffer(
-            "shape_indices", self.vocabulary.indices("shape"), persistent=False
-        )
-        self.register_buffer(
-            "reward_indices", self.vocabulary.indices("reward"), persistent=False
-        )
-        self.nothing_index = self.vocabulary.index(NOTHING)
+        for slot, group in enumerate(layout.percept_factors):
+            self.register_buffer(
+                f"percept_bank_{slot}", vocabulary.indices(group), persistent=False
+            )
+
+    @property
+    def action_indices(self) -> Int[Tensor, " indices"]:
+        return self.action_bank
+
+    @property
+    def reward_indices(self) -> Int[Tensor, " indices"]:
+        return self.reward_bank
+
+    def percept_bank(self, slot: int) -> Int[Tensor, " indices"]:
+        return getattr(self, f"percept_bank_{slot}")
 
     # -------------------------------------------------------------- utilities
 
@@ -213,21 +241,6 @@ class GridAgent(nn.Module):
         self, num_envs: int, device: torch.device
     ) -> tuple[Float[Tensor, "envs state"], None]:
         return torch.zeros(num_envs, self.config.state_dim, device=device), None
-
-    def percept_targets(
-        self,
-        visible_slot: Int[Tensor, " envs"],
-        object_color: Int[Tensor, "envs objects"],
-        object_shape: Int[Tensor, "envs objects"],
-    ) -> tuple[Int[Tensor, " envs"], Int[Tensor, " envs"]]:
-        """Ground-truth perceptual labels for the attended region of interest."""
-
-        visible = visible_slot >= 0
-        safe_slot = visible_slot.clamp_min(0)[:, None]
-        color = self.color_indices[object_color.gather(1, safe_slot).squeeze(1)]
-        shape = self.shape_indices[object_shape.gather(1, safe_slot).squeeze(1)]
-        nothing = torch.full_like(color, self.nothing_index)
-        return torch.where(visible, color, nothing), torch.where(visible, shape, nothing)
 
     def value_of(self, q: Float[Tensor, "envs state"]) -> Float[Tensor, " envs"]:
         r"""Internal reward function.
@@ -339,7 +352,7 @@ class GridAgent(nn.Module):
 
             # --- Algorithm 2 / Equation 46: gated inputs from modules ----
             q = self.brain.integrate_input(
-                q, self.view_projection(observation), input_gate=config.view_gate
+                q, self.encoder(observation), input_gate=config.view_gate
             )
             q = self.brain.integrate_input(
                 q,
@@ -358,10 +371,10 @@ class GridAgent(nn.Module):
             if window == 0 and config.measure_percepts:
                 # --- Algorithm 3, perceptual naming of the attended region
                 q, color_index, color_probabilities = self._measure_percept(
-                    q, self.percept_color_indices, percept_teacher, 0
+                    q, self.percept_bank(0), percept_teacher, 0
                 )
                 q, shape_index, shape_probabilities = self._measure_percept(
-                    q, self.percept_shape_indices, percept_teacher, 1
+                    q, self.percept_bank(1), percept_teacher, 1
                 )
 
             if not is_action_window:
@@ -422,3 +435,39 @@ class GridAgent(nn.Module):
         if context is not None:
             context = context * keep
         return q, context
+
+
+class GridAgent(TensorBrainAgent):
+    """The Tensor Brain agent for the symbolic-foraging gridworld."""
+
+    def __init__(self, grid: GridConfig, config: AgentConfig) -> None:
+        vocabulary = build_vocabulary(grid)
+        super().__init__(
+            vocabulary,
+            nn.Linear(grid.observation_dim, config.state_dim),
+            IndexLayout(percept_factors=("percept_color", "percept_shape")),
+            config,
+        )
+        self.grid = grid
+        self.register_buffer(
+            "color_indices", vocabulary.indices("color"), persistent=False
+        )
+        self.register_buffer(
+            "shape_indices", vocabulary.indices("shape"), persistent=False
+        )
+        self.nothing_index = vocabulary.index(NOTHING)
+
+    def percept_targets(
+        self,
+        visible_slot: Int[Tensor, " envs"],
+        object_color: Int[Tensor, "envs objects"],
+        object_shape: Int[Tensor, "envs objects"],
+    ) -> tuple[Int[Tensor, " envs"], Int[Tensor, " envs"]]:
+        """Ground-truth perceptual labels for the attended region of interest."""
+
+        visible = visible_slot >= 0
+        safe_slot = visible_slot.clamp_min(0)[:, None]
+        color = self.color_indices[object_color.gather(1, safe_slot).squeeze(1)]
+        shape = self.shape_indices[object_shape.gather(1, safe_slot).squeeze(1)]
+        nothing = torch.full_like(color, self.nothing_index)
+        return torch.where(visible, color, nothing), torch.where(visible, shape, nothing)

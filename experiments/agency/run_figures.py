@@ -150,14 +150,13 @@ def qualitative_figures(
         ("train-cue", train_cues(TASK.num_colors, TASK.num_shapes)),
         ("holdout-cue", latin_square_holdout(TASK.num_colors, TASK.num_shapes)),
     ):
-        # Draw a few layouts and keep the first successful one, so the strip
-        # illustrates the learned behaviour rather than an unlucky sample.
+        # Keep the *shortest successful* episode out of a sample, so the strip
+        # fits on a page and its panels actually show the agent reaching the
+        # target rather than being truncated before the outcome.
         environment = SymbolicForaging(TASK, 1, seed=7, allowed_cues=cues)
-        episode = narrate_episode(environment, agent)
-        for _ in range(20):
-            if episode.success:
-                break
-            episode = narrate_episode(environment, agent)
+        candidates = [narrate_episode(environment, agent) for _ in range(30)]
+        successful = [item for item in candidates if item.success]
+        episode = min(successful or candidates, key=lambda item: len(item.agent_row))
         trajectory_strip(episode, figure_root / f"{prefix}trajectory_{split}.png")
         index_rasters(episode, figure_root / f"{prefix}rasters_{split}.png")
         if split == "train-cue":

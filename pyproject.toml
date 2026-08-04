@@ -25,6 +25,11 @@ agency = [
   "matplotlib>=3.8",
   "numpy>=1.26",
 ]
+minigrid = [
+  "matplotlib>=3.8",
+  "minigrid>=3.1",
+  "numpy>=1.26",
+]
 dev = [
   "beartype>=0.19",
   "pytest>=8",

@@ -20,10 +20,26 @@ from experiments.agency.diagnostics import NarratedEpisode  # noqa: E402
 from experiments.agency.gridworld import ACTION_NAMES  # noqa: E402
 from experiments.agency.vocabulary import COLOR_NAMES, SHAPE_NAMES  # noqa: E402
 
-CONDITION_COLOR = {
-    "tb-full": "#1f77b4",
-    "gru-control": "#7f7f7f",
-}
+# A repeating default cycle made several curves indistinguishable, so every
+# condition gets a stable colour, and a linestyle breaks any remaining ties
+# within a claim group. `tb-full` is always the black reference line.
+_PALETTE = (
+    "#1f77b4", "#d62728", "#2ca02c", "#ff7f0e", "#9467bd",
+    "#8c564b", "#e377c2", "#17becf", "#bcbd22", "#7f7f7f",
+)
+_DASHES = ("-", "--", "-.", ":")
+
+
+def condition_style(name: str, position: int) -> dict:
+    """Stable colour and linestyle for one condition."""
+
+    if name == "tb-full":
+        return {"color": "black", "linestyle": "-", "linewidth": 2.2, "zorder": 5}
+    return {
+        "color": _PALETTE[position % len(_PALETTE)],
+        "linestyle": _DASHES[(position // len(_PALETTE)) % len(_DASHES)],
+        "linewidth": 1.7,
+    }
 SHAPE_MARKER = {"key": "P", "ball": "o", "box": "s", "cup": "v", "star": "*", "ring": "D"}
 COLOR_HEX = {
     "red": "#d62728",
@@ -65,13 +81,15 @@ def learning_curves(
 
     figure, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=True)
     for split, axis in zip(("eval", "holdout"), axes, strict=True):
-        for name in conditions:
+        for position, name in enumerate(conditions):
             if name not in results:
                 continue
             episodes, mean, error = _series(results[name], split, metric)
-            colour = CONDITION_COLOR.get(name)
-            axis.plot(episodes, mean, label=name, color=colour, linewidth=1.8)
-            axis.fill_between(episodes, mean - error, mean + error, alpha=0.15, color=colour)
+            style = condition_style(name, position)
+            axis.plot(episodes, mean, label=name, **style)
+            axis.fill_between(
+                episodes, mean - error, mean + error, alpha=0.13, color=style["color"]
+            )
         axis.set_xlabel("training episodes")
         axis.grid(alpha=0.25)
         if limit is not None:
