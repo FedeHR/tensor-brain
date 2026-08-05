@@ -467,6 +467,33 @@ average precision, mAP, and seen/unseen category-predicate-category recall. Unsu
 assignments are removed from mixed development targets, and rows with no supported target are
 excluded before evaluation. Official evaluation videos remain untouched.
 
+Before changing the Tensor Brain schedule, a four-condition complementarity diagnostic isolates
+whether PVSG exposes useful visual-symbolic interaction:
+
+1. `category-only` uses the directed source-category-pair predicate prior;
+2. `union-only` trains a predicate-only linear readout of the frozen union DINO feature;
+3. `union-category-oracle` adds the pair-prior log-probability for the ground-truth directed
+   source-category pair to an otherwise identical union readout;
+4. `union-category-predicted` replaces each ground-truth category with the detached softmax of a
+   shared linear source-category classifier applied to the subject and object DINO features.
+
+For uncertain predicted categories, condition 4 marginalizes the fixed conditional predicate
+probabilities over the product of the two predicted category distributions before taking the
+log. Predicate gradients are stopped at those distributions: the category classifier is trained
+only by subject and object category cross-entropies and cannot become an unconstrained hidden
+predicate encoder. The learned visual term is added to a learned scalar times the fixed category
+log-probability. Consequently, condition 3 contains condition 1 when the visual readout is zero
+and the scale is one, and condition 2 when the scale is zero. All learned checkpoints are selected
+by predicate KL on the same development subset. Condition 4 also reports category accuracy and an
+evaluation-only ground-truth-category intervention on the same checkpoint.
+
+If condition 3 does not beat both conditions 1 and 2, the task offers little exploitable
+complementarity under this minimal factorization. If condition 3 wins but condition 4 does not,
+source-category recognition is the immediate bottleneck. If conditions 3 and 4 win but Integral
+TB does not, the remaining diagnosis moves to TB grounding, feedback, evolution, or optimization.
+The four seed-0 jobs are submitted with
+`sbatch cluster/pvsg/pair_complementarity.sbatch`.
+
 ### Tiny-data overfit gate
 
 Before any comparison or full-data training, `experiments/pvsg/overfit.py` loads the first 200

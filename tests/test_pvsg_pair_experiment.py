@@ -102,6 +102,47 @@ def test_pair_cli_accepts_the_cluster_arguments(monkeypatch, tmp_path) -> None:
             {"config.json", "result.json", "vocabulary.json"},
         ),
         (
+            "category-only",
+            {"default"},
+            {"config.json", "result.json", "vocabulary.json"},
+        ),
+        (
+            "union-only",
+            {"default"},
+            {
+                "checkpoint.pt",
+                "config.json",
+                "result.json",
+                "training_trace.jsonl",
+                "validation_trace.jsonl",
+                "vocabulary.json",
+            },
+        ),
+        (
+            "union-category-oracle",
+            {"default"},
+            {
+                "checkpoint.pt",
+                "config.json",
+                "result.json",
+                "training_trace.jsonl",
+                "validation_trace.jsonl",
+                "vocabulary.json",
+            },
+        ),
+        (
+            "union-category-predicted",
+            {"default", "oracle-category-intervention"},
+            {
+                "checkpoint.pt",
+                "config.json",
+                "result.json",
+                "training_trace.jsonl",
+                "validation_trace.jsonl",
+                "vocabulary.json",
+            },
+        ),
+        (
             "linear-probe",
             {"default"},
             {
@@ -207,9 +248,7 @@ def test_pair_runner_supports_every_comparison_condition(
     ]
     development_rows[1]["subject_category"] = "ball"
     development_rows[1]["object_category"] = "dog"
-    _write_jsonl(
-        manifest_root / "heldout_video" / "train_pairs.jsonl", train_rows
-    )
+    _write_jsonl(manifest_root / "heldout_video" / "train_pairs.jsonl", train_rows)
     _write_jsonl(
         manifest_root / "heldout_video" / "development_pairs.jsonl",
         development_rows,
@@ -251,9 +290,7 @@ def test_pair_runner_supports_every_comparison_condition(
     )
 
     assert set(result["evaluation"]) == evaluation_modes
-    assert expected_files == {
-        path.name for path in (tmp_path / "runs" / condition).iterdir()
-    }
+    assert expected_files == {path.name for path in (tmp_path / "runs" / condition).iterdir()}
     for metrics in result["evaluation"].values():
         assert metrics["examples"] == 2
         assert metrics["predicate_assignments"] == 2

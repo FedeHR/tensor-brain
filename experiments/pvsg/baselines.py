@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import torch
 from jaxtyping import Float, Int
@@ -47,9 +47,7 @@ class LinearProbe(nn.Module):
             "subject_identity_logits": _readout(
                 self.readout, subject_features, identity_candidates
             ),
-            "object_identity_logits": _readout(
-                self.readout, object_features, identity_candidates
-            ),
+            "object_identity_logits": _readout(self.readout, object_features, identity_candidates),
             "subject_category_logits": {
                 group: _readout(self.readout, subject_features, candidates)
                 for group, candidates in categories.items()
@@ -58,9 +56,7 @@ class LinearProbe(nn.Module):
                 group: _readout(self.readout, object_features, candidates)
                 for group, candidates in categories.items()
             },
-            "predicate_logits": _readout(
-                self.readout, union_features, predicate_candidates
-            ),
+            "predicate_logits": _readout(self.readout, union_features, predicate_candidates),
         }
 
     def forward_object(
@@ -71,9 +67,7 @@ class LinearProbe(nn.Module):
         category_candidates: CategoryCandidates | None = None,
     ) -> ObjectOutputs:
         return {
-            "identity_logits": _readout(
-                self.readout, object_features, identity_candidates
-            ),
+            "identity_logits": _readout(self.readout, object_features, identity_candidates),
             "category_logits": {
                 group: _readout(self.readout, object_features, candidates)
                 for group, candidates in (category_candidates or {}).items()
@@ -127,17 +121,11 @@ class FusedLinear(nn.Module):
         subject_state = self._fuse(
             scene_features, subject_features, object_features, union_features
         )
-        object_state = self._fuse(
-            scene_features, object_features, subject_features, union_features
-        )
+        object_state = self._fuse(scene_features, object_features, subject_features, union_features)
         categories = category_candidates or {}
         return {
-            "subject_identity_logits": _readout(
-                self.readout, subject_state, identity_candidates
-            ),
-            "object_identity_logits": _readout(
-                self.readout, object_state, identity_candidates
-            ),
+            "subject_identity_logits": _readout(self.readout, subject_state, identity_candidates),
+            "object_identity_logits": _readout(self.readout, object_state, identity_candidates),
             "subject_category_logits": {
                 group: _readout(self.readout, subject_state, candidates)
                 for group, candidates in categories.items()
@@ -146,9 +134,7 @@ class FusedLinear(nn.Module):
                 group: _readout(self.readout, object_state, candidates)
                 for group, candidates in categories.items()
             },
-            "predicate_logits": _readout(
-                self.readout, subject_state, predicate_candidates
-            ),
+            "predicate_logits": _readout(self.readout, subject_state, predicate_candidates),
         }
 
 
@@ -181,17 +167,11 @@ class FlatFusion(nn.Module):
         subject_state = self._fuse(
             scene_features, subject_features, object_features, union_features
         )
-        object_state = self._fuse(
-            scene_features, object_features, subject_features, union_features
-        )
+        object_state = self._fuse(scene_features, object_features, subject_features, union_features)
         categories = category_candidates or {}
         return {
-            "subject_identity_logits": _readout(
-                self.readout, subject_state, identity_candidates
-            ),
-            "object_identity_logits": _readout(
-                self.readout, object_state, identity_candidates
-            ),
+            "subject_identity_logits": _readout(self.readout, subject_state, identity_candidates),
+            "object_identity_logits": _readout(self.readout, object_state, identity_candidates),
             "subject_category_logits": {
                 group: _readout(self.readout, subject_state, candidates)
                 for group, candidates in categories.items()
@@ -200,10 +180,106 @@ class FlatFusion(nn.Module):
                 group: _readout(self.readout, object_state, candidates)
                 for group, candidates in categories.items()
             },
-            "predicate_logits": _readout(
-                self.readout, subject_state, predicate_candidates
-            ),
+            "predicate_logits": _readout(self.readout, subject_state, predicate_candidates),
         }
+
+
+@dataclass(frozen=True)
+class ComplementarityOutputs:
+    """Outputs needed by the predicate complementarity diagnostic."""
+
+    predicate_logits: Float[Tensor, "batch predicates"]
+    subject_category_logits: Float[Tensor, "batch categories"] | None = None
+    object_category_logits: Float[Tensor, "batch categories"] | None = None
+
+
+class PredicateComplementarity(nn.Module):
+    """Minimal union/category predicate model used by the four-way diagnostic.
+
+    The fixed category term is a conditional predicate distribution estimated from
+    training records. Adding it to visual logits is a product-of-experts fusion and
+    makes the oracle model reduce exactly to the category-only prior when the visual
+    readout is zero.
+    """
+
+    def __init__(
+        self,
+        state_dim: int,
+        pair_logits: Float[Tensor, "subject_category object_category predicates"],
+        *,
+        condition: Literal["union-only", "union-category-oracle", "union-category-predicted"],
+    ) -> None:
+        super().__init__()
+        if pair_logits.ndim != 3 or not all(size > 0 for size in pair_logits.shape):
+            raise ValueError("pair logits must be a nonempty category-category-predicate tensor")
+        if pair_logits.shape[0] != pair_logits.shape[1]:
+            raise ValueError("subject and object category axes must contain the same vocabulary")
+        if condition not in (
+            "union-only",
+            "union-category-oracle",
+            "union-category-predicted",
+        ):
+            raise ValueError(f"unknown complementarity condition: {condition}")
+        self.condition = condition
+        self.union_readout = nn.Linear(state_dim, pair_logits.shape[-1])
+        self.category_readout = (
+            nn.Linear(state_dim, pair_logits.shape[0])
+            if condition == "union-category-predicted"
+            else None
+        )
+        self.category_logit_scale = (
+            nn.Parameter(torch.ones(())) if condition != "union-only" else None
+        )
+        self.register_buffer("pair_log_probabilities", pair_logits.log_softmax(dim=-1))
+
+    def forward(
+        self,
+        subject_features: Float[Tensor, "batch state"],
+        object_features: Float[Tensor, "batch state"],
+        union_features: Float[Tensor, "batch state"],
+        *,
+        subject_categories: Int[Tensor, " batch"] | None = None,
+        object_categories: Int[Tensor, " batch"] | None = None,
+        oracle_categories: bool = False,
+    ) -> ComplementarityOutputs:
+        visual_logits = self.union_readout(union_features)
+        if self.condition == "union-only":
+            if oracle_categories:
+                raise ValueError("union-only has no category intervention")
+            return ComplementarityOutputs(predicate_logits=visual_logits)
+
+        category_logits = None
+        if self.category_readout is not None:
+            subject_category_logits = self.category_readout(subject_features)
+            object_category_logits = self.category_readout(object_features)
+            category_logits = (subject_category_logits, object_category_logits)
+
+        if self.condition == "union-category-oracle" or oracle_categories:
+            if subject_categories is None or object_categories is None:
+                raise ValueError("oracle fusion requires subject and object category targets")
+            prior_logits = self.pair_log_probabilities[subject_categories, object_categories]
+        else:
+            assert category_logits is not None
+            subject_probabilities = category_logits[0].softmax(dim=-1).detach()
+            object_probabilities = category_logits[1].softmax(dim=-1).detach()
+            pair_probabilities = self.pair_log_probabilities.exp()
+            expected_probabilities = torch.einsum(
+                "bi,bj,ijp->bp",
+                subject_probabilities,
+                object_probabilities,
+                pair_probabilities,
+            )
+            prior_logits = expected_probabilities.clamp_min(
+                torch.finfo(expected_probabilities.dtype).tiny
+            ).log()
+
+        subject_category_logits, object_category_logits = category_logits or (None, None)
+        assert self.category_logit_scale is not None
+        return ComplementarityOutputs(
+            predicate_logits=visual_logits + self.category_logit_scale * prior_logits,
+            subject_category_logits=subject_category_logits,
+            object_category_logits=object_category_logits,
+        )
 
 
 @dataclass(frozen=True)
@@ -283,5 +359,25 @@ class PredicatePriors:
             [
                 self.category_pair_logits.get(pair, self.frequency_logits)
                 for pair in zip(subject_categories, object_categories, strict=True)
+            ]
+        )
+
+    def dense_logits(
+        self,
+        category_names: Sequence[str],
+    ) -> Float[Tensor, "subject_category object_category predicates"]:
+        """Materialize all directed category pairs with the frequency fallback."""
+
+        if not category_names or len(set(category_names)) != len(category_names):
+            raise ValueError("category names must be nonempty and unique")
+        return torch.stack(
+            [
+                torch.stack(
+                    [
+                        self.category_pair_logits.get((subject, object_), self.frequency_logits)
+                        for object_ in category_names
+                    ]
+                )
+                for subject in category_names
             ]
         )
