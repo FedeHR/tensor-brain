@@ -61,12 +61,21 @@ PairCondition = Literal[
     "p-direct",
     "integral-none",
     "integral-p-sa",
+    "integral-cat-sa",
+    "integral-id-cat-sa",
 ]
 COMPLEMENTARITY_CONDITIONS = (
     "union-only",
     "union-category-oracle",
     "union-category-predicted",
 )
+# (identity feedback, category feedback) trained for each Integral condition.
+INTEGRAL_FEEDBACK: dict[str, tuple[FeedbackMode, FeedbackMode]] = {
+    "integral-none": ("none", "none"),
+    "integral-p-sa": ("p-sa", "none"),
+    "integral-cat-sa": ("none", "p-sa"),
+    "integral-id-cat-sa": ("p-sa", "p-sa"),
+}
 FEATURE_KEYS = (
     "scene_features",
     "subject_features",
@@ -83,6 +92,9 @@ class PairExperimentConfig:
     condition: PairCondition
     evolution: Literal["original", "qtb"] = "qtb"
     score_mode: Literal["direct", "centered", "softplus-bias"] = "softplus-bias"
+    category_feedback_level: Literal[
+        "source", "fine", "basic", "coarse", "domain"
+    ] = "source"
     learning_rate: float = 1e-4
     input_mapping_learning_rate: float = 1e-5
     zero_initialize_union: bool = False
@@ -107,14 +119,17 @@ class PairExperimentConfig:
             "fused-linear",
             "flat-fusion",
             "p-direct",
-            "integral-none",
-            "integral-p-sa",
+            *INTEGRAL_FEEDBACK,
         ):
             raise ValueError(f"unknown pair condition: {self.condition}")
         if self.evolution not in ("original", "qtb"):
             raise ValueError(f"unknown evolution: {self.evolution}")
         if self.score_mode not in ("direct", "centered", "softplus-bias"):
             raise ValueError(f"unknown score mode: {self.score_mode}")
+        if self.category_feedback_level not in PAIR_CATEGORY_LEVELS:
+            raise ValueError(
+                f"unknown category feedback level: {self.category_feedback_level}"
+            )
         if self.zero_initialize_union and self.condition not in COMPLEMENTARITY_CONDITIONS:
             raise ValueError("zero-initialize-union is defined only for complementarity models")
         if (
@@ -152,12 +167,23 @@ def _loader(
     )
 
 
-def _condition(config: PairExperimentConfig) -> tuple[str, FeedbackMode | None]:
-    if config.condition == "integral-none":
-        return "integral", "none"
-    if config.condition == "integral-p-sa":
-        return "integral", "p-sa"
+FeedbackModes = tuple[FeedbackMode, FeedbackMode]
+
+
+def _condition(config: PairExperimentConfig) -> tuple[str, FeedbackModes | None]:
+    if config.condition in INTEGRAL_FEEDBACK:
+        return "integral", INTEGRAL_FEEDBACK[config.condition]
     return config.condition, None
+
+
+def _sampled(modes: FeedbackModes) -> FeedbackModes:
+    """Read the same checkpoint back with winner-take-all on every active pathway."""
+
+    identity, category = modes
+    return (
+        "p-samp" if identity == "p-sa" else identity,
+        "p-samp" if category == "p-sa" else category,
+    )
 
 
 def _forward(
@@ -165,13 +191,15 @@ def _forward(
     batch: Mapping[str, Any],
     candidates: Mapping[str, Tensor],
     *,
-    feedback_mode: FeedbackMode | None,
+    feedback_mode: FeedbackModes | None,
+    category_feedback_level: str = "source",
     trace: bool = False,
 ) -> PerceptionOutputs:
     categories = category_candidates(candidates)
     if isinstance(model, IntegralTB):
         if feedback_mode is None:
             raise ValueError("Integral TB requires an explicit feedback mode")
+        identity_mode, category_mode = feedback_mode
         return model(
             batch["scene_features"],
             batch["subject_features"],
@@ -180,7 +208,11 @@ def _forward(
             candidates["identity"],
             candidates["predicate"],
             category_candidates=categories,
-            feedback_mode=feedback_mode,
+            feedback_mode=identity_mode,
+            category_feedback_candidates=categories[
+                f"object_category/{category_feedback_level}"
+            ],
+            category_feedback_mode=category_mode,
             return_trace=trace,
         )
     if isinstance(model, PDirect):
@@ -700,6 +732,32 @@ def run_pair_experiment(
         "development_examples": len(development_indices),
         "diagnostic_indices": diagnostic_indices,
     }
+    if training_feedback is not None:
+        identity_mode, category_mode = training_feedback
+        training_config["feedback"] = {
+            "identity": {
+                "mode": identity_mode,
+                "candidates": "training_identity_columns",
+            },
+            "category": {
+                "mode": category_mode,
+                "candidates": (
+                    f"object_category/{config.category_feedback_level}"
+                    if category_mode != "none"
+                    else None
+                ),
+                "schedule": (
+                    "injected after the unary readout and before evolution; each group "
+                    "is scored before its own feedback so no readout confirms itself"
+                ),
+                "reference": (
+                    "original Algorithm 1 samples c* at line 22 without injecting it; "
+                    "q_S_ddot = q_S + a_{c*} is defined on p.18 and used for chaining "
+                    "in Section 5.2, so perception-path category feedback is an "
+                    "experimental extension"
+                ),
+            },
+        }
     if model_name in ("integral", "p-direct"):
         training_config["input_mapping"] = {
             "name": "shared_linear_g",
@@ -737,6 +795,7 @@ def run_pair_experiment(
             diagnostic_batch,
             candidates,
             feedback_mode=training_feedback,
+            category_feedback_level=config.category_feedback_level,
             trace=True,
         )
         pair_losses(
@@ -763,7 +822,7 @@ def run_pair_experiment(
         optimizer.zero_grad(set_to_none=True)
 
     def evaluate(
-        loader: DataLoader, mode: FeedbackMode | None = training_feedback
+        loader: DataLoader, mode: FeedbackModes | None = training_feedback
     ) -> dict[str, float | int]:
         model.eval()
         return evaluate_pairs(
@@ -772,6 +831,7 @@ def run_pair_experiment(
                 batch,
                 evaluation_candidates,
                 feedback_mode=mode,
+                category_feedback_level=config.category_feedback_level,
             ),
             loader,
             vocabulary,
@@ -794,7 +854,13 @@ def run_pair_experiment(
             ).to(device)
             model.train()
             optimizer.zero_grad(set_to_none=True)
-            outputs = _forward(model, batch, candidates, feedback_mode=training_feedback)
+            outputs = _forward(
+                model,
+                batch,
+                candidates,
+                feedback_mode=training_feedback,
+                category_feedback_level=config.category_feedback_level,
+            )
             losses = pair_losses(outputs, targets)
             if not torch.isfinite(losses.total):
                 raise FloatingPointError(f"non-finite loss at step {step}")
@@ -831,12 +897,17 @@ def run_pair_experiment(
     model.load_state_dict(checkpoint["model_state_dict"])
     diagnose(best_step, "best")
     assert best_metrics is not None
-    if config.condition == "integral-p-sa":
-        evaluation_modes = (("p-sa", "p-sa"), ("p-samp", "p-samp"))
-    elif config.condition == "integral-none":
-        evaluation_modes = (("none", "none"),)
-    else:
+    if training_feedback is None:
         evaluation_modes = (("default", None),)
+    elif "p-sa" in training_feedback:
+        # Read the same checkpoint back with expected and with winner feedback.
+        expected_label = config.condition.removeprefix("integral-")
+        evaluation_modes = (
+            (expected_label, training_feedback),
+            (f"{expected_label.removesuffix('sa')}samp", _sampled(training_feedback)),
+        )
+    else:
+        evaluation_modes = (("none", training_feedback),)
     development_loader = _loader(development_data, development_indices, config)
     result = {
         "best_step": best_step,
@@ -861,8 +932,7 @@ def _parse_args() -> tuple[Path, Path, Path, PairExperimentConfig]:
             "fused-linear",
             "flat-fusion",
             "p-direct",
-            "integral-none",
-            "integral-p-sa",
+            *INTEGRAL_FEEDBACK,
         ),
         required=True,
     )
@@ -870,6 +940,7 @@ def _parse_args() -> tuple[Path, Path, Path, PairExperimentConfig]:
     parser.add_argument(
         "--score-mode", choices=("direct", "centered", "softplus-bias")
     )
+    parser.add_argument("--category-feedback-level", choices=PAIR_CATEGORY_LEVELS)
     parser.add_argument("--zero-initialize-union", action="store_true")
     for name, type_ in (
         ("learning-rate", float),

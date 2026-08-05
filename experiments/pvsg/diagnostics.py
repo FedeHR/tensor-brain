@@ -85,6 +85,8 @@ def operation_rows(trace: Mapping[str, Mapping[str, Tensor]]) -> list[dict[str, 
     operations = (
         ("input", "q_before_input", "q_after_input"),
         ("feedback", "q_after_input", "q_after_feedback"),
+        ("category_feedback", "q_after_feedback", "q_after_category_feedback"),
+        ("evolution", "q_after_category_feedback", "q_after_evolution"),
         ("evolution", "q_after_feedback", "q_after_evolution"),
         ("evolution", "q_after_input", "q_after_evolution"),
     )
@@ -129,44 +131,86 @@ def raw_input_rows(batch: Mapping[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
-def feedback_rows(trace: Mapping[str, Mapping[str, Tensor]]) -> list[dict[str, Any]]:
-    """Summarize actual and counterfactual identity feedback at each entity window."""
+def _direction_cosine_mean(values: Tensor) -> float:
+    r"""Mean pairwise cosine between the batch's feedback vectors.
 
+    A value near one means the injected vector barely depends on the example, so the
+    pathway transports a constant that a no-feedback model can absorb into ``A``.
+    Norm dispersion (``l2_std``) cannot distinguish that case from an informative one.
+    """
+
+    flat = values.detach().float().flatten(end_dim=-2)
+    if flat.shape[0] < 2:
+        return float("nan")
+    unit = flat / flat.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+    gram = unit @ unit.T
+    count = gram.shape[0]
+    off_diagonal_sum = float(gram.sum() - gram.diagonal().sum())
+    return off_diagonal_sum / (count * (count - 1))
+
+
+def feedback_rows(trace: Mapping[str, Mapping[str, Tensor]]) -> list[dict[str, Any]]:
+    """Summarize actual and counterfactual index feedback at each entity window."""
+
+    groups = (
+        (
+            "identity",
+            "identity_probabilities",
+            ("expected_feedback", "winner_feedback", "applied_feedback"),
+        ),
+        (
+            "category",
+            "category_probabilities",
+            (
+                "expected_category_feedback",
+                "winner_category_feedback",
+                "applied_category_feedback",
+            ),
+        ),
+    )
     rows: list[dict[str, Any]] = []
     for window, tensors in trace.items():
-        if "identity_probabilities" not in tensors:
-            continue
-        probabilities = tensors["identity_probabilities"].detach().float()
-        entropy = -(probabilities * probabilities.clamp_min(1e-12).log()).sum(dim=-1)
-        candidate_count = probabilities.shape[-1]
-        rows.append(
-            {
-                "kind": "attention",
-                "window": window,
-                "candidate_count": candidate_count,
-                "entropy_mean": float(entropy.mean()),
-                "normalized_entropy_mean": (
-                    float((entropy / math.log(candidate_count)).mean())
-                    if candidate_count > 1
-                    else 0.0
-                ),
-                "maximum_probability_mean": float(probabilities.max(dim=-1).values.mean()),
-            }
-        )
-        for name in ("expected_feedback", "winner_feedback", "applied_feedback"):
-            values = tensors[name]
+        for group, probability_name, feedback_names in groups:
+            if probability_name not in tensors:
+                continue
+            probabilities = tensors[probability_name].detach().float()
+            entropy = -(probabilities * probabilities.clamp_min(1e-12).log()).sum(dim=-1)
+            candidate_count = probabilities.shape[-1]
             rows.append(
                 {
-                    "kind": "feedback",
+                    "kind": "attention",
                     "window": window,
-                    "tensor": name,
-                    **_vector_summary(values),
-                    "l2_over_input_drive": _norm_ratio(values, tensors["input_drive"]),
-                    "l2_over_pre_feedback_q": _norm_ratio(
-                        values, tensors["q_after_input"]
+                    "group": group,
+                    "candidate_count": candidate_count,
+                    "entropy_mean": float(entropy.mean()),
+                    "normalized_entropy_mean": (
+                        float((entropy / math.log(candidate_count)).mean())
+                        if candidate_count > 1
+                        else 0.0
+                    ),
+                    "maximum_probability_mean": float(
+                        probabilities.max(dim=-1).values.mean()
                     ),
                 }
             )
+            for name in feedback_names:
+                values = tensors[name]
+                rows.append(
+                    {
+                        "kind": "feedback",
+                        "window": window,
+                        "group": group,
+                        "tensor": name,
+                        **_vector_summary(values),
+                        "direction_cosine_mean": _direction_cosine_mean(values),
+                        "l2_over_input_drive": _norm_ratio(
+                            values, tensors["input_drive"]
+                        ),
+                        "l2_over_pre_feedback_q": _norm_ratio(
+                            values, tensors["q_after_input"]
+                        ),
+                    }
+                )
     return rows
 
 

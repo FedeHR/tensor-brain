@@ -234,6 +234,32 @@ def test_pair_cli_accepts_the_cluster_arguments(monkeypatch, tmp_path) -> None:
                 "vocabulary.json",
             },
         ),
+        (
+            "integral-cat-sa",
+            {"cat-sa", "cat-samp"},
+            {
+                "checkpoint.pt",
+                "config.json",
+                "result.json",
+                "scale_trace.jsonl",
+                "training_trace.jsonl",
+                "validation_trace.jsonl",
+                "vocabulary.json",
+            },
+        ),
+        (
+            "integral-id-cat-sa",
+            {"id-cat-sa", "id-cat-samp"},
+            {
+                "checkpoint.pt",
+                "config.json",
+                "result.json",
+                "scale_trace.jsonl",
+                "training_trace.jsonl",
+                "validation_trace.jsonl",
+                "vocabulary.json",
+            },
+        ),
     ),
 )
 def test_pair_runner_supports_every_comparison_condition(
@@ -330,10 +356,37 @@ def test_pair_runner_supports_every_comparison_condition(
             .splitlines()[0]
         )
         assert first_validation["step"] == 0
+    if condition in {"integral-cat-sa", "integral-id-cat-sa"}:
+        config = json.loads(
+            (tmp_path / "runs" / condition / "config.json").read_text(encoding="utf-8")
+        )
+        assert config["feedback"]["category"]["mode"] == "p-sa"
+        assert config["feedback"]["category"]["candidates"] == "object_category/source"
+        assert config["feedback"]["identity"]["mode"] == (
+            "p-sa" if condition == "integral-id-cat-sa" else "none"
+        )
+        rows = [
+            json.loads(line)
+            for line in (tmp_path / "runs" / condition / "scale_trace.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        assert {
+            (row["kind"], row["group"])
+            for row in rows
+            if row["kind"] in {"attention", "feedback"}
+        } >= {("attention", "category"), ("feedback", "category")}
+        assert {"category_feedback"} <= {
+            row["operation"] for row in rows if row["kind"] == "operation_delta"
+        }
+        assert all(
+            "direction_cosine_mean" in row for row in rows if row["kind"] == "feedback"
+        )
     if condition == "integral-p-sa":
         config = json.loads(
             (tmp_path / "runs" / condition / "config.json").read_text(encoding="utf-8")
         )
+        assert config["feedback"]["category"]["mode"] == "none"
         assert config["input_mapping"]["name"] == "shared_linear_g"
         assert config["optimizer"]["input_mapping_learning_rate"] == 1e-5
         vocabulary = json.loads(

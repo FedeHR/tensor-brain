@@ -84,6 +84,19 @@ def _index_feedback(
     return q_next, probabilities
 
 
+def _category_feedback(
+    brain: TensorBrain,
+    q: Float[Tensor, "*batch state"],
+    candidates: Int[Tensor, " categories"] | None,
+    feedback_mode: FeedbackMode,
+) -> tuple[Float[Tensor, "*batch state"], Float[Tensor, "*batch categories"] | None]:
+    """Inject the decoded category embedding, leaving ``q`` untouched when disabled."""
+
+    if feedback_mode == "none" or candidates is None:
+        return q, None
+    return _index_feedback(brain, q, candidates, feedback_mode)
+
+
 def _sequential_category_logits(
     brain: TensorBrain,
     q: Float[Tensor, "*batch state"],
@@ -105,12 +118,12 @@ def _sequential_category_logits(
 
 def _feedback_vectors(
     brain: TensorBrain,
-    probabilities: Float[Tensor, "*batch identities"],
-    identity_candidates: Int[Tensor, " identities"],
+    probabilities: Float[Tensor, "*batch indices"],
+    candidates: Int[Tensor, " indices"],
 ) -> tuple[Float[Tensor, "*batch state"], Float[Tensor, "*batch state"]]:
-    candidate_embeddings = brain.A[:, identity_candidates].T
+    candidate_embeddings = brain.A[:, candidates].T
     expected = probabilities @ candidate_embeddings
-    winner_indices = identity_candidates[probabilities.argmax(dim=-1)]
+    winner_indices = candidates[probabilities.argmax(dim=-1)]
     winner = brain.A.T[winner_indices]
     return expected, winner
 
@@ -146,8 +159,11 @@ def _record_identity_window(
     probabilities: Tensor,
     *,
     q_after_evolution: Tensor | None = None,
+    category_feedback_candidates: Int[Tensor, " categories"] | None = None,
+    category_probabilities: Tensor | None = None,
+    q_after_category_feedback: Tensor | None = None,
 ) -> None:
-    """Add feedback diagnostics to one already-computed identity window."""
+    """Add feedback diagnostics to one already-computed entity window."""
 
     if trace is None:
         return
@@ -159,6 +175,20 @@ def _record_identity_window(
         "applied_feedback": q_after_feedback - q_after_input,
         "q_after_feedback": q_after_feedback,
     }
+    if category_probabilities is not None and category_feedback_candidates is not None:
+        assert q_after_category_feedback is not None
+        category_expected, category_winner = _feedback_vectors(
+            brain, category_probabilities, category_feedback_candidates
+        )
+        states.update(
+            {
+                "category_probabilities": category_probabilities,
+                "expected_category_feedback": category_expected,
+                "winner_category_feedback": category_winner,
+                "applied_category_feedback": q_after_category_feedback - q_after_feedback,
+                "q_after_category_feedback": q_after_category_feedback,
+            }
+        )
     if q_after_evolution is not None:
         states["q_after_evolution"] = q_after_evolution
     _record_window(
@@ -285,18 +315,33 @@ class IntegralTB(nn.Module):
         *,
         category_candidates: CategoryCandidates | None = None,
         feedback_mode: FeedbackMode = "p-sa",
+        category_feedback_candidates: Int[Tensor, " categories"] | None = None,
+        category_feedback_mode: FeedbackMode = "none",
         return_trace: bool = False,
     ) -> PerceptionOutputs:
         """Return logits from the explicit Section 6 perception schedule.
 
         Training uses differentiable P-SA feedback. P-Samp is the evaluation-only
         winner-take-all condition of the same checkpoint.
+
+        ``category_feedback_mode`` injects the decoded category embedding after the
+        unary readout, which is original Algorithm 1's ``q̈_S = q_S + a_{c*}`` used on
+        the perception path rather than only for chaining. Each group is scored
+        before its own feedback, so no readout confirms itself.
         """
 
-        if feedback_mode == "p-samp" and self.training:
-            raise ValueError("P-Samp is evaluation-only; train the checkpoint with P-SA")
-        if feedback_mode not in ("p-sa", "p-samp", "none"):
-            raise ValueError("feedback_mode must be 'p-sa', 'p-samp', or 'none'")
+        for name, mode in (
+            ("feedback_mode", feedback_mode),
+            ("category_feedback_mode", category_feedback_mode),
+        ):
+            if mode not in ("p-sa", "p-samp", "none"):
+                raise ValueError(f"{name} must be 'p-sa', 'p-samp', or 'none'")
+            if mode == "p-samp" and self.training:
+                raise ValueError(
+                    "P-Samp is evaluation-only; train the checkpoint with P-SA"
+                )
+        if category_feedback_mode != "none" and category_feedback_candidates is None:
+            raise ValueError("category feedback requires explicit category candidates")
 
         scene_input = self.g(scene_features)
         subject_input = self.g(subject_features)
@@ -314,7 +359,8 @@ class IntegralTB(nn.Module):
             q_after_evolution=q,
         )
 
-        # Subject window: identify, feed the identity back, decode unary categories, then evolve.
+        # Subject window: identify, feed the identity back, decode unary categories,
+        # optionally feed the decoded category back, then evolve.
         q_before_input = q
         q = self.brain.integrate_input(q, subject_input)
         q_after_input = q
@@ -324,14 +370,22 @@ class IntegralTB(nn.Module):
         )
         q_after_feedback = q
         subject_category_logits = _category_logits(self.brain, q, category_candidates)
+        q, subject_category_probabilities = _category_feedback(
+            self.brain, q, category_feedback_candidates, category_feedback_mode
+        )
+        q_after_category_feedback = q
         q, context = self.brain.evolve(q, context)
         _record_identity_window(
             trace, "subject", self.brain, identity_candidates, subject_input,
             q_before_input, q_after_input, q_after_feedback, subject_probabilities,
             q_after_evolution=q,
+            category_feedback_candidates=category_feedback_candidates,
+            category_probabilities=subject_category_probabilities,
+            q_after_category_feedback=q_after_category_feedback,
         )
 
-        # Object window: identify, feed the identity back, decode unary categories, then evolve.
+        # Object window: identify, feed the identity back, decode unary categories,
+        # optionally feed the decoded category back, then evolve.
         q_before_input = q
         q = self.brain.integrate_input(q, object_input)
         q_after_input = q
@@ -341,11 +395,18 @@ class IntegralTB(nn.Module):
         )
         q_after_feedback = q
         object_category_logits = _category_logits(self.brain, q, category_candidates)
+        q, object_category_probabilities = _category_feedback(
+            self.brain, q, category_feedback_candidates, category_feedback_mode
+        )
+        q_after_category_feedback = q
         q, context = self.brain.evolve(q, context)
         _record_identity_window(
             trace, "object", self.brain, identity_candidates, object_input,
             q_before_input, q_after_input, q_after_feedback, object_probabilities,
             q_after_evolution=q,
+            category_feedback_candidates=category_feedback_candidates,
+            category_probabilities=object_category_probabilities,
+            q_after_category_feedback=q_after_category_feedback,
         )
 
         # Predicate window.

@@ -184,6 +184,140 @@ def test_integral_p_sa_matches_the_explicit_four_window_schedule() -> None:
         )
 
 
+def test_category_feedback_follows_the_unary_readout_and_precedes_evolution() -> None:
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+    set_index_parameters(model)
+    scene = torch.tensor([[0.2, -0.1]])
+    subject = torch.tensor([[0.4, 0.3]])
+    object_ = torch.tensor([[-0.2, 0.5]])
+    union = torch.tensor([[0.1, -0.4]])
+    identities = torch.tensor([0, 1])
+    predicates = torch.tensor([2, 3, 4])
+    source = torch.tensor([2, 4])
+    categories = {"object_category/source": source}
+
+    scores = model(
+        scene,
+        subject,
+        object_,
+        union,
+        identities,
+        predicates,
+        category_candidates=categories,
+        feedback_mode="none",
+        category_feedback_candidates=source,
+        category_feedback_mode="p-sa",
+        return_trace=True,
+    )
+
+    subject_q = 2.0 * scene + 1.0 + subject
+    # The unary readout is scored before its own feedback, so it cannot confirm itself.
+    expected_subject_source = model.brain.index_scores(subject_q, source)
+    subject_q, _ = model.brain.attend(subject_q, source)
+    object_q = 2.0 * subject_q + 2.0 + object_
+    expected_object_source = model.brain.index_scores(object_q, source)
+    object_q, _ = model.brain.attend(object_q, source)
+    predicate_q = 2.0 * object_q + 3.0 + union
+
+    torch.testing.assert_close(
+        scores["subject_category_logits"]["object_category/source"],
+        expected_subject_source,
+    )
+    torch.testing.assert_close(
+        scores["object_category_logits"]["object_category/source"],
+        expected_object_source,
+    )
+    torch.testing.assert_close(
+        scores["predicate_logits"], model.brain.index_scores(predicate_q, predicates)
+    )
+    torch.testing.assert_close(
+        scores["trace"]["subject"]["q_after_category_feedback"], subject_q
+    )
+
+
+def test_category_feedback_is_absent_unless_requested() -> None:
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+    set_index_parameters(model)
+    arguments = (
+        torch.tensor([[0.2, -0.1]]),
+        torch.tensor([[0.4, 0.3]]),
+        torch.tensor([[-0.2, 0.5]]),
+        torch.tensor([[0.1, -0.4]]),
+        torch.tensor([0, 1]),
+        torch.tensor([2, 3, 4]),
+    )
+    keywords = {
+        "category_candidates": {"object_category/source": torch.tensor([2, 4])},
+        "feedback_mode": "p-sa",
+        "return_trace": True,
+    }
+
+    disabled = model(*arguments, **keywords)
+    enabled = model(
+        *arguments, category_feedback_candidates=torch.tensor([2, 4]), **keywords
+    )
+
+    assert "q_after_category_feedback" not in disabled["trace"]["subject"]
+    torch.testing.assert_close(
+        enabled["predicate_logits"], disabled["predicate_logits"]
+    )
+
+
+def test_category_feedback_requires_explicit_candidates() -> None:
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+
+    with pytest.raises(ValueError, match="explicit category candidates"):
+        model(
+            torch.zeros(1, 2),
+            torch.zeros(1, 2),
+            torch.zeros(1, 2),
+            torch.zeros(1, 2),
+            torch.tensor([0, 1]),
+            torch.tensor([2, 3]),
+            category_feedback_mode="p-sa",
+        )
+
+
+def test_category_p_samp_is_evaluation_only() -> None:
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+
+    with pytest.raises(ValueError, match="evaluation-only"):
+        model(
+            torch.zeros(1, 2),
+            torch.zeros(1, 2),
+            torch.zeros(1, 2),
+            torch.zeros(1, 2),
+            torch.tensor([0, 1]),
+            torch.tensor([2, 3]),
+            category_feedback_candidates=torch.tensor([2, 3]),
+            category_feedback_mode="p-samp",
+        )
+
+
+def test_predicate_loss_reaches_category_embeddings_through_category_feedback() -> None:
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+    set_index_parameters(model)
+    source = torch.tensor([2, 4])
+
+    outputs = model(
+        torch.tensor([[0.2, -0.1]]),
+        torch.tensor([[0.4, 0.3]]),
+        torch.tensor([[-0.2, 0.5]]),
+        torch.tensor([[0.1, -0.4]]),
+        torch.tensor([0, 1]),
+        torch.tensor([3]),
+        category_candidates={"object_category/source": source},
+        feedback_mode="none",
+        category_feedback_candidates=source,
+        category_feedback_mode="p-sa",
+    )
+    outputs["predicate_logits"].sum().backward()
+
+    # Without category feedback the predicate readout cannot reach these columns.
+    assert model.brain.A.grad is not None
+    assert torch.any(model.brain.A.grad[:, source] != 0.0)
+
+
 def test_p_samp_is_an_evaluation_mode_of_the_integral_checkpoint() -> None:
     model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
     set_index_parameters(model)
