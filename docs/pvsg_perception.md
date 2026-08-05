@@ -218,17 +218,19 @@ DINO evidence.
 
 ### Tensor Brain schedule
 
-The perception-only baseline has no episodic index. Scene evidence initializes the
-representation; the Tensor Brain then moves through subject, object, and predicate windows:
+The perception-only baseline has no episodic index. One shared learned linear map `g` transforms
+every RMS-normalized DINO source into pre-CBS coordinates before input integration. Scene
+evidence then initializes the representation, and the Tensor Brain moves through subject,
+object, and predicate windows:
 
 ```text
-scene input
+g(scene input)
   -> evolve
-subject mask input -> identity readout -> identity feedback -> semantic readouts
+g(subject mask input) -> identity readout -> identity feedback -> semantic readouts
   -> evolve
-object mask input  -> identity readout -> identity feedback -> semantic readouts
+g(object mask input)  -> identity readout -> identity feedback -> semantic readouts
   -> evolve
-union-box input    -> multi-label predicate readout
+g(union-box input)    -> multi-label predicate readout
 ```
 
 This baseline separates the contribution of memory from perception and does not justify
@@ -348,20 +350,23 @@ For a positive-pair record with active set `Y_b`, define the uniform categorical
 This is ordinary categorical cross-entropy for single-label records and gives simultaneous true
 labels equal mass without discarding them. The runner also logs target entropy and
 `KL(r || softmax(z))`; the KL differs from cross-entropy only by the target-only entropy and is
-used for the zero-optimum overfit criterion. `G` is empty for the identity-only condition,
-contains the official source category for that condition, and contains the four reviewed
-hierarchy levels for the hierarchy condition.
+used for the zero-optimum overfit criterion. In the corrected pair experiment, `G` always
+contains official source plus reviewed fine, basic, coarse, and domain groups.
 An unavailable reviewed path uses the ordinary cross-entropy ignore index for that term only.
-No configurable loss weights are introduced until these diagnostics show a concrete problem.
+Predicate and identity losses have weight one. The ten subject/object category losses form one
+category block, averaged over the active groups in the batch, so adding hierarchy levels does not
+automatically multiply the influence of semantic supervision. This active-group mean also avoids
+penalizing examples whose reviewed paths are unavailable. The objective is recorded in each
+checkpoint configuration as `category_block=mean_over_active_subject_object_groups`.
 A separately named Bernoulli-BCE condition remains a possible later extension if simultaneous
 predicate calibration becomes a research target; it is not the initial objective.
 
 The overfit gate uses only pair batches so that it exercises the complete sequential schedule.
-The first thesis experiments keep unary object semantics and pair predicate recognition as
-separate tasks. The pair comparison uses predicate cross-entropy and the two identity terms but
-does not add the eight hierarchy losses; those belong to the unary experiment. A later joint
-multitask condition may combine pair and object-observation batches, but must report the exact
-number of examples contributed by each stream rather than silently resampling either one.
+The corrected pair comparison applies predicate, both identity, and all available subject/object
+category losses in the same forward pass. This is joint supervision over pair observations, not
+yet the original paper's broader interleaving of perception, episodic-memory, and semantic-memory
+experience. A later condition may combine pair and object or memory batches, but must report the
+exact number of examples contributed by each stream rather than silently resampling one.
 
 ### Semantic conditions
 
@@ -373,9 +378,9 @@ support named category candidate groups. P-Direct scores each group from the cor
 feature alone; Integral TB scores it from the post-identity-feedback subject or object state and
 does not feed the resulting category prediction back.
 
-The availability of a readout is distinct from applying its loss. Semantic supervision changes
-the shared `A` and can change later states through identity learning, so checkpoints use explicit
-conditions rather than silently enabling every target:
+For the object/unary experiments, the availability of a readout is distinct from applying its
+loss. Semantic supervision changes the shared `A` and can change later states through identity
+learning, so those checkpoints use explicit conditions rather than silently enabling every target:
 
 1. actual identity only;
 2. identity plus the official PVSG category;
@@ -391,6 +396,10 @@ losses are masked. The hierarchy condition is the paper-motivated primary semant
 while identity-only and official-category checkpoints are necessary ablations. Frozen probes on
 the identity-only model can later test whether semantic structure emerged without direct
 supervision.
+
+The corrected pair experiment deliberately does not repeat these semantic-loss ablations. It
+always applies source, fine, basic, coarse, and domain losses to both participants alongside the
+two identity losses and predicate loss. Missing reviewed paths are masked per level.
 
 The trained hierarchy readouts remain parallel: fine, basic, coarse, and domain candidates are
 all scored from the same state after identity feedback. As a nearly free evaluation-only
@@ -515,7 +524,7 @@ the other named score conditions are explicit alternatives.
 
 The optimizer is ordinary Adam over the complete model. The gate succeeds only when every
 enabled identity, predicate, and available category target is correct for every example and the
-unweighted total objective above irreducible predicate target entropy is at most `0.01`.
+weighted total objective above irreducible predicate target entropy is at most `0.01`.
 Initialization, fixed early checkpoints, and the final state are diagnosed on this same batch.
 This runner intentionally contains no baseline
 composer, callback system, full-dataset sampler, or validation protocol; those belong to the
@@ -528,14 +537,21 @@ Each run directory is immutable and contains:
 - `checkpoint.pt` and `result.json` for the final P-SA checkpoint and its evaluation-only
   P-Samp metrics.
 
-### Input-scale and initialization trace
+### Learned input mapping, scale, and initialization trace
 
-The initial DINO mapping is a deliberate modernization rather than a paper reproduction. Every
-tiny overfit and full training run must therefore evaluate it on a fixed, versioned diagnostic
-batch and write `scale_trace.jsonl`. Each row identifies the run, checkpoint step, evidence
+The corrected perception models own one shared linear
+`g: normalized DINO feature -> pre-CBS q`. Its identity weight and zero bias reproduce the old
+input at initialization, after which it is trained at a separately recorded smaller learning
+rate. Sharing one map across all visual windows follows the original use of one visual mapping
+and avoids silently introducing role-specific encoders. The explicit feature and pre-CBS
+dimensions form the stable boundary for a future `g_plus` decoder from CBS coordinates back to
+DINO feature space; no decoder or reconstruction objective is active yet.
+
+Every tiny overfit and full training run evaluates the mapping on a fixed, versioned diagnostic
+batch and writes `scale_trace.jsonl`. Each row identifies the run, checkpoint step, evidence
 window, candidate group, and feedback mode. It records:
 
-- raw cached DINO norms and normalized input-drive norms;
+- raw cached DINO norms and mapped input-drive norms;
 - pre-CBS `q` norm, component RMS, mean, and standard deviation after integration, index
   feedback, and evolution;
 - the delta caused by each operation in both `q` and `gamma = sigmoid(q)` coordinates;
@@ -545,15 +561,15 @@ window, candidate group, and feedback mode. It records:
   their dispersion ratio;
 - P-SA expected-feedback and winner-feedback norms relative to both the current input drive and
   pre-feedback `q`, together with attention entropy and maximum probability;
-- gradient norms for `A`, a learned bias when present, each evolution parameter, and any input
-  or feedback gate present in that named condition.
+- gradient norms for `A`, `g`, a learned bias when present, each evolution parameter, and any
+  input or feedback gate present in that named condition.
 
 The diagnostic batch stores its native video/frame/object addresses and is reused across steps,
 models, seeds, and normalization ablations. Required capture points are initialization before any
 optimizer step, fixed early steps, and the final checkpoint; the exact cadence belongs in
-`config.json`. `scale_trace.jsonl` contains aggregation-ready scalar summaries. Any future input mapping,
-centering, gate, or initialization change receives a new condition name and ledger entry and is
-compared on the same raw cached DINO features rather than replacing the feature snapshot.
+`config.json`. `scale_trace.jsonl` contains aggregation-ready scalar summaries. Any future
+mapping, centering, gate, or initialization change receives a new condition name and ledger row
+and is compared on the same raw cached DINO features rather than replacing the feature snapshot.
 
 VLM-derived semantics from PVSG descriptions and captions form a later, separately named
 modality. Because language can reveal relations and future events, every derived feature must

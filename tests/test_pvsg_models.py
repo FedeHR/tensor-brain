@@ -38,6 +38,40 @@ def set_index_parameters(model: PDirect | IntegralTB) -> None:
             model.brain.a0.copy_(torch.tensor([0.1, -0.2, 0.0, 0.3, -0.1]))
 
 
+@pytest.mark.parametrize("model_type", (PDirect, IntegralTB))
+def test_visual_mapping_is_shared_identity_initialized_and_trainable(model_type) -> None:
+    model = (
+        IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+        if model_type is IntegralTB
+        else PDirect(state_dim=2, num_indices=5)
+    )
+
+    torch.testing.assert_close(model.g.weight, torch.eye(2))
+    torch.testing.assert_close(model.g.bias, torch.zeros(2))
+    features = torch.tensor([[0.2, -0.4]], requires_grad=True)
+    if isinstance(model, IntegralTB):
+        outputs = model(
+            features,
+            features,
+            features,
+            features,
+            torch.tensor([0, 1]),
+            torch.tensor([2, 3, 4]),
+        )
+    else:
+        outputs = model(
+            features,
+            features,
+            features,
+            torch.tensor([0, 1]),
+            torch.tensor([2, 3, 4]),
+        )
+    outputs["predicate_logits"].sum().backward()
+
+    assert model.g.weight.grad is not None
+    assert model.g.in_features == model.g.out_features == 2
+
+
 def test_p_direct_scores_each_feature_independently() -> None:
     model = PDirect(state_dim=2, num_indices=5)
     set_index_parameters(model)

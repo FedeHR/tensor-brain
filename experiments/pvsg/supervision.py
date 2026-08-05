@@ -60,7 +60,7 @@ class ObjectTargets:
 
 @dataclass(frozen=True)
 class PairLosses:
-    """Unweighted negative-log-likelihood terms for one pair batch."""
+    """Pair negative-log-likelihood terms with a mean category block."""
 
     total: Float[Tensor, ""]
     overfit_excess: Float[Tensor, ""]
@@ -69,6 +69,7 @@ class PairLosses:
     predicate_kl: Float[Tensor, ""]
     subject_identity: Float[Tensor, ""]
     object_identity: Float[Tensor, ""]
+    category_block: Float[Tensor, ""]
     subject_categories: dict[str, Float[Tensor, ""]]
     object_categories: dict[str, Float[Tensor, ""]]
 
@@ -85,6 +86,7 @@ class PairLosses:
             "loss/predicate_kl": float(self.predicate_kl.detach()),
             "loss/subject_identity": float(self.subject_identity.detach()),
             "loss/object_identity": float(self.object_identity.detach()),
+            "loss/category_block": float(self.category_block.detach()),
         }
         for owner, losses in (
             ("subject", self.subject_categories),
@@ -349,7 +351,7 @@ def _masked_cross_entropy(
 
 
 def pair_losses(outputs: PerceptionOutputs, targets: PairTargets) -> PairLosses:
-    """Return the factorized pair negative log-likelihood without ad-hoc weights."""
+    """Return pair losses with predicate/identity weights one and a mean category block."""
 
     predicate_distribution = targets.predicates / targets.predicates.sum(
         dim=-1, keepdim=True
@@ -384,9 +386,22 @@ def pair_losses(outputs: PerceptionOutputs, targets: PairTargets) -> PairLosses:
         group: _masked_cross_entropy(outputs["object_category_logits"][group], target)
         for group, target in targets.object_categories.items()
     }
+    active_category_losses = [
+        loss
+        for owner_targets, owner_losses in (
+            (targets.subject_categories, subject_categories),
+            (targets.object_categories, object_categories),
+        )
+        for group, loss in owner_losses.items()
+        if bool((owner_targets[group] != IGNORE_INDEX).any())
+    ]
+    category_block = (
+        torch.stack(active_category_losses).mean()
+        if active_category_losses
+        else predicate_cross_entropy.new_zeros(())
+    )
     total = predicate_cross_entropy + subject_identity + object_identity
-    total = total + sum(subject_categories.values(), total.new_zeros(()))
-    total = total + sum(object_categories.values(), total.new_zeros(()))
+    total = total + category_block
     return PairLosses(
         total=total,
         overfit_excess=total - predicate_target_entropy,
@@ -395,6 +410,7 @@ def pair_losses(outputs: PerceptionOutputs, targets: PairTargets) -> PairLosses:
         predicate_kl=predicate_kl,
         subject_identity=subject_identity,
         object_identity=object_identity,
+        category_block=category_block,
         subject_categories=subject_categories,
         object_categories=object_categories,
     )

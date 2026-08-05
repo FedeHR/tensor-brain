@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from typing import Literal, NotRequired, TypedDict
 
+import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
@@ -12,6 +13,27 @@ from tb.evolution import Evolution
 FeedbackMode = Literal["p-sa", "p-samp", "none"]
 CategoryCandidates = Mapping[str, Int[Tensor, " categories"]]
 Trace = dict[str, dict[str, Tensor]]
+
+
+class VisualInputMapping(nn.Linear):
+    r"""Shared learned map from normalized DINO features into pre-CBS coordinates.
+
+    The identity initialization nests the previous direct-input condition. The explicit
+    feature-to-state boundary also leaves a stable contract for a future decoder ``g_plus``
+    from CBS coordinates back into the cached DINO feature space.
+    """
+
+    def __init__(self, feature_dim: int, state_dim: int) -> None:
+        if feature_dim != state_dim:
+            raise ValueError(
+                "identity-initialized visual mapping requires feature_dim == state_dim"
+            )
+        super().__init__(feature_dim, state_dim)
+
+    def reset_parameters(self) -> None:
+        nn.init.eye_(self.weight)
+        if self.bias is not None:
+            nn.init.zeros_(self.bias)
 
 
 class PerceptionOutputs(TypedDict):
@@ -152,9 +174,11 @@ class PDirect(nn.Module):
         state_dim: int,
         num_indices: int,
         *,
+        feature_dim: int | None = None,
         score_mode: ScoreMode = "direct",
     ) -> None:
         super().__init__()
+        self.g = VisualInputMapping(feature_dim or state_dim, state_dim)
         self.brain = TensorBrain(
             state_dim, num_indices, evolution=None, score_mode=score_mode
         )
@@ -176,14 +200,13 @@ class PDirect(nn.Module):
         transport scene information into later readouts.
         """
 
-        subject_q = self.brain.integrate_input(
-            subject_features.new_zeros(subject_features.shape), subject_features
-        )
-        object_q = self.brain.integrate_input(
-            object_features.new_zeros(object_features.shape), object_features
-        )
+        subject_input = self.g(subject_features)
+        object_input = self.g(object_features)
+        predicate_input = self.g(union_features)
+        subject_q = self.brain.integrate_input(torch.zeros_like(subject_input), subject_input)
+        object_q = self.brain.integrate_input(torch.zeros_like(object_input), object_input)
         predicate_q = self.brain.integrate_input(
-            union_features.new_zeros(union_features.shape), union_features
+            torch.zeros_like(predicate_input), predicate_input
         )
         outputs: PerceptionOutputs = {
             "subject_identity_logits": self.brain.index_scores(subject_q, identity_candidates),
@@ -198,13 +221,13 @@ class PDirect(nn.Module):
         }
         if return_trace:
             trace: Trace = {}
-            for window, features, q in (
-                ("subject", subject_features, subject_q),
-                ("object", object_features, object_q),
-                ("predicate", union_features, predicate_q),
+            for window, input_drive, q in (
+                ("subject", subject_input, subject_q),
+                ("object", object_input, object_q),
+                ("predicate", predicate_input, predicate_q),
             ):
                 _record_window(
-                    trace, window, features, features.new_zeros(features.shape), q
+                    trace, window, input_drive, torch.zeros_like(input_drive), q
                 )
             outputs["trace"] = trace
         return outputs
@@ -219,15 +242,16 @@ class PDirect(nn.Module):
     ) -> ObjectOutputs:
         """Independently decode one entity, matching P-Direct's local evidence."""
 
-        q_before_input = object_features.new_zeros(object_features.shape)
-        q = self.brain.integrate_input(q_before_input, object_features)
+        input_drive = self.g(object_features)
+        q_before_input = torch.zeros_like(input_drive)
+        q = self.brain.integrate_input(q_before_input, input_drive)
         outputs: ObjectOutputs = {
             "identity_logits": self.brain.index_scores(q, identity_candidates),
             "category_logits": _category_logits(self.brain, q, category_candidates),
         }
         if return_trace:
             trace: Trace = {}
-            _record_window(trace, "object", object_features, q_before_input, q)
+            _record_window(trace, "object", input_drive, q_before_input, q)
             outputs["trace"] = trace
         return outputs
 
@@ -241,9 +265,11 @@ class IntegralTB(nn.Module):
         num_indices: int,
         evolution: Evolution,
         *,
+        feature_dim: int | None = None,
         score_mode: ScoreMode = "direct",
     ) -> None:
         super().__init__()
+        self.g = VisualInputMapping(feature_dim or state_dim, state_dim)
         self.brain = TensorBrain(
             state_dim, num_indices, evolution, score_mode=score_mode
         )
@@ -272,20 +298,25 @@ class IntegralTB(nn.Module):
         if feedback_mode not in ("p-sa", "p-samp", "none"):
             raise ValueError("feedback_mode must be 'p-sa', 'p-samp', or 'none'")
 
+        scene_input = self.g(scene_features)
+        subject_input = self.g(subject_features)
+        object_input = self.g(object_features)
+        predicate_input = self.g(union_features)
+
         # Complete-scene window.
         trace: Trace | None = {} if return_trace else None
-        q_before_input = scene_features.new_zeros(scene_features.shape)
-        q = self.brain.integrate_input(q_before_input, scene_features)
+        q_before_input = torch.zeros_like(scene_input)
+        q = self.brain.integrate_input(q_before_input, scene_input)
         q_after_input = q
         q, context = self.brain.evolve(q)
         _record_window(
-            trace, "scene", scene_features, q_before_input, q_after_input,
+            trace, "scene", scene_input, q_before_input, q_after_input,
             q_after_evolution=q,
         )
 
         # Subject window: identify, feed the identity back, decode unary categories, then evolve.
         q_before_input = q
-        q = self.brain.integrate_input(q, subject_features)
+        q = self.brain.integrate_input(q, subject_input)
         q_after_input = q
         subject_identity_logits = self.brain.index_scores(q, identity_candidates)
         q, subject_probabilities = _index_feedback(
@@ -295,14 +326,14 @@ class IntegralTB(nn.Module):
         subject_category_logits = _category_logits(self.brain, q, category_candidates)
         q, context = self.brain.evolve(q, context)
         _record_identity_window(
-            trace, "subject", self.brain, identity_candidates, subject_features,
+            trace, "subject", self.brain, identity_candidates, subject_input,
             q_before_input, q_after_input, q_after_feedback, subject_probabilities,
             q_after_evolution=q,
         )
 
         # Object window: identify, feed the identity back, decode unary categories, then evolve.
         q_before_input = q
-        q = self.brain.integrate_input(q, object_features)
+        q = self.brain.integrate_input(q, object_input)
         q_after_input = q
         object_identity_logits = self.brain.index_scores(q, identity_candidates)
         q, object_probabilities = _index_feedback(
@@ -312,16 +343,16 @@ class IntegralTB(nn.Module):
         object_category_logits = _category_logits(self.brain, q, category_candidates)
         q, context = self.brain.evolve(q, context)
         _record_identity_window(
-            trace, "object", self.brain, identity_candidates, object_features,
+            trace, "object", self.brain, identity_candidates, object_input,
             q_before_input, q_after_input, q_after_feedback, object_probabilities,
             q_after_evolution=q,
         )
 
         # Predicate window.
         q_before_input = q
-        q = self.brain.integrate_input(q, union_features)
+        q = self.brain.integrate_input(q, predicate_input)
         predicate_logits = self.brain.index_scores(q, predicate_candidates)
-        _record_window(trace, "predicate", union_features, q_before_input, q)
+        _record_window(trace, "predicate", predicate_input, q_before_input, q)
 
         outputs: PerceptionOutputs = {
             "subject_identity_logits": subject_identity_logits,
@@ -358,18 +389,20 @@ class IntegralTB(nn.Module):
         if sequential_categories and return_trace:
             raise ValueError("sequential category traces are not implemented")
 
+        scene_input = self.g(scene_features)
+        object_input = self.g(object_features)
         trace: Trace | None = {} if return_trace else None
-        q_before_input = scene_features.new_zeros(scene_features.shape)
-        q = self.brain.integrate_input(q_before_input, scene_features)
+        q_before_input = torch.zeros_like(scene_input)
+        q = self.brain.integrate_input(q_before_input, scene_input)
         q_after_input = q
         q, _context = self.brain.evolve(q)
         _record_window(
-            trace, "scene", scene_features, q_before_input, q_after_input,
+            trace, "scene", scene_input, q_before_input, q_after_input,
             q_after_evolution=q,
         )
 
         q_before_input = q
-        q = self.brain.integrate_input(q, object_features)
+        q = self.brain.integrate_input(q, object_input)
         q_after_input = q
         identity_logits = self.brain.index_scores(q, identity_candidates)
         q, probabilities = _index_feedback(
@@ -383,7 +416,7 @@ class IntegralTB(nn.Module):
             else _category_logits(self.brain, q, category_candidates)
         )
         _record_identity_window(
-            trace, "object", self.brain, identity_candidates, object_features,
+            trace, "object", self.brain, identity_candidates, object_input,
             q_before_input, q_after_input, q, probabilities,
         )
         outputs: ObjectOutputs = {

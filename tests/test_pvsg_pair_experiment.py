@@ -36,6 +36,20 @@ def _artifact(feature_root, video_id, rows):
     )
 
 
+def _hierarchy():
+    return {
+        "paths": {
+            "dog": ["category:dog", "category:animal", "category:living"],
+            "ball": ["category:ball", "category:toy", "category:artifact"],
+        },
+        "identity_paths": {},
+        "domains": {
+            "category:living": "domain:natural",
+            "category:artifact": "domain:manufactured",
+        },
+    }
+
+
 def _record(video_id, row, role, subject, object_, predicate):
     return {
         "source": "vidor",
@@ -79,7 +93,9 @@ def test_pair_cli_accepts_the_cluster_arguments(monkeypatch, tmp_path) -> None:
             "--score-mode",
             "softplus-bias",
             "--learning-rate",
-            "0.001",
+            "0.0001",
+            "--input-mapping-learning-rate",
+            "0.00001",
             "--chunk-size",
             "1024",
             "--seed",
@@ -91,6 +107,7 @@ def test_pair_cli_accepts_the_cluster_arguments(monkeypatch, tmp_path) -> None:
 
     assert config.condition == "integral-p-sa"
     assert config.chunk_size == 1024
+    assert config.input_mapping_learning_rate == 1e-5
 
 
 @pytest.mark.parametrize(
@@ -220,8 +237,12 @@ def test_pair_cli_accepts_the_cluster_arguments(monkeypatch, tmp_path) -> None:
     ),
 )
 def test_pair_runner_supports_every_comparison_condition(
-    tmp_path, condition, evaluation_modes, expected_files
+    tmp_path, monkeypatch, condition, evaluation_modes, expected_files
 ) -> None:
+    monkeypatch.setattr(
+        "experiments.pvsg.pair_experiment.load_object_hierarchy",
+        lambda *_args, **_kwargs: _hierarchy(),
+    )
     manifest_root = tmp_path / "snapshot"
     feature_root = tmp_path / "features"
     train_rows = [
@@ -279,6 +300,8 @@ def test_pair_runner_supports_every_comparison_condition(
         PairExperimentConfig(
             run_name=condition,
             condition=condition,
+            evolution="original" if condition == "integral-none" else "qtb",
+            score_mode="direct" if condition == "integral-none" else "softplus-bias",
             zero_initialize_union=condition == "union-category-oracle",
             batch_size=2,
             max_steps=2,
@@ -307,3 +330,24 @@ def test_pair_runner_supports_every_comparison_condition(
             .splitlines()[0]
         )
         assert first_validation["step"] == 0
+    if condition == "integral-p-sa":
+        config = json.loads(
+            (tmp_path / "runs" / condition / "config.json").read_text(encoding="utf-8")
+        )
+        assert config["input_mapping"]["name"] == "shared_linear_g"
+        assert config["optimizer"]["input_mapping_learning_rate"] == 1e-5
+        vocabulary = json.loads(
+            (tmp_path / "runs" / condition / "vocabulary.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert "object_category/source" in vocabulary["groups"]
+        assert "object_category/domain" in vocabulary["groups"]
+        assert "accuracy/subject_category/object_category/source" in metrics
+        assert "accuracy/object_category/object_category/domain" in metrics
+    if condition == "integral-none":
+        config = json.loads(
+            (tmp_path / "runs" / condition / "config.json").read_text(encoding="utf-8")
+        )
+        assert config["evolution"] == "original"
+        assert config["score_mode"] == "direct"

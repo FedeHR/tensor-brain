@@ -123,6 +123,19 @@ def test_pair_objective_is_finite_and_strict_metrics_recognize_exact_predictions
         losses.predicate_cross_entropy,
         losses.predicate_kl + losses.predicate_target_entropy,
     )
+    active_category_losses = [
+        loss
+        for owner_targets, owner_losses in (
+            (targets.subject_categories, losses.subject_categories),
+            (targets.object_categories, losses.object_categories),
+        )
+        for group, loss in owner_losses.items()
+        if bool((owner_targets[group] != IGNORE_INDEX).any())
+    ]
+    torch.testing.assert_close(
+        losses.category_block,
+        torch.stack(active_category_losses).mean(),
+    )
     assert metrics["accuracy/all_exact"] == 1.0
     assert outputs["predicate_logits"].grad is not None
 

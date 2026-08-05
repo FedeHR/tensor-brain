@@ -425,17 +425,31 @@ within each block matches the first seed-0 run. Outputs go to the separate immut
 `$PVSG_RUN_ROOT/unary-multiseed/seed0/` through `seed4/`. The array defaults to five concurrent
 jobs.
 
-## Run the seed-0 pair predicate-recognition comparison
+## Run the corrected seed-0 pair Tensor Brain comparison
 
-The seven tasks are the count priors, local DINO linear probe, fused linear head, fusion MLP,
-P-Direct, Integral without feedback, and Integral P-SA. All learned conditions use the selected
-QTB/softplus/`1e-3` setup where applicable; P-Samp reuses the Integral P-SA checkpoint.
+Submit the same two-task array once for each model family. Task 0 disables feedback and task 1
+uses P-SA. The `original` family uses the paper's recurrent dynamic context and direct index
+scores; the `qtb` family uses feed-forward evolution and softplus-bias scores. Both use the rich
+source-plus-reviewed hierarchy vocabulary, joint identity/category/predicate supervision, and
+the shared learned visual mapping `g`.
 
 ```bash
 cd /nfs/data8/harjes/MASTER/tensor-brain
 source cluster/pvsg/common.sh
 mkdir -p "$SLURM_LOG_ROOT"
 sbatch \
+  --export=ALL,PAIR_TB_VARIANT=original \
+  --partition=minor \
+  --gres=gpu:1 \
+  --cpus-per-task=3 \
+  --mem=16G \
+  --time=2-00:00:00 \
+  --output="$SLURM_LOG_ROOT/%x-%A_%a.out" \
+  --error="$SLURM_LOG_ROOT/%x-%A_%a.err" \
+  cluster/pvsg/pair_baselines.sbatch
+
+sbatch \
+  --export=ALL,PAIR_TB_VARIANT=qtb \
   --partition=minor \
   --gres=gpu:1 \
   --cpus-per-task=3 \
@@ -449,4 +463,7 @@ sbatch \
 The models do not require the larger-memory partition at batch size 128. If `major` is used,
 prefer a cluster-specific GPU constraint so every learned condition uses one GPU family. Each
 `config.json` records the CUDA device and compute capability, and each Slurm log records the GPU
-name and driver. Results are written below `$PVSG_RUN_ROOT/pair-seed0/`.
+name and driver. Results are written below `$PVSG_RUN_ROOT/pair-corrected-original-seed0/` and
+`$PVSG_RUN_ROOT/pair-corrected-qtb-seed0/`. The jobs use Adam at `1e-4`, a `1e-5` parameter-group
+rate for `g`, and validation every 250 updates. These are two paper-motivated family bundles,
+not a controlled one-factor evolution ablation: evolution and score parameterization both change.

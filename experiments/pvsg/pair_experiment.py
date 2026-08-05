@@ -28,6 +28,7 @@ from experiments.pvsg.data import (
 )
 from experiments.pvsg.diagnostics import scale_trace_rows
 from experiments.pvsg.evaluation import evaluate_pairs, predicate_metrics
+from experiments.pvsg.hierarchy import load_object_hierarchy
 from experiments.pvsg.indices import build_section6_vocabulary, predicate_label
 from experiments.pvsg.io import read_json, write_json, write_jsonl
 from experiments.pvsg.models import FeedbackMode, IntegralTB, PDirect, PerceptionOutputs
@@ -73,6 +74,7 @@ FEATURE_KEYS = (
     "union_features",
 )
 CAPTURE_STEPS = {0, 1, 10, 100, 1_000, 5_000, 10_000}
+PAIR_CATEGORY_LEVELS = ("source", "fine", "basic", "coarse", "domain")
 
 
 @dataclass(frozen=True)
@@ -80,12 +82,13 @@ class PairExperimentConfig:
     run_name: str
     condition: PairCondition
     evolution: Literal["original", "qtb"] = "qtb"
-    score_mode: Literal["centered", "softplus-bias"] = "softplus-bias"
-    learning_rate: float = 1e-3
+    score_mode: Literal["direct", "centered", "softplus-bias"] = "softplus-bias"
+    learning_rate: float = 1e-4
+    input_mapping_learning_rate: float = 1e-5
     zero_initialize_union: bool = False
     batch_size: int = 128
     max_steps: int = 10_000
-    validation_every: int = 1_000
+    validation_every: int = 250
     validation_examples: int = 20_000
     chunk_size: int = 1024
     log_every: int = 100
@@ -110,13 +113,14 @@ class PairExperimentConfig:
             raise ValueError(f"unknown pair condition: {self.condition}")
         if self.evolution not in ("original", "qtb"):
             raise ValueError(f"unknown evolution: {self.evolution}")
-        if self.score_mode not in ("centered", "softplus-bias"):
+        if self.score_mode not in ("direct", "centered", "softplus-bias"):
             raise ValueError(f"unknown score mode: {self.score_mode}")
         if self.zero_initialize_union and self.condition not in COMPLEMENTARITY_CONDITIONS:
             raise ValueError("zero-initialize-union is defined only for complementarity models")
         if (
             min(
                 self.learning_rate,
+                self.input_mapping_learning_rate,
                 self.batch_size,
                 self.max_steps,
                 self.validation_every,
@@ -623,6 +627,11 @@ def run_pair_experiment(
     )
     train_indices = role_indices(train_data.records, "train")
     ontology = read_json(manifest_root / "ontology.json")
+    hierarchy = load_object_hierarchy(
+        ontology["object_categories"],
+        ontology["identities"],
+        path=manifest_root / "object_hierarchy.json",
+    )
     supported = set(ontology["train_supported_predicates"])
     development_indices = [
         index
@@ -638,7 +647,12 @@ def run_pair_experiment(
         for record in train_records
         for identity in (record["subject_identity"], record["object_identity"])
     }
-    vocabulary = build_section6_vocabulary(ontology, identity_names=identities)
+    vocabulary = build_section6_vocabulary(
+        ontology,
+        identity_names=identities,
+        category_levels=PAIR_CATEGORY_LEVELS,
+        hierarchy=hierarchy,
+    )
     if config.condition in ("priors", "category-only"):
         return _run_priors(output_root, config, train_records, development_records, vocabulary)
 
@@ -674,22 +688,39 @@ def run_pair_experiment(
             seen,
         )
     model_name, training_feedback = _condition(config)
+    training_config = {
+        **asdict(config),
+        "objective": {
+            "predicate_weight": 1.0,
+            "identity_weight": 1.0,
+            "category_block": "mean_over_active_subject_object_groups",
+        },
+        "train_examples": len(train_indices),
+        "validation_examples": len(validation_indices),
+        "development_examples": len(development_indices),
+        "diagnostic_indices": diagnostic_indices,
+    }
+    if model_name in ("integral", "p-direct"):
+        training_config["input_mapping"] = {
+            "name": "shared_linear_g",
+            "shared_windows": ["scene", "subject", "object", "predicate"],
+            "input_space": "rms_normalized_dinov3",
+            "output_space": "pre_cbs_q",
+            "initialization": "identity_weight_zero_bias",
+            "decoder_contract": "g_plus maps CBS coordinates back to DINO feature space",
+        }
     run = start_training(
         output_root,
         config.run_name,
-        {
-            **asdict(config),
-            "train_examples": len(train_indices),
-            "validation_examples": len(validation_indices),
-            "development_examples": len(development_indices),
-            "diagnostic_indices": diagnostic_indices,
-        },
+        training_config,
         vocabulary,
         state_dim,
         model=model_name,
         evolution=config.evolution,
         score_mode=config.score_mode,
         learning_rate=config.learning_rate,
+        input_mapping_learning_rate=config.input_mapping_learning_rate,
+        feature_dim=state_dim,
         num_sources=4,
     )
     model, optimizer, candidates = run.model, run.optimizer, run.candidates
@@ -709,7 +740,10 @@ def run_pair_experiment(
             trace=True,
         )
         pair_losses(
-            outputs, build_pair_targets(diagnostic_cpu, vocabulary).to(device)
+            outputs,
+            build_pair_targets(
+                diagnostic_cpu, vocabulary, hierarchy=hierarchy
+            ).to(device),
         ).total.backward()
         context = {
             "run_name": config.run_name,
@@ -742,6 +776,7 @@ def run_pair_experiment(
             loader,
             vocabulary,
             device=device,
+            hierarchy=hierarchy,
             seen_triples=seen,
         )
 
@@ -754,7 +789,9 @@ def run_pair_experiment(
         for cpu_batch in train_loader:
             step += 1
             batch = move_features(cpu_batch, FEATURE_KEYS, device)
-            targets = build_pair_targets(cpu_batch, vocabulary).to(device)
+            targets = build_pair_targets(
+                cpu_batch, vocabulary, hierarchy=hierarchy
+            ).to(device)
             model.train()
             optimizer.zero_grad(set_to_none=True)
             outputs = _forward(model, batch, candidates, feedback_mode=training_feedback)
@@ -830,10 +867,13 @@ def _parse_args() -> tuple[Path, Path, Path, PairExperimentConfig]:
         required=True,
     )
     parser.add_argument("--evolution", choices=("original", "qtb"))
-    parser.add_argument("--score-mode", choices=("centered", "softplus-bias"))
+    parser.add_argument(
+        "--score-mode", choices=("direct", "centered", "softplus-bias")
+    )
     parser.add_argument("--zero-initialize-union", action="store_true")
     for name, type_ in (
         ("learning-rate", float),
+        ("input-mapping-learning-rate", float),
         ("batch-size", int),
         ("max-steps", int),
         ("validation-every", int),

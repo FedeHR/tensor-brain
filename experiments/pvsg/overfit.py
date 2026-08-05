@@ -34,7 +34,7 @@ FEATURE_KEYS = ("scene_features", "subject_features", "object_features", "union_
 SEMANTIC_LEVELS = {
     "identity": (),
     "source": ("source",),
-    "hierarchy": ("fine", "basic", "coarse", "domain"),
+    "hierarchy": ("source", "fine", "basic", "coarse", "domain"),
 }
 
 
@@ -150,7 +150,14 @@ def run_overfit(
     run = start_training(
         output_dir.parent,
         output_dir.name,
-        asdict(config),
+        {
+            **asdict(config),
+            "objective": {
+                "predicate_weight": 1.0,
+                "identity_weight": 1.0,
+                "category_block": "mean_over_active_subject_object_groups",
+            },
+        },
         prepared.vocabulary,
         state_dim,
         model=config.model,

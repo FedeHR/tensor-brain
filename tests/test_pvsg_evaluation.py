@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch import nn
 
-from experiments.pvsg.evaluation import evaluate_objects
+from experiments.pvsg.evaluation import evaluate_objects, predicate_metrics
 from tb import IndexVocabulary
 
 
@@ -46,6 +46,22 @@ def _vocabulary():
             "identity": ("identity:dog", "identity:ball"),
         }
     )
+
+
+def test_predicate_average_precision_ranks_categorical_probabilities() -> None:
+    metrics = predicate_metrics(
+        torch.tensor([[2.0, 3.0], [1.0, -10.0]]),
+        torch.tensor([[1.0, 0.0], [0.0, 1.0]]),
+        ("predicate:a", "predicate:b"),
+        ("dog", "dog"),
+        ("ball", "ball"),
+        (("vidor", "a"), ("vidor", "b")),
+        seen_triples=set(),
+    )
+
+    # Raw class-a logits rank the positive first, but the categorical probabilities
+    # correctly rank the very confident class-a negative first.
+    assert metrics["average_precision/predicate/predicate:a"] == 0.5
 
 
 def test_object_evaluation_scores_known_identities() -> None:

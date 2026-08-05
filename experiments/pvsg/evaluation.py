@@ -285,6 +285,7 @@ def predicate_metrics(
         raise ValueError("every evaluated pair must have a supported predicate")
 
     log_probabilities = logits.log_softmax(dim=-1)
+    probabilities = log_probabilities.exp()
     distributions = targets.float() / target_counts.unsqueeze(-1)
     cross_entropy = -(distributions * log_probabilities).sum(dim=-1).mean()
     target_entropy = -torch.xlogy(distributions, distributions).sum(dim=-1).mean()
@@ -364,7 +365,10 @@ def predicate_metrics(
         support = int(truth.sum())
         if not support:
             continue
-        order = logits[:, predicate].argsort(descending=True)
+        # The task is trained and evaluated as a categorical distribution. Raw logits
+        # are not comparable across model families because their per-example normalizers
+        # differ; use the corresponding categorical probability for cross-example AP.
+        order = probabilities[:, predicate].argsort(descending=True)
         ranked_truth = truth[order].float()
         precision = ranked_truth.cumsum(dim=0) / torch.arange(
             1, examples + 1, device=logits.device
@@ -385,11 +389,17 @@ def evaluate_pairs(
     vocabulary: IndexVocabulary,
     *,
     device: torch.device,
+    hierarchy: Mapping[str, Any] | None,
     seen_triples: set[tuple[str, str, str]],
 ) -> dict[str, float | int]:
-    """Evaluate predicate recognition without requiring held-out identities."""
+    """Evaluate predicates and unary semantics without requiring held-out identities."""
 
     candidates = candidate_tensors(vocabulary, device)
+    categories = category_candidates(candidates)
+    category_totals = {
+        owner: {group: _AccuracyTotals() for group in categories}
+        for owner in ("subject", "object")
+    }
     logits = []
     targets = []
     subject_categories = []
@@ -412,10 +422,31 @@ def evaluate_pairs(
         )
         subject_categories.extend(cpu_batch["subject_category"])
         object_categories.extend(cpu_batch["object_category"])
-        videos.extend(zip(cpu_batch["source"], cpu_batch["video_id"], strict=True))
+        batch_videos = tuple(
+            zip(cpu_batch["source"], cpu_batch["video_id"], strict=True)
+        )
+        videos.extend(batch_videos)
+        for owner in ("subject", "object"):
+            owner_identities = tuple(cpu_batch[f"{owner}_identity"])
+            owner_targets = build_category_targets(
+                {
+                    "identity": owner_identities,
+                    "category": tuple(cpu_batch[f"{owner}_category"]),
+                },
+                vocabulary,
+                hierarchy=hierarchy,
+                allow_unknown=True,
+            )
+            for group, totals in category_totals[owner].items():
+                totals.update(
+                    outputs[f"{owner}_category_logits"][group],
+                    owner_targets[group].to(device),
+                    owner_identities,
+                    batch_videos,
+                )
     if not logits:
         raise ValueError("evaluation requires at least one pair")
-    return predicate_metrics(
+    result = predicate_metrics(
         torch.cat(logits),
         torch.cat(targets),
         vocabulary.group_labels("predicate"),
@@ -424,3 +455,18 @@ def evaluate_pairs(
         videos,
         seen_triples=seen_triples,
     )
+    for owner, totals_by_group in category_totals.items():
+        for group, totals in totals_by_group.items():
+            result[f"ignored/{owner}_category/{group}"] = totals.ignored
+            result[f"support/{owner}_category/{group}"] = totals.support
+            if not totals.support:
+                continue
+            result[f"loss/{owner}_category/{group}"] = totals.loss / totals.support
+            result[f"accuracy/{owner}_category/{group}"] = totals.micro
+            result[f"accuracy/{owner}_category_class_macro/{group}"] = totals.macro(
+                totals.by_class
+            )
+            result[f"accuracy/{owner}_category_video_macro/{group}"] = totals.macro(
+                totals.by_video
+            )
+    return result

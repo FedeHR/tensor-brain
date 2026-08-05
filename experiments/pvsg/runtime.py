@@ -112,13 +112,16 @@ def build_model(
     model: ModelName,
     evolution: EvolutionName,
     score_mode: ScoreMode,
+    feature_dim: int | None = None,
     hidden_dim: int | None = None,
     num_sources: int = 2,
 ) -> nn.Module:
     """Construct a named model without hiding its forward schedule."""
 
     if model == "p-direct":
-        return PDirect(state_dim, num_indices, score_mode=score_mode)
+        return PDirect(
+            state_dim, num_indices, feature_dim=feature_dim, score_mode=score_mode
+        )
     if model == "linear-probe":
         return LinearProbe(state_dim, num_indices)
     if model == "fused-linear":
@@ -134,6 +137,7 @@ def build_model(
         state_dim,
         num_indices,
         evolution_type(state_dim, hidden_dim or state_dim),
+        feature_dim=feature_dim,
         score_mode=score_mode,
     )
 
@@ -160,7 +164,9 @@ def start_training(
     evolution: EvolutionName,
     score_mode: ScoreMode,
     learning_rate: float,
+    input_mapping_learning_rate: float | None = None,
     weight_decay: float = 0.0,
+    feature_dim: int | None = None,
     hidden_dim: int | None = None,
     num_sources: int = 2,
 ) -> TrainingRun:
@@ -176,20 +182,47 @@ def start_training(
         model=model,
         evolution=evolution,
         score_mode=score_mode,
+        feature_dim=feature_dim,
         hidden_dim=hidden_dim,
         num_sources=num_sources,
     ).to(device)
-    optimizer = torch.optim.Adam(
-        network.parameters(), lr=learning_rate, weight_decay=weight_decay
-    )
+    input_mapping = getattr(network, "g", None)
+    if input_mapping is None or input_mapping_learning_rate is None:
+        parameter_groups: list[dict[str, Any]] = [
+            {"params": list(network.parameters()), "lr": learning_rate}
+        ]
+    else:
+        mapping_parameters = list(input_mapping.parameters())
+        mapping_parameter_ids = {id(parameter) for parameter in mapping_parameters}
+        parameter_groups = [
+            {
+                "params": [
+                    parameter
+                    for parameter in network.parameters()
+                    if id(parameter) not in mapping_parameter_ids
+                ],
+                "lr": learning_rate,
+            },
+            {"params": mapping_parameters, "lr": input_mapping_learning_rate},
+        ]
+    optimizer = torch.optim.Adam(parameter_groups, weight_decay=weight_decay)
     output_dir.mkdir(parents=True)
     write_json(
         output_dir / "config.json",
         {
             **config,
             "state_dim": state_dim,
+            "feature_dim": feature_dim or state_dim,
             "num_indices": len(vocabulary),
             "num_parameters": sum(parameter.numel() for parameter in network.parameters()),
+            "optimizer": {
+                "name": "Adam",
+                "main_learning_rate": learning_rate,
+                "input_mapping_learning_rate": (
+                    input_mapping_learning_rate if input_mapping is not None else None
+                ),
+                "weight_decay": weight_decay,
+            },
             "runtime": runtime_metadata(device),
         },
         sort_keys=True,
