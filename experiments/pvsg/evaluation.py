@@ -10,15 +10,22 @@ from typing import Any
 import torch
 from torch.nn import functional as F
 
+from experiments.pvsg.data import ELAPSED_PAIR_FIELDS
 from experiments.pvsg.models import ObjectOutputs, PerceptionOutputs
 from experiments.pvsg.runtime import candidate_tensors, category_candidates, move_features
 from experiments.pvsg.supervision import (
     IGNORE_INDEX,
     build_category_targets,
+    build_identity_targets,
     build_object_targets,
     build_predicate_targets,
 )
 from tb import IndexVocabulary
+
+# Re-identification delay strata for the blocked protocol, in seconds since the
+# participant was last observed. The paper's VRD-EX has no temporal axis at all.
+DELAY_BIN_EDGES = (2.0, 5.0, 10.0)
+DELAY_BIN_LABELS = ("0-2s", "2-5s", "5-10s", "10s+")
 
 
 @dataclass
@@ -266,8 +273,14 @@ def predicate_metrics(
     videos: Sequence[tuple[str, str]],
     *,
     seen_triples: set[tuple[str, str, str]],
+    detailed: bool = True,
 ) -> dict[str, float | int]:
-    """Aggregate positive-pair ranking metrics from one set of predictions."""
+    """Aggregate positive-pair ranking metrics from one set of predictions.
+
+    ``detailed`` emits the per-predicate breakdown. Subsets evaluated only to compare
+    strata against each other suppress it, because the aggregate is the comparison and
+    the breakdown would multiply the result file by the number of strata.
+    """
 
     if logits.shape != targets.shape or logits.ndim != 2:
         raise ValueError("predicate logits and targets must be equally shaped matrices")
@@ -329,9 +342,10 @@ def predicate_metrics(
             if not support:
                 continue
             recall = float(hits[:, predicate].sum() / support)
-            result[f"recall/predicate@{requested_k}/{name}"] = recall
-            if requested_k == 1:
-                result[f"support/predicate/{name}"] = support
+            if detailed:
+                result[f"recall/predicate@{requested_k}/{name}"] = recall
+                if requested_k == 1:
+                    result[f"support/predicate/{name}"] = support
             class_recalls.append(recall)
         result[f"recall/predicate_class_macro@{requested_k}"] = fmean(class_recalls)
 
@@ -374,9 +388,123 @@ def predicate_metrics(
             1, examples + 1, device=logits.device
         )
         average_precision = float((precision * ranked_truth).sum() / support)
-        result[f"average_precision/predicate/{name}"] = average_precision
+        if detailed:
+            result[f"average_precision/predicate/{name}"] = average_precision
         average_precisions.append(average_precision)
     result["mean_average_precision/predicate"] = fmean(average_precisions)
+    return result
+
+
+def batch_delays(batch: Mapping[str, Any]) -> torch.Tensor | None:
+    """Return each pair's re-identification delay, or ``None`` outside blocked evaluation.
+
+    The delay of a pair is that of its longer-unobserved participant, which is what
+    governs how hard the pair is to recognize.
+    """
+
+    if not all(field in batch for field in ELAPSED_PAIR_FIELDS):
+        return None
+    subject_delay, object_delay = (
+        batch[field].float() for field in ELAPSED_PAIR_FIELDS
+    )
+    return torch.maximum(subject_delay, object_delay)
+
+
+def record_delays(records: Sequence[Mapping[str, Any]]) -> torch.Tensor | None:
+    """Read delays straight from manifest rows, for models that never build a batch."""
+
+    if not all(field in record for record in records for field in ELAPSED_PAIR_FIELDS):
+        return None
+    return torch.tensor(
+        [
+            max(float(record[field]) for field in ELAPSED_PAIR_FIELDS)
+            for record in records
+        ],
+        dtype=torch.float32,
+    )
+
+
+def _delay_strata(delays: torch.Tensor) -> list[tuple[str, torch.Tensor]]:
+    """Bucket rows by how long the longer-unobserved participant had been absent."""
+
+    boundaries = torch.tensor(DELAY_BIN_EDGES, dtype=delays.dtype)
+    positions = torch.bucketize(delays, boundaries, right=True)
+    return [
+        (f"delay/{label}", positions == position)
+        for position, label in enumerate(DELAY_BIN_LABELS)
+    ]
+
+
+def predicate_strata(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    predicate_names: Sequence[str],
+    subject_categories: Sequence[str],
+    object_categories: Sequence[str],
+    videos: Sequence[tuple[str, str]],
+    *,
+    seen_triples: set[tuple[str, str, str]],
+    strata: Sequence[tuple[str, torch.Tensor]],
+) -> dict[str, float | int]:
+    """Recompute the aggregate predicate metrics over each named subset of the rows."""
+
+    result: dict[str, float | int] = {}
+    for name, mask in strata:
+        count = int(mask.sum())
+        result[f"stratum/{name}/examples"] = count
+        if not count:
+            continue
+        rows = mask.nonzero(as_tuple=False).flatten().tolist()
+        subset = predicate_metrics(
+            logits[mask],
+            targets[mask],
+            predicate_names,
+            [subject_categories[row] for row in rows],
+            [object_categories[row] for row in rows],
+            [videos[row] for row in rows],
+            seen_triples=seen_triples,
+            detailed=False,
+        )
+        result.update({f"stratum/{name}/{key}": value for key, value in subset.items()})
+    return result
+
+
+def delay_metrics(
+    delays: torch.Tensor | None,
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    predicate_names: Sequence[str],
+    subject_categories: Sequence[str],
+    object_categories: Sequence[str],
+    videos: Sequence[tuple[str, str]],
+    *,
+    seen_triples: set[tuple[str, str, str]],
+) -> dict[str, float | int]:
+    """Partition predicate quality by re-identification delay.
+
+    Every model reports this on the blocked evaluation set, including the memoryless
+    priors and the visual-only readout. Without a memoryless reference the delay axis is
+    uninterpretable: predicate difficulty could itself correlate with elapsed time.
+    """
+
+    if delays is None:
+        return {}
+    result: dict[str, float | int] = {
+        "delay_seconds_mean": float(delays.mean()),
+        "delay_seconds_max": float(delays.max()),
+    }
+    result.update(
+        predicate_strata(
+            logits,
+            targets,
+            predicate_names,
+            subject_categories,
+            object_categories,
+            videos,
+            seen_triples=seen_triples,
+            strata=_delay_strata(delays),
+        )
+    )
     return result
 
 
@@ -391,8 +519,16 @@ def evaluate_pairs(
     device: torch.device,
     hierarchy: Mapping[str, Any] | None,
     seen_triples: set[tuple[str, str, str]],
+    identities: bool = False,
 ) -> dict[str, float | int]:
-    """Evaluate predicates and unary semantics without requiring held-out identities."""
+    """Evaluate predicates and unary semantics without requiring held-out identities.
+
+    ``identities`` additionally scores the two identity readouts and partitions the
+    predicate metrics by whether both participants were re-identified. It is meaningful
+    only where the protocol enrolled the evaluated entities; on held-out video every
+    candidate is wrong by construction. Where the manifest records a re-identification
+    delay, the same partition is also reported per delay bucket.
+    """
 
     candidates = candidate_tensors(vocabulary, device)
     categories = category_candidates(candidates)
@@ -400,11 +536,15 @@ def evaluate_pairs(
         owner: {group: _AccuracyTotals() for group in categories}
         for owner in ("subject", "object")
     }
+    identity_totals = {owner: _AccuracyTotals() for owner in ("subject", "object")}
     logits = []
     targets = []
     subject_categories = []
     object_categories = []
     videos = []
+    pair_recognized = []
+    pair_enrolled = []
+    delays = []
     feature_keys = (
         "scene_features",
         "subject_features",
@@ -444,17 +584,98 @@ def evaluate_pairs(
                     owner_identities,
                     batch_videos,
                 )
+        if identities:
+            identity_targets = build_identity_targets(cpu_batch, vocabulary)
+            recognized = torch.ones(len(batch_videos), dtype=torch.bool)
+            enrolled = torch.ones(len(batch_videos), dtype=torch.bool)
+            for owner, target in identity_targets.items():
+                owner_logits = outputs[f"{owner}_identity_logits"]
+                identity_totals[owner].update(
+                    owner_logits,
+                    target.to(device),
+                    tuple(cpu_batch[f"{owner}_identity"]),
+                    batch_videos,
+                )
+                valid = target != IGNORE_INDEX
+                enrolled &= valid
+                recognized &= valid & (owner_logits.argmax(dim=-1).cpu() == target)
+            pair_recognized.append(recognized)
+            pair_enrolled.append(enrolled)
+        batch_delay = batch_delays(cpu_batch)
+        if batch_delay is not None:
+            delays.append(batch_delay)
     if not logits:
         raise ValueError("evaluation requires at least one pair")
+    predicate_names = vocabulary.group_labels("predicate")
+    all_logits = torch.cat(logits)
+    all_targets = torch.cat(targets)
     result = predicate_metrics(
-        torch.cat(logits),
-        torch.cat(targets),
-        vocabulary.group_labels("predicate"),
+        all_logits,
+        all_targets,
+        predicate_names,
         subject_categories,
         object_categories,
         videos,
         seen_triples=seen_triples,
     )
+    all_delays = torch.cat(delays) if delays else None
+    result.update(
+        delay_metrics(
+            all_delays,
+            all_logits,
+            all_targets,
+            predicate_names,
+            subject_categories,
+            object_categories,
+            videos,
+            seen_triples=seen_triples,
+        )
+    )
+    if pair_recognized:
+        recognized = torch.cat(pair_recognized)
+        enrolled = torch.cat(pair_enrolled)
+        result["support/identity_pair_enrolled"] = int(enrolled.sum())
+        if bool(enrolled.any()):
+            result["accuracy/identity_pair_exact"] = float(
+                recognized[enrolled].float().mean()
+            )
+        result.update(
+            predicate_strata(
+                all_logits,
+                all_targets,
+                predicate_names,
+                subject_categories,
+                object_categories,
+                videos,
+                seen_triples=seen_triples,
+                strata=[
+                    ("identity_pair_correct", enrolled & recognized),
+                    ("identity_pair_incorrect", enrolled & ~recognized),
+                ],
+            )
+        )
+        if all_delays is not None:
+            # Recognition rate per delay bucket: does the memory itself decay?
+            for name, mask in _delay_strata(all_delays):
+                scored = mask & enrolled
+                if bool(scored.any()):
+                    result[f"stratum/{name}/accuracy/identity_pair_exact"] = float(
+                        recognized[scored].float().mean()
+                    )
+    if identities:
+        for owner, total in identity_totals.items():
+            result[f"ignored/{owner}_identity"] = total.ignored
+            result[f"support/{owner}_identity"] = total.support
+            if not total.support:
+                continue
+            result[f"loss/{owner}_identity"] = total.loss / total.support
+            result[f"accuracy/{owner}_identity"] = total.micro
+            result[f"accuracy/{owner}_identity_macro"] = total.macro(total.by_identity)
+            result[f"accuracy/{owner}_identity_video_macro"] = total.macro(
+                total.by_video
+            )
+            result[f"identities/{owner}_identity"] = len(total.by_identity)
+            result[f"videos/{owner}_identity"] = len(total.by_video)
     for owner, totals_by_group in category_totals.items():
         for group, totals in totals_by_group.items():
             result[f"ignored/{owner}_category/{group}"] = totals.ignored

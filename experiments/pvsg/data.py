@@ -19,6 +19,12 @@ from experiments.pvsg.io import read_jsonl
 
 NORMALIZATION_EPSILON = 1e-12
 _FEATURE_TABLES = ("scene_features", "object_features", "union_features")
+# Present only in the blocked evaluation manifests, where every participant was last
+# seen before the observation boundary. They carry the re-identification delay.
+ELAPSED_PAIR_FIELDS = (
+    "seconds_since_subject_observation",
+    "seconds_since_object_observation",
+)
 
 
 def normalize_dino(
@@ -161,6 +167,11 @@ class PVSGPairDataset(Dataset[dict[str, Any]]):
             "frame_index": record["frame_index"],
             "subject_id": record["subject_id"],
             "object_id": record["object_id"],
+            **{
+                field: float(record[field])
+                for field in ELAPSED_PAIR_FIELDS
+                if field in record
+            },
         }
 
 

@@ -227,6 +227,31 @@ def build_category_targets(
     }
 
 
+def build_identity_targets(
+    batch: Mapping[str, Any],
+    vocabulary: IndexVocabulary,
+    *,
+    owners: Sequence[str] = ("subject", "object"),
+) -> dict[str, Int[Tensor, " batch"]]:
+    """Map pair participants to identity positions, ignoring unenrolled entities.
+
+    Held-out-video entities are novel by construction and score ``IGNORE_INDEX`` at
+    every candidate, so identity accuracy is only defined where the protocol enrolled
+    the entity. The blocked protocol re-observes its training entities and therefore
+    reports genuine identity support.
+    """
+
+    return {
+        owner: _class_targets(
+            _string_sequence(batch, f"{owner}_identity"),
+            vocabulary,
+            "identity",
+            allow_unknown=True,
+        )
+        for owner in owners
+    }
+
+
 def _entity_targets(
     identities: tuple[str, ...],
     source_categories: tuple[str, ...],

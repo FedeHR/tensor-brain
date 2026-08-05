@@ -17,6 +17,9 @@ The first-principles video experiment design is documented in
 [PVSG perception and memory experiments](docs/pvsg_perception.md).
 The pinned dataset preparation and cluster extraction commands are in
 [PVSG cluster feature extraction](docs/pvsg_cluster_extraction.md).
+The pair protocol that evaluates known entities, and how it maps onto the original
+VRD-E and VRD-EX experiments, is documented in
+[The known-entity pair protocol](docs/pair_known_entity_protocol.md).
 
 The repository and distribution are named `tensor-brain`; the import package is the shorter
 `tb` and lives under `src/tb`:

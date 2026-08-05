@@ -1,4 +1,13 @@
-"""Train the PVSG subject-object-predicate recognition comparison."""
+"""Train the PVSG subject-object-predicate recognition comparison.
+
+``--protocol`` selects which entities are seen at evaluation. ``heldout_video`` reserves
+whole videos, and since PVSG identities are video-scoped its evaluation entities are
+novel by construction, matching the paper's VRD-E regime. ``blocked`` trains on each
+training video's observation window and additionally reports the same checkpoint on
+later frames of those videos, where the identity bank holds the evaluated entity; that
+is the VRD-EX regime, and ``docs/pair_known_entity_protocol.md`` records why the blocked
+construction is the stronger of the two.
+"""
 
 from __future__ import annotations
 
@@ -21,13 +30,20 @@ from experiments.pvsg.baselines import (
     PredicatePriors,
 )
 from experiments.pvsg.data import (
+    PVSGObjectDataset,
     PVSGPairDataset,
     collate_pair_batch,
     experiment_loader,
     role_indices,
 )
 from experiments.pvsg.diagnostics import scale_trace_rows
-from experiments.pvsg.evaluation import evaluate_pairs, predicate_metrics
+from experiments.pvsg.evaluation import (
+    batch_delays,
+    delay_metrics,
+    evaluate_pairs,
+    predicate_metrics,
+    record_delays,
+)
 from experiments.pvsg.hierarchy import load_object_hierarchy
 from experiments.pvsg.indices import build_section6_vocabulary, predicate_label
 from experiments.pvsg.io import read_json, write_json, write_jsonl
@@ -87,9 +103,116 @@ PAIR_CATEGORY_LEVELS = ("source", "fine", "basic", "coarse", "domain")
 
 
 @dataclass(frozen=True)
+class EvaluationSet:
+    """One reported evaluation view and the VRD protocol it stands in for."""
+
+    name: str
+    manifest: str
+    role: str
+    known_entities: bool
+    vrd_analogue: str
+    description: str
+
+
+@dataclass(frozen=True)
+class PairProtocol:
+    """Which manifests supply training, entity enrollment, selection, and reporting.
+
+    ``enrollment_manifest`` names the object manifest whose observations populate the
+    identity group. ``None`` keeps the original rule of enrolling exactly the entities
+    that appear in a training pair.
+    """
+
+    name: str
+    train_manifest: str
+    train_role: str
+    enrollment_manifest: str | None
+    selection_set: str
+    evaluation_sets: tuple[EvaluationSet, ...]
+
+    def __post_init__(self) -> None:
+        names = [view.name for view in self.evaluation_sets]
+        if len(set(names)) != len(names):
+            raise ValueError("evaluation set names must be unique")
+        if self.selection_set not in names:
+            raise ValueError("selection_set must name one of the evaluation sets")
+
+
+# Novel entities at evaluation: whole videos are reserved, and PVSG identities are
+# video-scoped, so no identity candidate can be correct. This is the regime the
+# corrected pair runs already measured.
+NOVEL_ENTITY_SET = EvaluationSet(
+    name="development",
+    manifest="heldout_video/development_pairs.jsonl",
+    role="development",
+    known_entities=False,
+    vrd_analogue="VRD-E",
+    description=(
+        "pairs from videos never trained on; entity instances are novel by "
+        "construction, so the identity bank cannot hold the evaluated entity"
+    ),
+)
+# Known entities at evaluation, and a stronger construction than the paper's: VRD-EX
+# distorted copies of the training images (tb_original p.23), so "known entity" partly
+# meant "nearly the same pixels". Blocked evaluates genuinely later frames of the same
+# video behind a 10% temporal embargo, which is real re-identification.
+KNOWN_ENTITY_SET = EvaluationSet(
+    name="blocked",
+    manifest="blocked/evaluation_pairs.jsonl",
+    role="train",
+    known_entities=True,
+    vrd_analogue="VRD-EX",
+    description=(
+        "pairs from the last 45% of the training videos, after a 10% embargo; both "
+        "participants were observed before the observation boundary, so the identity "
+        "bank holds the evaluated entity"
+    ),
+)
+PAIR_PROTOCOLS: dict[str, PairProtocol] = {
+    "heldout_video": PairProtocol(
+        name="heldout_video",
+        train_manifest="heldout_video/train_pairs.jsonl",
+        train_role="train",
+        enrollment_manifest=None,
+        selection_set="development",
+        evaluation_sets=(NOVEL_ENTITY_SET,),
+    ),
+    "blocked": PairProtocol(
+        name="blocked",
+        train_manifest="blocked/train_pairs.jsonl",
+        train_role="train",
+        # Pair records alone do not cover every re-observed entity: a blocked evaluation
+        # pair only requires both participants to have been *visible* before the
+        # boundary. Enrolling from the observation-window object manifest is what makes
+        # the known-entity claim hold for the whole evaluation set rather than a
+        # silently filtered subset.
+        enrollment_manifest="blocked/train_objects.jsonl",
+        # Selection stays on the novel-entity set, so the known-entity result is
+        # reported rather than selected for.
+        selection_set="development",
+        evaluation_sets=(NOVEL_ENTITY_SET, KNOWN_ENTITY_SET),
+    ),
+}
+
+
+@dataclass(frozen=True)
+class EvaluationView:
+    """One evaluation set resolved against the materialized manifests."""
+
+    set: EvaluationSet
+    data: PVSGPairDataset
+    indices: list[int]
+
+    @property
+    def records(self) -> list[dict[str, Any]]:
+        return [self.data.records[index] for index in self.indices]
+
+
+@dataclass(frozen=True)
 class PairExperimentConfig:
     run_name: str
     condition: PairCondition
+    protocol: Literal["heldout_video", "blocked"] = "heldout_video"
     evolution: Literal["original", "qtb"] = "qtb"
     score_mode: Literal["direct", "centered", "softplus-bias"] = "softplus-bias"
     category_feedback_level: Literal[
@@ -122,6 +245,8 @@ class PairExperimentConfig:
             *INTEGRAL_FEEDBACK,
         ):
             raise ValueError(f"unknown pair condition: {self.condition}")
+        if self.protocol not in PAIR_PROTOCOLS:
+            raise ValueError(f"unknown pair protocol: {self.protocol}")
         if self.evolution not in ("original", "qtb"):
             raise ValueError(f"unknown evolution: {self.evolution}")
         if self.score_mode not in ("direct", "centered", "softplus-bias"):
@@ -261,12 +386,52 @@ def _seen_triples(records: Sequence[Mapping[str, Any]]) -> set[tuple[str, str, s
     }
 
 
+def _prior_metrics(
+    priors: PredicatePriors,
+    records: Sequence[Mapping[str, Any]],
+    vocabulary,
+    *,
+    seen_triples: set[tuple[str, str, str]],
+) -> dict[str, dict[str, float | int]]:
+    """Score the frequency and category-pair priors on one evaluation set."""
+
+    targets = build_predicate_targets(
+        {"predicates": [record["predicates"] for record in records]},
+        vocabulary,
+        allow_unknown=True,
+    )
+    subject_categories = tuple(str(record["subject_category"]) for record in records)
+    object_categories = tuple(str(record["object_category"]) for record in records)
+    videos = tuple((str(record["source"]), str(record["video_id"])) for record in records)
+    delays = record_delays(records)
+    predicate_names = vocabulary.group_labels("predicate")
+    metrics = {}
+    for label, logits in (
+        ("frequency", priors.frequency_logits.expand(len(records), -1)),
+        ("category-pair", priors.logits(subject_categories, object_categories)),
+    ):
+        arguments = (
+            logits,
+            targets,
+            predicate_names,
+            subject_categories,
+            object_categories,
+            videos,
+        )
+        metrics[label] = {
+            **predicate_metrics(*arguments, seen_triples=seen_triples),
+            **delay_metrics(delays, *arguments, seen_triples=seen_triples),
+        }
+    return metrics
+
+
 def _run_priors(
     output_root: Path,
     config: PairExperimentConfig,
     train_records: Sequence[dict[str, Any]],
-    development_records: Sequence[dict[str, Any]],
+    views: Mapping[str, EvaluationView],
     vocabulary,
+    protocol_metadata: Mapping[str, Any],
 ) -> dict[str, Any]:
     output_dir = output_root / config.run_name
     if output_dir.exists():
@@ -276,54 +441,22 @@ def _run_priors(
         label.removeprefix("predicate:") for label in vocabulary.group_labels("predicate")
     )
     priors = PredicatePriors.fit_records(train_records, predicate_names)
-    targets = build_predicate_targets(
-        {"predicates": [record["predicates"] for record in development_records]},
-        vocabulary,
-        allow_unknown=True,
-    )
-    subject_categories = tuple(str(record["subject_category"]) for record in development_records)
-    object_categories = tuple(str(record["object_category"]) for record in development_records)
-    videos = tuple(
-        (str(record["source"]), str(record["video_id"])) for record in development_records
-    )
-    frequency_logits = priors.frequency_logits.expand(len(development_records), -1)
-    pair_logits = priors.logits(subject_categories, object_categories)
     seen = _seen_triples(train_records)
-    frequency_metrics = predicate_metrics(
-        frequency_logits,
-        targets,
-        vocabulary.group_labels("predicate"),
-        subject_categories,
-        object_categories,
-        videos,
-        seen_triples=seen,
-    )
-    category_pair_metrics = predicate_metrics(
-        pair_logits,
-        targets,
-        vocabulary.group_labels("predicate"),
-        subject_categories,
-        object_categories,
-        videos,
-        seen_triples=seen,
-    )
-    evaluation = (
-        {"default": category_pair_metrics}
-        if config.condition == "category-only"
-        else {
-            "frequency": frequency_metrics,
-            "category-pair": category_pair_metrics,
-        }
-    )
-    result = {
-        "evaluation": evaluation,
-    }
+    evaluation = {}
+    for name, view in views.items():
+        by_prior = _prior_metrics(priors, view.records, vocabulary, seen_triples=seen)
+        evaluation[name] = (
+            {"default": by_prior["category-pair"]}
+            if config.condition == "category-only"
+            else by_prior
+        )
+    result = {"evaluation": evaluation}
     write_json(
         output_dir / "config.json",
         {
             **asdict(config),
             "train_examples": len(train_records),
-            "development_examples": len(development_records),
+            "protocol_layout": protocol_metadata,
             "prior_smoothing": 1.0,
             "runtime": runtime_metadata(torch.device("cpu")),
         },
@@ -403,6 +536,7 @@ def _evaluate_complementarity(
     subject_categories = []
     object_categories = []
     videos = []
+    delays = []
     subject_correct = 0
     object_correct = 0
     pair_correct = 0
@@ -422,6 +556,9 @@ def _evaluate_complementarity(
         subject_categories.extend(cpu_batch["subject_category"])
         object_categories.extend(cpu_batch["object_category"])
         videos.extend(zip(cpu_batch["source"], cpu_batch["video_id"], strict=True))
+        batch_delay = batch_delays(cpu_batch)
+        if batch_delay is not None:
+            delays.append(batch_delay)
         if outputs.subject_category_logits is not None:
             assert outputs.object_category_logits is not None
             subject_matches = outputs.subject_category_logits.argmax(dim=-1) == category_targets[0]
@@ -432,14 +569,21 @@ def _evaluate_complementarity(
             category_examples += len(subject_matches)
     if not logits:
         raise ValueError("evaluation requires at least one pair")
-    metrics = predicate_metrics(
+    arguments = (
         torch.cat(logits),
         torch.cat(targets),
         vocabulary.group_labels("predicate"),
         subject_categories,
         object_categories,
         videos,
-        seen_triples=seen_triples,
+    )
+    metrics = predicate_metrics(*arguments, seen_triples=seen_triples)
+    metrics.update(
+        delay_metrics(
+            torch.cat(delays) if delays else None,
+            *arguments,
+            seen_triples=seen_triples,
+        )
     )
     if category_examples:
         metrics.update(
@@ -459,14 +603,14 @@ def _run_complementarity_learned(
     output_root: Path,
     config: PairExperimentConfig,
     train_records: Sequence[dict[str, Any]],
-    development_records: Sequence[dict[str, Any]],
     train_loader: DataLoader,
     validation_loader: DataLoader,
-    development_loader: DataLoader,
+    evaluation_loaders: Mapping[str, DataLoader],
     vocabulary,
     category_names: Sequence[str],
     state_dim: int,
     seen_triples: set[tuple[str, str, str]],
+    protocol_metadata: Mapping[str, Any],
 ) -> dict[str, Any]:
     output_dir = output_root / config.run_name
     if output_dir.exists():
@@ -494,7 +638,7 @@ def _run_complementarity_learned(
             **asdict(config),
             "train_examples": len(train_records),
             "validation_examples": len(validation_loader.dataset),
-            "development_examples": len(development_records),
+            "protocol_layout": protocol_metadata,
             "state_dim": state_dim,
             "category_names": list(category_names),
             "predicate_gradient_into_category_classifier": False,
@@ -629,11 +773,13 @@ def _run_complementarity_learned(
     checkpoint = torch.load(output_dir / "checkpoint.pt", map_location=device, weights_only=True)
     model.load_state_dict(checkpoint["model_state_dict"])
     assert best_metrics is not None
-    evaluation = {"default": evaluate(development_loader)}
-    if config.condition == "union-category-predicted":
-        evaluation["oracle-category-intervention"] = evaluate(
-            development_loader, oracle_categories=True
-        )
+    evaluation = {}
+    for name, loader in evaluation_loaders.items():
+        evaluation[name] = {"default": evaluate(loader)}
+        if config.condition == "union-category-predicted":
+            evaluation[name]["oracle-category-intervention"] = evaluate(
+                loader, oracle_categories=True
+            )
     result = {
         "best_step": best_step,
         "selection": best_metrics,
@@ -645,19 +791,113 @@ def _run_complementarity_learned(
     return result
 
 
+def _resolve_evaluation_views(
+    protocol: PairProtocol,
+    manifest_root: Path,
+    feature_root: Path,
+    supported_predicates: set[str],
+) -> dict[str, EvaluationView]:
+    """Load every reported evaluation set, keeping only scoreable predicate rows."""
+
+    views = {}
+    for evaluation_set in protocol.evaluation_sets:
+        data = PVSGPairDataset(manifest_root / evaluation_set.manifest, feature_root)
+        indices = [
+            index
+            for index in role_indices(data.records, evaluation_set.role)
+            if supported_predicates.intersection(data.records[index]["predicates"])
+        ]
+        if not indices:
+            raise ValueError(
+                f"{evaluation_set.name} contains no train-supported predicate targets"
+            )
+        views[evaluation_set.name] = EvaluationView(evaluation_set, data, indices)
+    return views
+
+
+def _pair_participants(records: Sequence[Mapping[str, Any]]) -> set[str]:
+    return {
+        identity
+        for record in records
+        for identity in (record["subject_identity"], record["object_identity"])
+    }
+
+
+def _enrolled_identities(
+    protocol: PairProtocol,
+    manifest_root: Path,
+    feature_root: Path,
+    train_records: Sequence[Mapping[str, Any]],
+) -> tuple[set[str], str]:
+    """Return the entities that own an index column, and where they were enrolled."""
+
+    pair_participants = _pair_participants(train_records)
+    if protocol.enrollment_manifest is None:
+        return pair_participants, "training_pair_participants"
+    observations = PVSGObjectDataset(
+        manifest_root / protocol.enrollment_manifest, feature_root
+    )
+    enrolled = {
+        observations.records[index]["identity"]
+        for index in role_indices(observations.records, protocol.train_role)
+    }
+    unenrolled = pair_participants - enrolled
+    if unenrolled:
+        raise ValueError(
+            "training pairs reference entities missing from the enrollment manifest: "
+            f"{sorted(unenrolled)[:5]!r}"
+        )
+    return enrolled, protocol.enrollment_manifest
+
+
+def _protocol_metadata(
+    protocol: PairProtocol,
+    views: Mapping[str, EvaluationView],
+    *,
+    train_examples: int,
+    enrollment: str,
+    identity_columns: int,
+    supervised_identity_columns: int,
+) -> dict[str, Any]:
+    """Record the protocol layout and its VRD correspondence alongside the run."""
+
+    return {
+        "name": protocol.name,
+        "train_manifest": protocol.train_manifest,
+        "train_role": protocol.train_role,
+        "train_examples": train_examples,
+        "identity_enrollment": {
+            "source": enrollment,
+            "columns": identity_columns,
+            "columns_supervised_by_training_pairs": supervised_identity_columns,
+        },
+        "selection_set": protocol.selection_set,
+        "evaluation_sets": {
+            name: {
+                "manifest": view.set.manifest,
+                "role": view.set.role,
+                "examples": len(view.indices),
+                "known_entities": view.set.known_entities,
+                "vrd_analogue": view.set.vrd_analogue,
+                "description": view.set.description,
+            }
+            for name, view in views.items()
+        },
+    }
+
+
 def run_pair_experiment(
     manifest_root: Path,
     feature_root: Path,
     output_root: Path,
     config: PairExperimentConfig,
 ) -> dict[str, Any]:
+    protocol = PAIR_PROTOCOLS[config.protocol]
     train_data = PVSGPairDataset(
-        manifest_root / "heldout_video" / "train_pairs.jsonl", feature_root
+        manifest_root / protocol.train_manifest, feature_root
     )
-    development_data = PVSGPairDataset(
-        manifest_root / "heldout_video" / "development_pairs.jsonl", feature_root
-    )
-    train_indices = role_indices(train_data.records, "train")
+    train_indices = role_indices(train_data.records, protocol.train_role)
+    train_records = [train_data.records[index] for index in train_indices]
     ontology = read_json(manifest_root / "ontology.json")
     hierarchy = load_object_hierarchy(
         ontology["object_categories"],
@@ -665,43 +905,58 @@ def run_pair_experiment(
         path=manifest_root / "object_hierarchy.json",
     )
     supported = set(ontology["train_supported_predicates"])
-    development_indices = [
-        index
-        for index in role_indices(development_data.records, "development")
-        if supported.intersection(development_data.records[index]["predicates"])
-    ]
-    if not development_indices:
-        raise ValueError("development contains no train-supported predicate targets")
-    train_records = [train_data.records[index] for index in train_indices]
-    development_records = [development_data.records[index] for index in development_indices]
-    identities = {
-        identity
-        for record in train_records
-        for identity in (record["subject_identity"], record["object_identity"])
-    }
+    views = _resolve_evaluation_views(protocol, manifest_root, feature_root, supported)
+    identities, enrollment = _enrolled_identities(
+        protocol, manifest_root, feature_root, train_records
+    )
     vocabulary = build_section6_vocabulary(
         ontology,
         identity_names=identities,
         category_levels=PAIR_CATEGORY_LEVELS,
         hierarchy=hierarchy,
     )
+    for view in views.values():
+        if not view.set.known_entities:
+            continue
+        unknown = _pair_participants(view.records) - identities
+        if unknown:
+            raise ValueError(
+                f"{view.set.name} claims known entities but {len(unknown)} of them own "
+                f"no index column, for example {sorted(unknown)[:5]!r}"
+            )
+    protocol_metadata = _protocol_metadata(
+        protocol,
+        views,
+        train_examples=len(train_indices),
+        enrollment=enrollment,
+        identity_columns=len(identities),
+        supervised_identity_columns=len(_pair_participants(train_records)),
+    )
     if config.condition in ("priors", "category-only"):
-        return _run_priors(output_root, config, train_records, development_records, vocabulary)
+        return _run_priors(
+            output_root, config, train_records, views, vocabulary, protocol_metadata
+        )
 
     generator = torch.Generator().manual_seed(config.seed)
-    validation_indices = development_indices
+    selection_view = views[protocol.selection_set]
+    validation_indices = selection_view.indices
     if len(validation_indices) > config.validation_examples:
         positions = torch.randperm(len(validation_indices), generator=generator)[
             : config.validation_examples
         ]
-        validation_indices = sorted(development_indices[position] for position in positions)
+        validation_indices = sorted(
+            selection_view.indices[position] for position in positions
+        )
     diagnostic_indices = [
         train_indices[position]
         for position in torch.randperm(len(train_indices), generator=generator)[: config.batch_size]
     ]
     diagnostic_cpu = collate_pair_batch([train_data[index] for index in diagnostic_indices])
     train_loader = _loader(train_data, train_indices, config, train=True)
-    validation_loader = _loader(development_data, validation_indices, config)
+    validation_loader = _loader(selection_view.data, validation_indices, config)
+    evaluation_loaders = {
+        name: _loader(view.data, view.indices, config) for name, view in views.items()
+    }
     seen = _seen_triples(train_records)
 
     state_dim = int(diagnostic_cpu["subject_features"].shape[-1])
@@ -710,14 +965,14 @@ def run_pair_experiment(
             output_root,
             config,
             train_records,
-            development_records,
             train_loader,
             validation_loader,
-            _loader(development_data, development_indices, config),
+            evaluation_loaders,
             vocabulary,
             _source_category_names(ontology),
             state_dim,
             seen,
+            protocol_metadata,
         )
     model_name, training_feedback = _condition(config)
     training_config = {
@@ -729,7 +984,7 @@ def run_pair_experiment(
         },
         "train_examples": len(train_indices),
         "validation_examples": len(validation_indices),
-        "development_examples": len(development_indices),
+        "protocol_layout": protocol_metadata,
         "diagnostic_indices": diagnostic_indices,
     }
     if training_feedback is not None:
@@ -737,7 +992,7 @@ def run_pair_experiment(
         training_config["feedback"] = {
             "identity": {
                 "mode": identity_mode,
-                "candidates": "training_identity_columns",
+                "candidates": "enrolled_identity_columns",
             },
             "category": {
                 "mode": category_mode,
@@ -822,7 +1077,10 @@ def run_pair_experiment(
         optimizer.zero_grad(set_to_none=True)
 
     def evaluate(
-        loader: DataLoader, mode: FeedbackModes | None = training_feedback
+        loader: DataLoader,
+        mode: FeedbackModes | None = training_feedback,
+        *,
+        identities: bool = False,
     ) -> dict[str, float | int]:
         model.eval()
         return evaluate_pairs(
@@ -838,6 +1096,7 @@ def run_pair_experiment(
             device=device,
             hierarchy=hierarchy,
             seen_triples=seen,
+            identities=identities,
         )
 
     diagnose(0)
@@ -908,12 +1167,19 @@ def run_pair_experiment(
         )
     else:
         evaluation_modes = (("none", training_feedback),)
-    development_loader = _loader(development_data, development_indices, config)
     result = {
         "best_step": best_step,
         "selection": best_metrics,
         "evaluation": {
-            label: evaluate(development_loader, mode) for label, mode in evaluation_modes
+            name: {
+                label: evaluate(
+                    evaluation_loaders[name],
+                    mode,
+                    identities=view.set.known_entities,
+                )
+                for label, mode in evaluation_modes
+            }
+            for name, view in views.items()
         },
     }
     write_json(output_dir / "result.json", result, sort_keys=True)
@@ -936,6 +1202,7 @@ def _parse_args() -> tuple[Path, Path, Path, PairExperimentConfig]:
         ),
         required=True,
     )
+    parser.add_argument("--protocol", choices=tuple(PAIR_PROTOCOLS))
     parser.add_argument("--evolution", choices=("original", "qtb"))
     parser.add_argument(
         "--score-mode", choices=("direct", "centered", "softplus-bias")
