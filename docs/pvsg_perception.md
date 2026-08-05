@@ -494,6 +494,14 @@ TB does not, the remaining diagnosis moves to TB grounding, feedback, evolution,
 The four seed-0 jobs are submitted with
 `sbatch cluster/pvsg/pair_complementarity.sbatch`.
 
+The single follow-up oracle-residual sanity check starts the union readout at zero, making its
+step-0 prediction exactly category-only, evaluates and checkpoints that state, then permits a
+smaller-`1e-4`-learning-rate visual residual to improve it with validation every 100 steps. This
+run determines whether the earlier oracle fusion lost to the prior because useful visual evidence
+was absent or because a randomly initialized, rapidly growing residual destroyed a strong
+starting solution. It is submitted with `sbatch cluster/pvsg/pair_oracle_residual.sbatch`; no
+additional predicted-category, per-example export, or metric extension belongs to this check.
+
 ### Tiny-data overfit gate
 
 Before any comparison or full-data training, `experiments/pvsg/overfit.py` loads the first 200

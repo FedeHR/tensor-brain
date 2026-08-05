@@ -82,6 +82,7 @@ class PairExperimentConfig:
     evolution: Literal["original", "qtb"] = "qtb"
     score_mode: Literal["centered", "softplus-bias"] = "softplus-bias"
     learning_rate: float = 1e-3
+    zero_initialize_union: bool = False
     batch_size: int = 128
     max_steps: int = 10_000
     validation_every: int = 1_000
@@ -111,6 +112,8 @@ class PairExperimentConfig:
             raise ValueError(f"unknown evolution: {self.evolution}")
         if self.score_mode not in ("centered", "softplus-bias"):
             raise ValueError(f"unknown score mode: {self.score_mode}")
+        if self.zero_initialize_union and self.condition not in COMPLEMENTARITY_CONDITIONS:
+            raise ValueError("zero-initialize-union is defined only for complementarity models")
         if (
             min(
                 self.learning_rate,
@@ -443,6 +446,9 @@ def _run_complementarity_learned(
         pair_logits,
         condition=config.condition,
     ).to(device)
+    if config.zero_initialize_union:
+        nn.init.zeros_(model.union_readout.weight)
+        nn.init.zeros_(model.union_readout.bias)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     category_positions = {name: position for position, name in enumerate(category_names)}
     output_dir.mkdir(parents=True)
@@ -482,9 +488,21 @@ def _run_complementarity_learned(
             oracle_categories=oracle_categories,
         )
 
-    best_metrics = None
-    best_loss = float("inf")
+    best_metrics = evaluate(validation_loader)
+    best_loss = float(best_metrics["loss/predicate_kl"])
     best_step = 0
+    write_jsonl(
+        output_dir / "validation_trace.jsonl",
+        [{"step": 0, **best_metrics}],
+        append=True,
+    )
+    save_checkpoint(
+        output_dir / "checkpoint.pt",
+        model,
+        optimizer,
+        step=0,
+        validation_loss=best_loss,
+    )
     step = 0
     while step < config.max_steps:
         for cpu_batch in train_loader:
@@ -813,6 +831,7 @@ def _parse_args() -> tuple[Path, Path, Path, PairExperimentConfig]:
     )
     parser.add_argument("--evolution", choices=("original", "qtb"))
     parser.add_argument("--score-mode", choices=("centered", "softplus-bias"))
+    parser.add_argument("--zero-initialize-union", action="store_true")
     for name, type_ in (
         ("learning-rate", float),
         ("batch-size", int),

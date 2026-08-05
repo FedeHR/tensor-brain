@@ -279,6 +279,7 @@ def test_pair_runner_supports_every_comparison_condition(
         PairExperimentConfig(
             run_name=condition,
             condition=condition,
+            zero_initialize_union=condition == "union-category-oracle",
             batch_size=2,
             max_steps=2,
             validation_every=1,
@@ -295,3 +296,14 @@ def test_pair_runner_supports_every_comparison_condition(
         assert metrics["examples"] == 2
         assert metrics["predicate_assignments"] == 2
         assert metrics["support/triple_unseen"] == 1
+    if condition in {
+        "union-only",
+        "union-category-oracle",
+        "union-category-predicted",
+    }:
+        first_validation = json.loads(
+            (tmp_path / "runs" / condition / "validation_trace.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()[0]
+        )
+        assert first_validation["step"] == 0
