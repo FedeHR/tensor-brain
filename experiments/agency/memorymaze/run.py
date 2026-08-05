@@ -43,6 +43,42 @@ def build_policy(
     return RecurrentControl(CONDITIONS["tb-full"], cell=cell)
 
 
+def _progress_reporter(policy, directory: Path, level, config, started: float):
+    """Report progress and checkpoint, using PPO's periodic evaluation hook.
+
+    Without this a run is completely opaque: `train` prints nothing and the
+    artifacts are written only on completion, so a job at 95% is
+    indistinguishable from one that died immediately. A run of this length
+    outlives too many things to be unobservable.
+
+    The partial checkpoint means a job killed by a wall-clock limit still leaves
+    something probeable rather than nothing at all.
+    """
+
+    total = config.updates * config.segment_steps * level.num_envs
+    calls = 0
+
+    def report() -> dict[str, dict[str, float]]:
+        nonlocal calls
+        calls += 1
+        # `train` calls this at update 0, then every `evaluate_every`.
+        update = min((calls - 1) * config.evaluate_every, config.updates)
+        frames = update * config.segment_steps * level.num_envs
+        elapsed = time.time() - started
+        rate = frames / elapsed if elapsed > 0 and frames else 0.0
+        eta = (total - frames) / rate / 60.0 if rate else float("nan")
+        print(
+            f"update {update}/{config.updates} frames {frames}/{total} "
+            f"{rate:.0f} frames/s eta {eta:.0f} min",
+            flush=True,
+        )
+        if update:
+            torch.save(policy.state_dict(), directory / "policy.partial.pt")
+        return {}
+
+    return report
+
+
 def run_condition(
     level_name: str,
     condition: str,
@@ -74,7 +110,18 @@ def run_condition(
     )
 
     started = time.time()
-    log = train(environment, policy, ppo_config)
+    print(
+        f"start {condition} seed{seed} level={level_name} "
+        f"envs={level.num_envs} updates={ppo_config.updates} "
+        f"frames={ppo_config.updates * level.segment_steps * level.num_envs}",
+        flush=True,
+    )
+    log = train(
+        environment,
+        policy,
+        ppo_config,
+        evaluation=_progress_reporter(policy, directory, level, ppo_config, started),
+    )
     elapsed = time.time() - started
     environment.close()
 
