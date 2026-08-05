@@ -924,13 +924,20 @@ def run_pair_experiment(
                 f"{view.set.name} claims known entities but {len(unknown)} of them own "
                 f"no index column, for example {sorted(unknown)[:5]!r}"
             )
+    supervised_identities = _pair_participants(train_records)
+    # Enrolled but never pair-supervised columns stay near initialization and compete
+    # in the identity softmax; the diagnostics report how much mass they attract.
+    unsupervised_identity_columns = torch.tensor(
+        [label not in supervised_identities for label in vocabulary.group_labels("identity")],
+        dtype=torch.bool,
+    )
     protocol_metadata = _protocol_metadata(
         protocol,
         views,
         train_examples=len(train_indices),
         enrollment=enrollment,
         identity_columns=len(identities),
-        supervised_identity_columns=len(_pair_participants(train_records)),
+        supervised_identity_columns=len(supervised_identities),
     )
     if config.condition in ("priors", "category-only"):
         return _run_priors(
@@ -1070,7 +1077,13 @@ def run_pair_experiment(
             output_dir / "scale_trace.jsonl",
             [
                 {**context, **row}
-                for row in scale_trace_rows(model, outputs, candidates, diagnostic_batch)
+                for row in scale_trace_rows(
+                    model,
+                    outputs,
+                    candidates,
+                    diagnostic_batch,
+                    unsupervised_identity_columns=unsupervised_identity_columns,
+                )
             ],
             append=True,
         )

@@ -35,6 +35,30 @@ simply had `heldout_video/` hardcoded.
 Checkpoint selection stays on the **novel-entity** set. The known-entity result is
 therefore reported, never selected for.
 
+### Read the two numbers against each other, not against the corrected runs
+
+Blocked trains on the observation window only — the first 45% of the frames of each
+training video — while `heldout_video` trains on every frame of its train-role videos.
+So a blocked run sees substantially less data, and its **`development` numbers are not
+comparable to the corrected pair runs'** (`runs/pair-corrected-qtb-seed0`, KL 1.674 /
+micro R@1 55.54). Two different training-set sizes, one of them not controlled.
+
+What is valid is the contrast *within* a blocked run: `blocked` versus `development`
+from the same checkpoint, and `integral-p-sa` versus `integral-none` on the same
+evaluation set. `protocol_layout.train_examples` in `config.json` records the size, so
+the difference is visible rather than inferred. Any cross-protocol claim needs the
+`heldout_video` arm of this same array as its control, not the earlier runs.
+
+Two more axes that do not survive the crossing:
+
+- **Seen/unseen triples.** `seen_triples` is built from the blocked training window of
+  the *same videos* the blocked set evaluates, so `recall/triple_seen@1` there is close
+  to saturated and the seen/unseen split stops carrying its usual meaning. Compare the
+  split within an evaluation set, never across the two.
+- **Predicate marginals.** Blocked evaluates videos it trained on, which is why the
+  `priors` condition is in the array: the memoryless floor has to be measured on both
+  sets before any blocked-versus-development gap is credited to the model.
+
 ### Blocked is a stronger VRD-EX than VRD-EX
 
 The paper built VRD-EX by distorting copies of the training images (tb_original p.23),
@@ -110,6 +134,11 @@ than hidden:
 - `config.json` reports total identity columns and how many are supervised by a
   training pair. Columns enrolled but never pair-supervised sit near initialization and
   act as distractors in the identity readout — a real cost, reported as a number.
+  The scale trace additionally reports `unsupervised_attention_mass_mean` on every
+  identity attention row: how much of the P-SA softmax those near-initialization
+  columns actually attract. If feedback looks weak and that mass is large, the
+  candidate set degraded the pathway rather than the pathway failing, and the fix is
+  to restrict enrollment rather than to conclude anything about feedback.
 - Every training-pair participant must be enrolled, or the run refuses to start.
 - Every entity in a known-entity evaluation set must own a column, or the run refuses
   to start. The known-entity claim holds for the whole set or the run does not happen.

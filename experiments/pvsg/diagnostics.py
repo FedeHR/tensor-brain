@@ -149,8 +149,20 @@ def _direction_cosine_mean(values: Tensor) -> float:
     return off_diagonal_sum / (count * (count - 1))
 
 
-def feedback_rows(trace: Mapping[str, Mapping[str, Tensor]]) -> list[dict[str, Any]]:
-    """Summarize actual and counterfactual index feedback at each entity window."""
+def feedback_rows(
+    trace: Mapping[str, Mapping[str, Tensor]],
+    *,
+    unsupervised_identity_columns: Tensor | None = None,
+) -> list[dict[str, Any]]:
+    """Summarize actual and counterfactual index feedback at each entity window.
+
+    ``unsupervised_identity_columns`` is a boolean mask over identity candidate
+    positions marking columns that no training pair ever supervised. The blocked
+    protocol enrolls one column per observed entity, so some columns stay near
+    initialization and compete in the P-SA softmax as distractors. Reporting how much
+    attention mass they attract keeps a weak feedback result from being blamed on the
+    pathway when the candidate set is what degraded it.
+    """
 
     groups = (
         (
@@ -176,23 +188,28 @@ def feedback_rows(trace: Mapping[str, Mapping[str, Tensor]]) -> list[dict[str, A
             probabilities = tensors[probability_name].detach().float()
             entropy = -(probabilities * probabilities.clamp_min(1e-12).log()).sum(dim=-1)
             candidate_count = probabilities.shape[-1]
-            rows.append(
-                {
-                    "kind": "attention",
-                    "window": window,
-                    "group": group,
-                    "candidate_count": candidate_count,
-                    "entropy_mean": float(entropy.mean()),
-                    "normalized_entropy_mean": (
-                        float((entropy / math.log(candidate_count)).mean())
-                        if candidate_count > 1
-                        else 0.0
-                    ),
-                    "maximum_probability_mean": float(
-                        probabilities.max(dim=-1).values.mean()
-                    ),
-                }
-            )
+            row = {
+                "kind": "attention",
+                "window": window,
+                "group": group,
+                "candidate_count": candidate_count,
+                "entropy_mean": float(entropy.mean()),
+                "normalized_entropy_mean": (
+                    float((entropy / math.log(candidate_count)).mean())
+                    if candidate_count > 1
+                    else 0.0
+                ),
+                "maximum_probability_mean": float(
+                    probabilities.max(dim=-1).values.mean()
+                ),
+            }
+            if group == "identity" and unsupervised_identity_columns is not None:
+                mask = unsupervised_identity_columns.to(probabilities.device)
+                row["unsupervised_candidate_count"] = int(mask.sum())
+                row["unsupervised_attention_mass_mean"] = float(
+                    probabilities[..., mask].sum(dim=-1).mean()
+                )
+            rows.append(row)
             for name in feedback_names:
                 values = tensors[name]
                 rows.append(
@@ -353,6 +370,8 @@ def scale_trace_rows(
     outputs: PerceptionOutputs,
     candidates_by_group: Mapping[str, Tensor],
     batch: Mapping[str, Any] | None = None,
+    *,
+    unsupervised_identity_columns: Tensor | None = None,
 ) -> list[dict[str, Any]]:
     """Return all scalar scale diagnostics for one forward/backward checkpoint."""
 
@@ -363,7 +382,9 @@ def scale_trace_rows(
         *raw_input_rows(batch or {}),
         *state_rows(trace),
         *operation_rows(trace),
-        *feedback_rows(trace),
+        *feedback_rows(
+            trace, unsupervised_identity_columns=unsupervised_identity_columns
+        ),
         *readout_rows(model, outputs, candidates_by_group),
         *gradient_rows(model, candidates_by_group),
     ]

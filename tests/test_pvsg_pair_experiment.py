@@ -458,6 +458,10 @@ def _blocked_manifests(manifest_root, feature_root):
         [
             _object_record("train", 0, "train", "identity:dog", "dog"),
             _object_record("train", 1, "train", "identity:ball", "ball"),
+            # Observed before the boundary but never in an annotated pair. Enrolling
+            # per observed entity is what makes the known-entity claim cover the whole
+            # evaluation set, and it is why some columns stay unsupervised.
+            _object_record("train", 1, "train", "identity:bystander", "ball"),
         ],
     )
     _write_jsonl(
@@ -513,6 +517,7 @@ def _blocked_manifests(manifest_root, feature_root):
             "identities": [
                 {"name": "identity:dog", "category": "dog"},
                 {"name": "identity:ball", "category": "ball"},
+                {"name": "identity:bystander", "category": "ball"},
                 {"name": "identity:novel-dog", "category": "dog"},
                 {"name": "identity:novel-ball", "category": "ball"},
             ],
@@ -594,6 +599,26 @@ def test_blocked_protocol_reports_known_and_novel_entities(tmp_path, monkeypatch
     assert layout["evaluation_sets"]["blocked"]["vrd_analogue"] == "VRD-EX"
     assert layout["evaluation_sets"]["development"]["vrd_analogue"] == "VRD-E"
     assert layout["evaluation_sets"]["blocked"]["known_entities"] is True
+
+    # Enrolling per observed entity leaves columns no training pair supervised. They
+    # compete in the identity softmax, so their attention mass is reported.
+    enrollment = layout["identity_enrollment"]
+    unsupervised = enrollment["columns"] - enrollment["columns_supervised_by_training_pairs"]
+    assert unsupervised > 0
+    attention = [
+        row
+        for row in (
+            json.loads(line)
+            for line in (tmp_path / "runs" / "blocked" / "scale_trace.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        )
+        if row["kind"] == "attention" and row["group"] == "identity"
+    ]
+    assert attention
+    for row in attention:
+        assert row["unsupervised_candidate_count"] == unsupervised
+        assert 0.0 <= row["unsupervised_attention_mass_mean"] <= 1.0
 
 
 @pytest.mark.parametrize(
