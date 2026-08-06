@@ -20,17 +20,26 @@
 #
 # Two pathways, because the identity one is the paper's own mechanism and has only
 # been measured at beta = 1, where it was worth +3 assignments of 67,134.
+#
+# PAIR_PROTOCOL=blocked is the sharp test. On heldout_video the learned identity gate
+# collapsed to 0.002 - but there identity *cannot* be correct, since PVSG identities are
+# video-scoped. On blocked the same index is recoverable at 44.5% pair-exact, so whether
+# the gate still collapses separates "this pathway is useless" from "this pathway needs
+# a retrievable index", which is the paper's own VRD-E versus VRD-EX contrast.
+# Note blocked trains on 168,621 pairs against heldout_video's 367,132, so compare the
+# learned gate values qualitatively, not the metrics across protocols.
 
 set -euo pipefail
 
 REPOSITORY_ROOT="${TB_REPO_ROOT:-${MASTER_ROOT:-/nfs/data8/harjes/MASTER}/tensor-brain}"
 source "$REPOSITORY_ROOT/cluster/pvsg/common.sh"
 
+PROTOCOL="${PAIR_PROTOCOL:-heldout_video}"
 CONDITIONS=(integral-cat-sa integral-p-sa)
 CONDITION="${CONDITIONS[$SLURM_ARRAY_TASK_ID]}"
 GATE_LEARNING_RATE="${PAIR_GATE_LEARNING_RATE:-0.01}"
-RUN_NAME="pair-learned-gate-${CONDITION}-seed0"
-OUTPUT_ROOT="$PVSG_RUN_ROOT/pair-learned-gate-seed0"
+RUN_NAME="pair-learned-gate-${PROTOCOL}-${CONDITION}-seed0"
+OUTPUT_ROOT="$PVSG_RUN_ROOT/pair-learned-gate-${PROTOCOL}-seed0"
 
 export TMPDIR="$MASTER_ROOT/tmp/${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 export HF_HUB_OFFLINE=1
@@ -45,6 +54,7 @@ bash cluster/pvsg/with_gpu_monitor.sh \
   --output-root "$OUTPUT_ROOT" \
   --run-name "$RUN_NAME" \
   --condition "$CONDITION" \
+  --protocol "$PROTOCOL" \
   --evolution qtb \
   --score-mode softplus-bias \
   --category-feedback-level source \
