@@ -67,7 +67,10 @@ case "$CONDITION" in
 esac
 
 RUN_NAME="pair-${PROTOCOL}-${CONDITION}-seed${PAIR_SEED:-0}"
-OUTPUT_ROOT="$PVSG_RUN_ROOT/pair-${PROTOCOL}-seed${PAIR_SEED:-0}"
+# PAIR_RUN_GROUP redirects the whole campaign into one directory, so a replicate
+# cannot land on top of an earlier single-seed run. Run names already carry the
+# protocol, condition and seed, so they stay unique inside a shared group.
+OUTPUT_ROOT="$PVSG_RUN_ROOT/${PAIR_RUN_GROUP:-pair-${PROTOCOL}-seed${PAIR_SEED:-0}}"
 
 export TMPDIR="$MASTER_ROOT/tmp/${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 export HF_HUB_OFFLINE=1
