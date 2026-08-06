@@ -1,5 +1,6 @@
 """Perception models for the initial PVSG Section 6 comparison."""
 
+import math
 from collections.abc import Mapping
 from typing import Literal, NotRequired, TypedDict, get_args
 
@@ -334,12 +335,32 @@ class IntegralTB(nn.Module):
         *,
         feature_dim: int | None = None,
         score_mode: ScoreMode = "direct",
+        learn_feedback_gate: bool = False,
     ) -> None:
         super().__init__()
         self.g = VisualInputMapping(feature_dim or state_dim, state_dim)
         self.brain = TensorBrain(
             state_dim, num_indices, evolution, score_mode=score_mode
         )
+        # beta as a learned scalar. Softplus keeps it positive and spans both QTB's
+        # stated 0-to-1 range and the extension the fixed sweep explores; the raw
+        # value is initialized so training starts at exactly the paper's beta = 1.
+        self.raw_feedback_gate = (
+            nn.Parameter(torch.tensor(math.log(math.e - 1.0)))
+            if learn_feedback_gate
+            else None
+        )
+
+    def resolve_feedback_gate(
+        self, override: float | Tensor | None = None
+    ) -> float | Tensor:
+        """Return the gate in force: an explicit override, the learned value, or one."""
+
+        if override is not None:
+            return override
+        if self.raw_feedback_gate is None:
+            return 1.0
+        return nn.functional.softplus(self.raw_feedback_gate)
 
     def forward(
         self,
@@ -354,7 +375,7 @@ class IntegralTB(nn.Module):
         feedback_mode: FeedbackMode = "p-sa",
         category_feedback_candidates: Int[Tensor, " categories"] | None = None,
         category_feedback_mode: FeedbackMode = "none",
-        feedback_gate: float = 1.0,
+        feedback_gate: float | Tensor | None = None,
         return_trace: bool = False,
     ) -> PerceptionOutputs:
         """Return logits from the explicit Section 6 perception schedule.
@@ -370,8 +391,11 @@ class IntegralTB(nn.Module):
         ``feedback_gate`` is Algorithm 3's :math:`\\beta`, applied to every injected
         embedding. The QTB text sets it to one and bounds it by one; values above one
         leave that range deliberately, to test whether the measured null follows from
-        the injection being small relative to the visual drive.
+        the injection being small relative to the visual drive. ``None`` uses the
+        learned gate when the model owns one and otherwise the paper's one.
         """
+
+        feedback_gate = self.resolve_feedback_gate(feedback_gate)
 
         for name, mode in (
             ("feedback_mode", feedback_mode),

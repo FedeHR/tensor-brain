@@ -610,3 +610,44 @@ def test_fused_linear_object_readout_uses_scene_and_object_evidence() -> None:
     assert model.readout.in_features == 4
     assert outputs["identity_logits"].shape == (1, 2)
     assert outputs["category_logits"]["object_category/source"].shape == (1, 2)
+
+
+def test_learned_feedback_gate_starts_at_the_paper_value_and_trains() -> None:
+    """Beta is softplus-parameterized, so it stays positive and begins at one."""
+
+    model = IntegralTB(
+        state_dim=2, num_indices=5, evolution=CountingEvolution(), learn_feedback_gate=True
+    )
+    set_index_parameters(model)
+    arguments = (
+        torch.tensor([[0.2, -0.1]]), torch.tensor([[0.4, 0.3]]),
+        torch.tensor([[-0.2, 0.5]]), torch.tensor([[0.1, -0.4]]),
+        torch.tensor([0, 1]), torch.tensor([2, 3, 4]),
+    )
+
+    torch.testing.assert_close(
+        model.resolve_feedback_gate(), torch.tensor(1.0), atol=1e-6, rtol=0
+    )
+    # Step zero therefore reproduces the fixed-gate model exactly.
+    fixed = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+    set_index_parameters(fixed)
+    torch.testing.assert_close(
+        model(*arguments, feedback_mode="p-sa")["predicate_logits"],
+        fixed(*arguments, feedback_mode="p-sa")["predicate_logits"],
+    )
+
+    model(*arguments, feedback_mode="p-sa")["predicate_logits"].sum().backward()
+    assert model.raw_feedback_gate.grad is not None
+    assert model.raw_feedback_gate.grad.abs() > 0.0
+
+
+def test_learned_gate_yields_to_an_explicit_override() -> None:
+    model = IntegralTB(
+        state_dim=2, num_indices=5, evolution=CountingEvolution(), learn_feedback_gate=True
+    )
+
+    assert model.resolve_feedback_gate(4.0) == 4.0
+    # A model without the parameter falls back to the paper's beta = 1.
+    assert IntegralTB(
+        state_dim=2, num_indices=5, evolution=CountingEvolution()
+    ).resolve_feedback_gate() == 1.0

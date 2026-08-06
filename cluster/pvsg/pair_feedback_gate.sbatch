@@ -26,6 +26,11 @@
 # and the sweep would be four identical runs. Separating the two is the finer
 # factorization if they ever need to move independently.
 #
+# beta=1..8 is done (runs/pair-feedback-gate-seed0): monotone improvement with no
+# plateau, so the optimum lies beyond the swept range. Extend with PAIR_GATE_VALUES.
+# PAIR_GATE_CONDITION=integral-p-sa repeats the ladder on the identity pathway, which
+# is the paper's own P-SA mechanism and has only ever been measured at beta=1.
+#
 # The category pathway is swept rather than the identity one because its diagnostics
 # are the strongest: near-one-hot attention over a group read out at 70-78% accuracy.
 # If amplifying that changes nothing, amplifying the weaker identity pathway will not
@@ -41,7 +46,9 @@ set -euo pipefail
 REPOSITORY_ROOT="${TB_REPO_ROOT:-${MASTER_ROOT:-/nfs/data8/harjes/MASTER}/tensor-brain}"
 source "$REPOSITORY_ROOT/cluster/pvsg/common.sh"
 
-GATES=(1 2 4 8)
+# Override to extend the ladder without rerunning finished values, e.g.
+#   PAIR_GATE_VALUES="16 32" sbatch --array=0-1 cluster/pvsg/pair_feedback_gate.sbatch
+read -r -a GATES <<< "${PAIR_GATE_VALUES:-1 2 4 8}"
 FEEDBACK_GATE="${GATES[$SLURM_ARRAY_TASK_ID]}"
 CONDITION="${PAIR_GATE_CONDITION:-integral-cat-sa}"
 RUN_NAME="pair-feedback-gate-${CONDITION}-beta${FEEDBACK_GATE}-seed0"

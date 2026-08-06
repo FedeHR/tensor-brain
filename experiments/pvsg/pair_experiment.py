@@ -222,6 +222,10 @@ class PairExperimentConfig:
     # values above one deliberately leave that range to test whether the measured
     # feedback null follows from the injection being small next to the visual drive.
     feedback_gate: float = 1.0
+    # Learn beta instead of fixing it, so the model reports the magnitude it prefers
+    # rather than one chosen by a sweep. Softplus-parameterized, initialized at one.
+    learn_feedback_gate: bool = False
+    feedback_gate_learning_rate: float = 1e-2
     learning_rate: float = 1e-4
     input_mapping_learning_rate: float = 1e-5
     zero_initialize_union: bool = False
@@ -255,8 +259,10 @@ class PairExperimentConfig:
             raise ValueError(f"unknown evolution: {self.evolution}")
         if self.score_mode not in ("direct", "centered", "softplus-bias"):
             raise ValueError(f"unknown score mode: {self.score_mode}")
-        if self.feedback_gate < 0.0:
-            raise ValueError("feedback-gate must be non-negative")
+        if self.feedback_gate < 0.0 or self.feedback_gate_learning_rate <= 0.0:
+            raise ValueError(
+                "feedback-gate must be non-negative and its learning rate positive"
+            )
         if self.category_feedback_level not in PAIR_CATEGORY_LEVELS:
             raise ValueError(
                 f"unknown category feedback level: {self.category_feedback_level}"
@@ -1055,6 +1061,10 @@ def run_pair_experiment(
         score_mode=config.score_mode,
         learning_rate=config.learning_rate,
         input_mapping_learning_rate=config.input_mapping_learning_rate,
+        feedback_gate_learning_rate=(
+            config.feedback_gate_learning_rate if config.learn_feedback_gate else None
+        ),
+        learn_feedback_gate=config.learn_feedback_gate,
         feature_dim=state_dim,
         num_sources=4,
     )
@@ -1073,7 +1083,7 @@ def run_pair_experiment(
             candidates,
             feedback_mode=training_feedback,
             category_feedback_level=config.category_feedback_level,
-            feedback_gate=config.feedback_gate,
+            feedback_gate=None if config.learn_feedback_gate else config.feedback_gate,
             trace=True,
         )
         pair_losses(
@@ -1119,7 +1129,7 @@ def run_pair_experiment(
                 evaluation_candidates,
                 feedback_mode=mode,
                 category_feedback_level=config.category_feedback_level,
-                feedback_gate=config.feedback_gate,
+                feedback_gate=None if config.learn_feedback_gate else config.feedback_gate,
             ),
             loader,
             vocabulary,
@@ -1149,7 +1159,7 @@ def run_pair_experiment(
                 candidates,
                 feedback_mode=training_feedback,
                 category_feedback_level=config.category_feedback_level,
-                feedback_gate=config.feedback_gate,
+                feedback_gate=None if config.learn_feedback_gate else config.feedback_gate,
             )
             losses = pair_losses(outputs, targets)
             if not torch.isfinite(losses.total):
@@ -1159,6 +1169,8 @@ def run_pair_experiment(
 
             if step == 1 or step % config.log_every == 0:
                 row = {"step": step, **losses.scalars(), **pair_metrics(outputs, targets)}
+                if config.learn_feedback_gate:
+                    row["feedback_gate"] = float(model.resolve_feedback_gate())
                 write_jsonl(output_dir / "training_trace.jsonl", [row], append=True)
                 print(f"step={step} loss={row['loss/total']:.6f}", flush=True)
             if step in CAPTURE_STEPS or step == config.max_steps:
@@ -1205,9 +1217,15 @@ def run_pair_experiment(
         )
     else:
         evaluation_modes = (("none", training_feedback),)
+    resolved_gate = (
+        float(model.resolve_feedback_gate())
+        if config.learn_feedback_gate
+        else config.feedback_gate
+    )
     result = {
         "best_step": best_step,
         "selection": best_metrics,
+        "feedback_gate": resolved_gate,
         "evaluation": {
             name: {
                 label: evaluate(
@@ -1247,6 +1265,8 @@ def _parse_args() -> tuple[Path, Path, Path, PairExperimentConfig]:
     )
     parser.add_argument("--category-feedback-level", choices=PAIR_CATEGORY_LEVELS)
     parser.add_argument("--feedback-gate", type=float)
+    parser.add_argument("--learn-feedback-gate", action="store_true")
+    parser.add_argument("--feedback-gate-learning-rate", type=float)
     parser.add_argument("--zero-initialize-union", action="store_true")
     for name, type_ in (
         ("learning-rate", float),

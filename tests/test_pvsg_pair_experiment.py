@@ -781,3 +781,45 @@ def test_reevaluation_reports_extra_readouts_from_a_finished_checkpoint(
         != known["winner@beta=1"]["loss/predicate_kl"]
     )
     assert (tmp_path / "runs" / "blocked" / "reevaluation.json").exists()
+
+
+def test_learned_feedback_gate_is_trained_and_reported(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "experiments.pvsg.pair_experiment.load_object_hierarchy",
+        lambda *_args, **_kwargs: _hierarchy(),
+    )
+    manifest_root = tmp_path / "snapshot"
+    feature_root = tmp_path / "features"
+    _blocked_manifests(manifest_root, feature_root)
+
+    result = run_pair_experiment(
+        manifest_root,
+        feature_root,
+        tmp_path / "runs",
+        PairExperimentConfig(
+            run_name="learned-gate",
+            condition="integral-cat-sa",
+            protocol="blocked",
+            learn_feedback_gate=True,
+            feedback_gate_learning_rate=0.1,
+            batch_size=2,
+            max_steps=3,
+            validation_every=1,
+            validation_examples=2,
+            log_every=1,
+            num_workers=0,
+            device="cpu",
+        ),
+    )
+
+    # The resolved gate is reported, stays positive, and has moved off its init.
+    assert result["feedback_gate"] > 0.0
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "runs" / "learned-gate" / "training_trace.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    trajectory = [row["feedback_gate"] for row in rows]
+    assert all(value > 0.0 for value in trajectory)
+    assert trajectory[0] != trajectory[-1]
