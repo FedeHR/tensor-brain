@@ -286,6 +286,17 @@ simulated residual ratio (8%), so the conclusion is consistent with both, but no
 variation is not the same measurement as direction variation. Tracing the
 across-example variance of the feedback *direction* would settle it exactly.
 
+> **⚠️ Narrowed by the blocked run.** That direction diagnostic now exists
+> (`unsupervised_attention_mass_mean` and `direction_cosine_mean`, added at `55b34b0`)
+> and was measured on `runs/pair-blocked-seed0`: expected-feedback direction cosine
+> **0.54–0.61**, winner-feedback **0.17–0.20**, distractor attention mass **0.3%**.
+> The injected vector there is strongly example-specific, and identity feedback is
+> *still* worth only +0.27 pp. So constancy is a sufficient explanation for the
+> held-out-video null, not a general one — and the numbers in this section remain
+> simulation, never measurement, because the diagnostic postdates those runs. See
+> `runs/pair-blocked-seed0/ANALYSIS.md` §3. Magnitude (feedback at 3–5% of the state
+> norm) is the last surviving mechanical explanation.
+
 ## 7c-bis. What the paper says about the feedback candidate set
 
 **Algorithm 1 (p.19) scores the subject and object over the full concept set `C`,
