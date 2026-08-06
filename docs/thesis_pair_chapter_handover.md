@@ -71,57 +71,64 @@ direction cosine, CBS occupancy, per-group gradient norms.
 
 ## 2. The seed plan
 
-**Run three seeds (0, 1, 2) of everything in the tables below, at one commit.** Rerun
-seed 0 too — existing seed-0 runs span four commits, and a thesis table should not need
-a footnote about which code produced which row.
+**Three seeds (0, 1, 2) of the seeded set below, at one commit, `PAIR_MAX_STEPS=15000`.**
+Rerun seed 0 too — the existing seed-0 runs span four commits, and a thesis table should
+not need a footnote about which code produced which row. Do not mix step budgets.
 
-**Use `PAIR_MAX_STEPS=20000`.** Every run so far selected its checkpoint at step
-8,000–9,500 of 10,000 with mAP and category accuracy still climbing, and the learned
-identity gate had not converged (still rising at 3.51 when the run ended). Doubling the
-budget removes a standing objection and lets the gates settle. Do not mix budgets.
+Why 15,000 and not 10,000: every run so far selected its checkpoint at step 8,000–9,500
+of 10,000 with mAP and category accuracy still climbing. 15,000 puts the selection well
+inside the budget. **The learned identity gate may still not converge** — it was rising
+at 3.51 when its 10,000-step run ended — so report that gate as a lower bound and say so.
+The qualitative contrast that carries C3 (0.002 versus >2) is already decisive.
 
-### Held-out video (VRD-E analogue) — novel entities
+### Seeded set — 9 jobs per seed, 27 total
 
-| # | condition | command |
+| protocol | conditions | command |
 |---|---|---|
-| 1 | P-Direct | `PAIR_PROTOCOL=heldout_video PAIR_SEED=$S PAIR_MAX_STEPS=20000 sbatch --array=2 cluster/pvsg/pair_known_entities.sbatch` |
-| 2 | Integral, no feedback | `... --array=3 ...` (same script) |
-| 3 | Integral P-SA, β=1 | `... --array=4 ...` (same script) |
-| 4 | priors + union-only | `... --array=0-1 ...` (same script) |
-| 5 | Category feedback, β=1 | `PAIR_SEED=$S PAIR_MAX_STEPS=20000 sbatch --array=0 cluster/pvsg/pair_category_feedback.sbatch` |
-| 6 | Learned β, category **and** identity | `PAIR_SEED=$S PAIR_MAX_STEPS=20000 sbatch cluster/pvsg/pair_learned_gate.sbatch` |
+| held-out | P-Direct, Integral-none, Integral-P-SA β=1 | `PAIR_PROTOCOL=heldout_video PAIR_SEED=$S PAIR_MAX_STEPS=15000 sbatch --array=2-4 cluster/pvsg/pair_known_entities.sbatch` |
+| held-out | learned β, category + identity | `PAIR_SEED=$S PAIR_MAX_STEPS=15000 sbatch cluster/pvsg/pair_learned_gate.sbatch` |
+| blocked | Integral-none, Integral-P-SA β=1 | `PAIR_PROTOCOL=blocked PAIR_SEED=$S PAIR_MAX_STEPS=15000 sbatch --array=3-4 cluster/pvsg/pair_known_entities.sbatch` |
+| blocked | learned β, category + identity | `PAIR_PROTOCOL=blocked PAIR_SEED=$S PAIR_MAX_STEPS=15000 sbatch cluster/pvsg/pair_learned_gate.sbatch` |
 
-`pair_known_entities.sbatch` runs `(priors, union-only, p-direct, integral-none,
-integral-p-sa)` as array tasks 0–4 and honours `PAIR_PROTOCOL`, so rows 1–4 come from
-one script.
+Run seeds sequentially so a queue problem costs one seed, not three.
 
-### Blocked (VRD-EX analogue) — known entities
+### Single-seed set — 8 jobs
 
-| # | condition | command |
+| purpose | command | why one seed suffices |
 |---|---|---|
-| 7 | all five conditions | `PAIR_PROTOCOL=blocked PAIR_SEED=$S PAIR_MAX_STEPS=20000 sbatch cluster/pvsg/pair_known_entities.sbatch` |
-| 8 | Learned β, category **and** identity | `PAIR_PROTOCOL=blocked PAIR_SEED=$S PAIR_MAX_STEPS=20000 sbatch cluster/pvsg/pair_learned_gate.sbatch` |
+| priors, both protocols | `--array=0` of `pair_known_entities.sbatch` with each `PAIR_PROTOCOL` | count-based, **deterministic** — no training, no seed dependence |
+| union-only, both protocols | `--array=1` of the same, each protocol | a floor, reported without error bars |
+| β ladder | `PAIR_GATE_VALUES="1 2 4 8 16 32" PAIR_MAX_STEPS=15000 sbatch --array=0-5 cluster/pvsg/pair_feedback_gate.sbatch` | a curve; its endpoints are seeded by the learned-gate cells |
 
-### Single-seed supporting runs (seed 0 only)
+**Total 35 jobs at 15k steps**, against 51 at 20k in the first draft — roughly 45% of
+the original compute.
 
-| # | purpose | command |
-|---|---|---|
-| 9 | the β ladder, as a curve | `PAIR_GATE_VALUES="1 2 4 8 16 32" PAIR_MAX_STEPS=20000 sbatch --array=0-5 cluster/pvsg/pair_feedback_gate.sbatch` |
-| 10 | scoring-rule comparison | already done: `runs/pair-corrected-{original,qtb}-seed0` — reuse, do not rerun |
+### What was cut, and what it costs
 
-A sweep curve does not need replication at every point; seed its endpoints via rows 3
-and 6 and present the ladder as a seed-0 figure with that caveat stated.
+| cut | cost |
+|---|---|
+| `p-direct` on blocked | C1 rests on held-out video alone. Acceptable: the effect is +10.83 pp there. |
+| dedicated `cat-sa` β=1 cells (3 seeds) | Covered by the β=1 point of the ladder and by the learned-gate trajectories, which all start at β=1. Loses error bars on a **null**, which is the cheapest place to lose them. |
+| `priors` and `union-only` at 3 seeds | Priors are deterministic, so nothing is lost. Union-only loses error bars on a floor. |
+| step budget 20k → 15k | The learned identity gate may not converge; report it as a lower bound. |
 
-**Total:** ~13 jobs per seed × 3 seeds, plus 6 single-seed ladder jobs ≈ **45 jobs**.
-Run seeds sequentially so a queue problem costs one seed, not all three.
+### If you need to cut further
 
-### Trimming, if compute is short
+Drop the **β ladder** (6 jobs, → 29 total). C2 then rests on the learned gate alone,
+which finds the optimum and gives the trajectory but loses the monotone curve of F2 —
+the most visually convincing evidence that the scale effect is real rather than a lucky
+setting. Cut this before cutting anything else.
 
-Drop in this order: `union-only` on blocked (the prior already gives the memoryless
-floor) → `p-direct` on blocked (C1 is established on held-out video) → category
-feedback at β=1 on blocked. Never drop rows 3, 6, 7, 8 — they carry C1, C3 and C4.
+**Never drop:** P-Direct and Integral-none on held-out (C1), Integral-P-SA β=1 on both
+protocols (C1, C3), or either learned-gate run on either protocol (C3, C4). Those five
+cells are the chapter.
 
----
+### Parallelism
+
+Array tasks run concurrently up to the `%N` throttle in each script: `%3` for
+`pair_known_entities`, `%2` for the others. Separate `sbatch` submissions are
+independent jobs with no cross-cap, so submitting one seed's four commands puts up to
+nine tasks in flight. Override with `sbatch --array=2-4%3` to raise or lower it.
 
 ## 3. Figures and tables to produce
 
