@@ -28,6 +28,19 @@ case "$VARIANT" in
 esac
 
 CONDITIONS=(integral-none integral-p-sa)
+# Fail with a readable message rather than an unbound-variable error when the submitted
+# --array range does not match this script's task list.
+_TASKS=("${CONDITIONS[@]}")
+if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
+  echo "submit this script with --array; valid indices 0-$(( ${#_TASKS[@]} - 1 ))" >&2
+  exit 2
+fi
+if (( SLURM_ARRAY_TASK_ID >= ${#_TASKS[@]} )); then
+  echo "array index $SLURM_ARRAY_TASK_ID is out of range for $(basename "$0")" >&2
+  echo "valid indices 0-$(( ${#_TASKS[@]} - 1 )): ${_TASKS[*]}" >&2
+  exit 2
+fi
+
 CONDITION="${CONDITIONS[$SLURM_ARRAY_TASK_ID]}"
 RUN_NAME="pair-corrected-${VARIANT}-${CONDITION}-seed${PAIR_SEED:-0}"
 OUTPUT_ROOT="$PVSG_RUN_ROOT/pair-corrected-${VARIANT}-seed${PAIR_SEED:-0}"

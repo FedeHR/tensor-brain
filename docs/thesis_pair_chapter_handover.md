@@ -83,12 +83,35 @@ The qualitative contrast that carries C3 (0.002 versus >2) is already decisive.
 
 ### Seeded set — 9 jobs per seed, 27 total
 
-| protocol | conditions | command |
-|---|---|---|
-| held-out | P-Direct, Integral-none, Integral-P-SA β=1 | `PAIR_PROTOCOL=heldout_video PAIR_SEED=$S PAIR_MAX_STEPS=15000 sbatch --array=2-4 cluster/pvsg/pair_known_entities.sbatch` |
-| held-out | learned β, category + identity | `PAIR_SEED=$S PAIR_MAX_STEPS=15000 sbatch cluster/pvsg/pair_learned_gate.sbatch` |
-| blocked | Integral-none, Integral-P-SA β=1 | `PAIR_PROTOCOL=blocked PAIR_SEED=$S PAIR_MAX_STEPS=15000 sbatch --array=3-4 cluster/pvsg/pair_known_entities.sbatch` |
-| blocked | learned β, category + identity | `PAIR_PROTOCOL=blocked PAIR_SEED=$S PAIR_MAX_STEPS=15000 sbatch cluster/pvsg/pair_learned_gate.sbatch` |
+Submit through `cluster/pvsg/submit.sh`, which supplies the partition, GPU, CPU, memory,
+time limit and log paths. **The `--array` range is script-specific** — `pair_known_entities`
+defines tasks 0-4 and `pair_learned_gate` only 0-1, so ranges are not interchangeable
+between them. Each script now refuses an out-of-range index with a readable message
+rather than an unbound-variable error.
+
+```bash
+S=0   # then 1, then 2
+
+# held-out: P-Direct, Integral-none, Integral-P-SA beta=1   (tasks 2,3,4 of 0-4)
+PAIR_PROTOCOL=heldout_video PAIR_SEED=$S PAIR_MAX_STEPS=15000 \
+  cluster/pvsg/submit.sh --array=2-4 cluster/pvsg/pair_known_entities.sbatch
+
+# held-out: learned beta, category + identity                (tasks 0,1 of 0-1)
+PAIR_SEED=$S PAIR_MAX_STEPS=15000 \
+  cluster/pvsg/submit.sh --array=0-1 cluster/pvsg/pair_learned_gate.sbatch
+
+# blocked: Integral-none, Integral-P-SA beta=1               (tasks 3,4 of 0-4)
+PAIR_PROTOCOL=blocked PAIR_SEED=$S PAIR_MAX_STEPS=15000 \
+  cluster/pvsg/submit.sh --array=3-4 cluster/pvsg/pair_known_entities.sbatch
+
+# blocked: learned beta, category + identity                 (tasks 0,1 of 0-1)
+PAIR_PROTOCOL=blocked PAIR_SEED=$S PAIR_MAX_STEPS=15000 \
+  cluster/pvsg/submit.sh --array=0-1 cluster/pvsg/pair_learned_gate.sbatch
+```
+
+**Check the time limit.** `submit.sh` defaults to `SLURM_TIME=3:00:00`, which was set for
+10,000-step runs. At 15,000 steps a job needs roughly 1.5x that, so raise it —
+`SLURM_TIME=5:00:00` — or a job will be killed at the wall clock and the run lost.
 
 Run seeds sequentially so a queue problem costs one seed, not three.
 
@@ -96,9 +119,9 @@ Run seeds sequentially so a queue problem costs one seed, not three.
 
 | purpose | command | why one seed suffices |
 |---|---|---|
-| priors, both protocols | `--array=0` of `pair_known_entities.sbatch` with each `PAIR_PROTOCOL` | count-based, **deterministic** — no training, no seed dependence |
-| union-only, both protocols | `--array=1` of the same, each protocol | a floor, reported without error bars |
-| β ladder | `PAIR_GATE_VALUES="1 2 4 8 16 32" PAIR_MAX_STEPS=15000 sbatch --array=0-5 cluster/pvsg/pair_feedback_gate.sbatch` | a curve; its endpoints are seeded by the learned-gate cells |
+| priors, both protocols | `cluster/pvsg/submit.sh --array=0 cluster/pvsg/pair_known_entities.sbatch` per `PAIR_PROTOCOL` | count-based, **deterministic** — no training, no seed dependence |
+| union-only, both protocols | `--array=1` of the same script, each protocol | a floor, reported without error bars |
+| β ladder | `PAIR_GATE_VALUES="1 2 4 8 16 32" PAIR_MAX_STEPS=15000 cluster/pvsg/submit.sh --array=0-5 cluster/pvsg/pair_feedback_gate.sbatch` | a curve; its endpoints are seeded by the learned-gate cells |
 
 **Total 35 jobs at 15k steps**, against 51 at 20k in the first draft — roughly 45% of
 the original compute.

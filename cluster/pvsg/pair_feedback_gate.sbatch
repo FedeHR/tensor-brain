@@ -51,6 +51,19 @@ source "$REPOSITORY_ROOT/cluster/pvsg/common.sh"
 # Override to extend the ladder without rerunning finished values, e.g.
 #   PAIR_GATE_VALUES="16 32" sbatch --array=0-1 cluster/pvsg/pair_feedback_gate.sbatch
 read -r -a GATES <<< "${PAIR_GATE_VALUES:-1 2 4 8}"
+# Fail with a readable message rather than an unbound-variable error when the submitted
+# --array range does not match this script's task list.
+_TASKS=("${GATES[@]}")
+if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
+  echo "submit this script with --array; valid indices 0-$(( ${#_TASKS[@]} - 1 ))" >&2
+  exit 2
+fi
+if (( SLURM_ARRAY_TASK_ID >= ${#_TASKS[@]} )); then
+  echo "array index $SLURM_ARRAY_TASK_ID is out of range for $(basename "$0")" >&2
+  echo "valid indices 0-$(( ${#_TASKS[@]} - 1 )): ${_TASKS[*]}" >&2
+  exit 2
+fi
+
 FEEDBACK_GATE="${GATES[$SLURM_ARRAY_TASK_ID]}"
 CONDITION="${PAIR_GATE_CONDITION:-integral-cat-sa}"
 RUN_NAME="pair-feedback-gate-${CONDITION}-beta${FEEDBACK_GATE}-seed${PAIR_SEED:-0}"
