@@ -10,7 +10,7 @@ set -euo pipefail
 REPOSITORY_ROOT="${TB_REPO_ROOT:-${MASTER_ROOT:-/nfs/data8/harjes/MASTER}/tensor-brain}"
 source "$REPOSITORY_ROOT/cluster/pvsg/common.sh"
 
-RUN_NAME="pair-union-category-oracle-residual-seed0"
+RUN_NAME="pair-union-category-oracle-residual-seed${PAIR_SEED:-0}"
 
 export TMPDIR="$MASTER_ROOT/tmp/${SLURM_JOB_ID}_oracle_residual"
 export HF_HUB_OFFLINE=1
@@ -31,4 +31,5 @@ bash cluster/pvsg/with_gpu_monitor.sh \
   --validation-every 100 \
   --log-every 100 \
   --chunk-size 1024 \
-  --seed 0
+  --seed "${PAIR_SEED:-0}" \
+  --max-steps "${PAIR_MAX_STEPS:-10000}"

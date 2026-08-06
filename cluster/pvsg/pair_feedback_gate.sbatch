@@ -53,8 +53,8 @@ source "$REPOSITORY_ROOT/cluster/pvsg/common.sh"
 read -r -a GATES <<< "${PAIR_GATE_VALUES:-1 2 4 8}"
 FEEDBACK_GATE="${GATES[$SLURM_ARRAY_TASK_ID]}"
 CONDITION="${PAIR_GATE_CONDITION:-integral-cat-sa}"
-RUN_NAME="pair-feedback-gate-${CONDITION}-beta${FEEDBACK_GATE}-seed0"
-OUTPUT_ROOT="$PVSG_RUN_ROOT/pair-feedback-gate-seed0"
+RUN_NAME="pair-feedback-gate-${CONDITION}-beta${FEEDBACK_GATE}-seed${PAIR_SEED:-0}"
+OUTPUT_ROOT="$PVSG_RUN_ROOT/pair-feedback-gate-seed${PAIR_SEED:-0}"
 
 export TMPDIR="$MASTER_ROOT/tmp/${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 export HF_HUB_OFFLINE=1
@@ -77,4 +77,5 @@ bash cluster/pvsg/with_gpu_monitor.sh \
   --input-mapping-learning-rate 0.00001 \
   --validation-every 250 \
   --chunk-size 1024 \
-  --seed 0
+  --seed "${PAIR_SEED:-0}" \
+  --max-steps "${PAIR_MAX_STEPS:-10000}"

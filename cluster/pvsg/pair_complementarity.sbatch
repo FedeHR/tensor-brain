@@ -18,7 +18,7 @@ CONDITIONS=(
   union-category-predicted
 )
 CONDITION="${CONDITIONS[$SLURM_ARRAY_TASK_ID]}"
-RUN_NAME="pair-${CONDITION}-seed0"
+RUN_NAME="pair-${CONDITION}-seed${PAIR_SEED:-0}"
 
 export TMPDIR="$MASTER_ROOT/tmp/${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 export HF_HUB_OFFLINE=1
@@ -35,4 +35,5 @@ bash cluster/pvsg/with_gpu_monitor.sh \
   --condition "$CONDITION" \
   --learning-rate 0.001 \
   --chunk-size 1024 \
-  --seed 0
+  --seed "${PAIR_SEED:-0}" \
+  --max-steps "${PAIR_MAX_STEPS:-10000}"

@@ -53,8 +53,8 @@ case "$CONDITION" in
     ;;
 esac
 
-RUN_NAME="pair-${PROTOCOL}-${CONDITION}-seed0"
-OUTPUT_ROOT="$PVSG_RUN_ROOT/pair-${PROTOCOL}-seed0"
+RUN_NAME="pair-${PROTOCOL}-${CONDITION}-seed${PAIR_SEED:-0}"
+OUTPUT_ROOT="$PVSG_RUN_ROOT/pair-${PROTOCOL}-seed${PAIR_SEED:-0}"
 
 export TMPDIR="$MASTER_ROOT/tmp/${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 export HF_HUB_OFFLINE=1
@@ -76,4 +76,5 @@ bash cluster/pvsg/with_gpu_monitor.sh \
   --input-mapping-learning-rate 0.00001 \
   --validation-every 250 \
   --chunk-size 1024 \
-  --seed 0
+  --seed "${PAIR_SEED:-0}" \
+  --max-steps "${PAIR_MAX_STEPS:-10000}"
