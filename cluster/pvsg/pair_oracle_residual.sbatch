@@ -2,6 +2,8 @@
 #SBATCH --job-name=pvsg-pair-oracle-residual-seed0
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=f.harjes@campus.lmu.de
 
 set -euo pipefail
 

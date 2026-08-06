@@ -3,6 +3,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --array=0-4%5
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=f.harjes@campus.lmu.de
 
 set -euo pipefail
 

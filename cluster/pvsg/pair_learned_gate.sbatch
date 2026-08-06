@@ -3,6 +3,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --array=0-1%2
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=f.harjes@campus.lmu.de
 
 # Learn beta instead of fixing it, and let the model report the injection magnitude it
 # prefers.

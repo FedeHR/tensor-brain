@@ -2,6 +2,8 @@
 #SBATCH --job-name=pvsg-overfit
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=f.harjes@campus.lmu.de
 
 set -euo pipefail
 
