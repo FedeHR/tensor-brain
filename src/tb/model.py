@@ -120,6 +120,8 @@ class TensorBrain(nn.Module):
         self,
         q: Float[Tensor, "*batch state"],
         candidates: Int[Tensor, " indices"] | Sequence[int] | None = None,
+        *,
+        feedback_gate: Float[Tensor, "..."] | float = 1.0,
     ) -> tuple[
         Float[Tensor, "*batch state"],
         Float[Tensor, "*batch indices"],
@@ -127,14 +129,22 @@ class TensorBrain(nn.Module):
         r"""Apply deterministic expected index feedback.
 
         Returns ``(updated_q, probabilities)`` where
-        :math:`q' = q + \sum_k p_k a_k`.
+        :math:`q' = q + \beta \sum_k p_k a_k`.
         ``candidates=None`` attends over the complete global index layer.
+
+        Current-arXiv Algorithm 2 writes this attention step without a gate. Accepting
+        Algorithm 3's :math:`\beta` here makes injected magnitude one variable across
+        both top-down operations, which is what lets a gate sweep reach the
+        differentiable attention path and therefore act during training. The default
+        reproduces the ungated equation exactly. Attention and measurement magnitudes
+        are deliberately not separated; a distinct attention gate would be the finer
+        factorization if the two ever need to move independently.
         """
 
         indices = self._resolve_candidate_indices(candidates, q.device)
         probabilities = torch.softmax(self.index_scores(q, indices), dim=-1)
         feedback = probabilities @ self.A[:, indices].T
-        return q + feedback, probabilities
+        return q + feedback_gate * feedback, probabilities
 
     def measure(
         self,

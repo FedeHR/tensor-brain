@@ -218,6 +218,10 @@ class PairExperimentConfig:
     category_feedback_level: Literal[
         "source", "fine", "basic", "coarse", "domain"
     ] = "source"
+    # Algorithm 3's beta, applied to every injected embedding. QTB bounds it by one;
+    # values above one deliberately leave that range to test whether the measured
+    # feedback null follows from the injection being small next to the visual drive.
+    feedback_gate: float = 1.0
     learning_rate: float = 1e-4
     input_mapping_learning_rate: float = 1e-5
     zero_initialize_union: bool = False
@@ -251,6 +255,8 @@ class PairExperimentConfig:
             raise ValueError(f"unknown evolution: {self.evolution}")
         if self.score_mode not in ("direct", "centered", "softplus-bias"):
             raise ValueError(f"unknown score mode: {self.score_mode}")
+        if self.feedback_gate < 0.0:
+            raise ValueError("feedback-gate must be non-negative")
         if self.category_feedback_level not in PAIR_CATEGORY_LEVELS:
             raise ValueError(
                 f"unknown category feedback level: {self.category_feedback_level}"
@@ -301,6 +307,13 @@ def _condition(config: PairExperimentConfig) -> tuple[str, FeedbackModes | None]
     return config.condition, None
 
 
+def _sequential(modes: FeedbackModes, selection: str) -> FeedbackModes:
+    """Read the checkpoint back under QTB's attention-then-measurement order."""
+
+    sequential = f"sequential-{selection}"
+    return tuple(sequential if mode == "p-sa" else mode for mode in modes)
+
+
 def _sampled(modes: FeedbackModes) -> FeedbackModes:
     """Read the same checkpoint back with winner-take-all on every active pathway."""
 
@@ -318,6 +331,7 @@ def _forward(
     *,
     feedback_mode: FeedbackModes | None,
     category_feedback_level: str = "source",
+    feedback_gate: float = 1.0,
     trace: bool = False,
 ) -> PerceptionOutputs:
     categories = category_candidates(candidates)
@@ -338,6 +352,7 @@ def _forward(
                 f"object_category/{category_feedback_level}"
             ],
             category_feedback_mode=category_mode,
+            feedback_gate=feedback_gate,
             return_trace=trace,
         )
     if isinstance(model, PDirect):
@@ -1058,6 +1073,7 @@ def run_pair_experiment(
             candidates,
             feedback_mode=training_feedback,
             category_feedback_level=config.category_feedback_level,
+            feedback_gate=config.feedback_gate,
             trace=True,
         )
         pair_losses(
@@ -1103,6 +1119,7 @@ def run_pair_experiment(
                 evaluation_candidates,
                 feedback_mode=mode,
                 category_feedback_level=config.category_feedback_level,
+                feedback_gate=config.feedback_gate,
             ),
             loader,
             vocabulary,
@@ -1132,6 +1149,7 @@ def run_pair_experiment(
                 candidates,
                 feedback_mode=training_feedback,
                 category_feedback_level=config.category_feedback_level,
+                feedback_gate=config.feedback_gate,
             )
             losses = pair_losses(outputs, targets)
             if not torch.isfinite(losses.total):
@@ -1177,6 +1195,13 @@ def run_pair_experiment(
         evaluation_modes = (
             (expected_label, training_feedback),
             (f"{expected_label.removesuffix('sa')}samp", _sampled(training_feedback)),
+            # Current-arXiv Algorithms 2 and 3 run in sequence rather than as
+            # alternatives; these read the same checkpoint under that schedule.
+            (f"{expected_label}-sequential", _sequential(training_feedback, "argmax")),
+            (
+                f"{expected_label}-sequential-sample",
+                _sequential(training_feedback, "sample"),
+            ),
         )
     else:
         evaluation_modes = (("none", training_feedback),)
@@ -1221,6 +1246,7 @@ def _parse_args() -> tuple[Path, Path, Path, PairExperimentConfig]:
         "--score-mode", choices=("direct", "centered", "softplus-bias")
     )
     parser.add_argument("--category-feedback-level", choices=PAIR_CATEGORY_LEVELS)
+    parser.add_argument("--feedback-gate", type=float)
     parser.add_argument("--zero-initialize-union", action="store_true")
     for name, type_ in (
         ("learning-rate", float),

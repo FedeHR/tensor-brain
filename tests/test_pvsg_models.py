@@ -235,6 +235,68 @@ def test_category_feedback_follows_the_unary_readout_and_precedes_evolution() ->
     )
 
 
+def test_sequential_mode_applies_attention_then_generative_measurement() -> None:
+    """QTB orders Algorithm 2 and Algorithm 3 in sequence, not as alternatives."""
+
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+    set_index_parameters(model)
+    model.eval()
+    scene = torch.tensor([[0.2, -0.1]])
+    subject = torch.tensor([[0.4, 0.3]])
+    identities = torch.tensor([0, 1])
+    arguments = (
+        scene, subject, torch.tensor([[-0.2, 0.5]]), torch.tensor([[0.1, -0.4]]),
+        identities, torch.tensor([2, 3, 4]),
+    )
+
+    traced = model(*arguments, feedback_mode="sequential-argmax", return_trace=True)
+
+    q = 2.0 * scene + 1.0 + subject
+    q_attended, _ = model.brain.attend(q, identities)
+    q_measured, _outcome, _p = model.brain.measure(
+        q_attended, identities, selection="argmax"
+    )
+    torch.testing.assert_close(traced["trace"]["subject"]["q_after_feedback"], q_measured)
+    # Strictly more movement than either operation alone.
+    applied = traced["trace"]["subject"]["applied_feedback"].norm()
+    assert applied > (q_attended - q).norm()
+
+
+def test_feedback_gate_scales_attention_and_measurement_alike() -> None:
+    """One gate covers both top-down operations so a sweep reaches training."""
+
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+    set_index_parameters(model)
+    model.eval()
+    arguments = (
+        torch.tensor([[0.2, -0.1]]), torch.tensor([[0.4, 0.3]]),
+        torch.tensor([[-0.2, 0.5]]), torch.tensor([[0.1, -0.4]]),
+        torch.tensor([0, 1]), torch.tensor([2, 3, 4]),
+    )
+
+    for mode in ("p-sa", "p-samp"):
+        unit, doubled = (
+            model(*arguments, feedback_mode=mode, feedback_gate=gate, return_trace=True)
+            for gate in (1.0, 2.0)
+        )
+        torch.testing.assert_close(
+            doubled["trace"]["subject"]["applied_feedback"],
+            2.0 * unit["trace"]["subject"]["applied_feedback"],
+            msg=f"{mode} injection did not scale with the feedback gate",
+        )
+
+
+def test_sequential_modes_are_evaluation_only() -> None:
+    model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
+
+    with pytest.raises(ValueError, match="evaluation-only"):
+        model(
+            torch.zeros(1, 2), torch.zeros(1, 2), torch.zeros(1, 2), torch.zeros(1, 2),
+            torch.tensor([0, 1]), torch.tensor([2, 3]),
+            feedback_mode="sequential-sample",
+        )
+
+
 def test_category_feedback_is_absent_unless_requested() -> None:
     model = IntegralTB(state_dim=2, num_indices=5, evolution=CountingEvolution())
     set_index_parameters(model)

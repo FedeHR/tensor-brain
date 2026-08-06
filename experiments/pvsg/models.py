@@ -1,7 +1,7 @@
 """Perception models for the initial PVSG Section 6 comparison."""
 
 from collections.abc import Mapping
-from typing import Literal, NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict, get_args
 
 import torch
 from jaxtyping import Float, Int
@@ -10,7 +10,16 @@ from torch import Tensor, nn
 from tb import ScoreMode, TensorBrain
 from tb.evolution import Evolution
 
-FeedbackMode = Literal["p-sa", "p-samp", "none"]
+FeedbackMode = Literal[
+    "p-sa", "p-samp", "none", "sequential-argmax", "sequential-sample"
+]
+# Modes that run current-arXiv Algorithm 2's attention and then Algorithm 3's
+# generative measurement, which the QTB text orders sequentially rather than as
+# alternatives. Original Section 5.3 instead has attention *replace* the sampled
+# injection, which is what "p-sa" and "p-samp" implement. See the
+# attention-versus-generative-measurement row of docs/fidelity.md.
+SEQUENTIAL_FEEDBACK_MODES = ("sequential-argmax", "sequential-sample")
+EVALUATION_ONLY_FEEDBACK_MODES = ("p-samp", *SEQUENTIAL_FEEDBACK_MODES)
 CategoryCandidates = Mapping[str, Int[Tensor, " categories"]]
 Trace = dict[str, dict[str, Tensor]]
 
@@ -73,13 +82,37 @@ def _index_feedback(
     q: Float[Tensor, "*batch state"],
     candidates: Int[Tensor, " indices"],
     feedback_mode: FeedbackMode,
+    *,
+    feedback_gate: float = 1.0,
 ) -> tuple[Float[Tensor, "*batch state"], Float[Tensor, "*batch indices"]]:
-    if feedback_mode == "p-sa":
-        return brain.attend(q, candidates)
+    """Apply one top-down step and return the post-feedback state and its scores.
+
+    ``p-sa`` and ``p-samp`` are the original paper's alternatives: Section 5.3's
+    attention approximation *replaces* Algorithm 1's sampled injection. The
+    ``sequential-*`` modes instead run current-arXiv Algorithm 2's attention and then
+    Algorithm 3's generative measurement, which is the order the QTB text specifies.
+    Returned probabilities are always the ones that drove the applied feedback.
+
+    ``feedback_gate`` is Algorithm 3's :math:`\\beta`, applied to every injected
+    embedding including Algorithm 2's attention. Gating attention is what makes a
+    sweep act during training, since attention is the differentiable path the runs
+    actually train on; the two magnitudes are therefore deliberately tied together.
+    """
+
     if feedback_mode == "none":
         return q, brain.index_scores(q, candidates).softmax(dim=-1)
+    if feedback_mode == "p-sa":
+        return brain.attend(q, candidates, feedback_gate=feedback_gate)
+    if feedback_mode == "p-samp":
+        q_next, _outcome, probabilities = brain.measure(
+            q, candidates, selection="argmax", feedback_gate=feedback_gate
+        )
+        return q_next, probabilities
+    # Algorithm 2 attention, then Algorithm 3 measurement on the attended state.
+    q_next, _probabilities = brain.attend(q, candidates, feedback_gate=feedback_gate)
+    selection = "argmax" if feedback_mode == "sequential-argmax" else "sample"
     q_next, _outcome, probabilities = brain.measure(
-        q, candidates, selection="argmax"
+        q_next, candidates, selection=selection, feedback_gate=feedback_gate
     )
     return q_next, probabilities
 
@@ -89,12 +122,16 @@ def _category_feedback(
     q: Float[Tensor, "*batch state"],
     candidates: Int[Tensor, " categories"] | None,
     feedback_mode: FeedbackMode,
+    *,
+    feedback_gate: float = 1.0,
 ) -> tuple[Float[Tensor, "*batch state"], Float[Tensor, "*batch categories"] | None]:
     """Inject the decoded category embedding, leaving ``q`` untouched when disabled."""
 
     if feedback_mode == "none" or candidates is None:
         return q, None
-    return _index_feedback(brain, q, candidates, feedback_mode)
+    return _index_feedback(
+        brain, q, candidates, feedback_mode, feedback_gate=feedback_gate
+    )
 
 
 def _sequential_category_logits(
@@ -317,28 +354,34 @@ class IntegralTB(nn.Module):
         feedback_mode: FeedbackMode = "p-sa",
         category_feedback_candidates: Int[Tensor, " categories"] | None = None,
         category_feedback_mode: FeedbackMode = "none",
+        feedback_gate: float = 1.0,
         return_trace: bool = False,
     ) -> PerceptionOutputs:
         """Return logits from the explicit Section 6 perception schedule.
 
-        Training uses differentiable P-SA feedback. P-Samp is the evaluation-only
-        winner-take-all condition of the same checkpoint.
+        Training uses differentiable P-SA feedback. P-Samp and the ``sequential-*``
+        schedules are evaluation-only readouts of the same checkpoint.
 
         ``category_feedback_mode`` injects the decoded category embedding after the
         unary readout, which is original Algorithm 1's ``q̈_S = q_S + a_{c*}`` used on
         the perception path rather than only for chaining. Each group is scored
         before its own feedback, so no readout confirms itself.
+
+        ``feedback_gate`` is Algorithm 3's :math:`\\beta`, applied to every injected
+        embedding. The QTB text sets it to one and bounds it by one; values above one
+        leave that range deliberately, to test whether the measured null follows from
+        the injection being small relative to the visual drive.
         """
 
         for name, mode in (
             ("feedback_mode", feedback_mode),
             ("category_feedback_mode", category_feedback_mode),
         ):
-            if mode not in ("p-sa", "p-samp", "none"):
-                raise ValueError(f"{name} must be 'p-sa', 'p-samp', or 'none'")
-            if mode == "p-samp" and self.training:
+            if mode not in get_args(FeedbackMode):
+                raise ValueError(f"{name} must be one of {get_args(FeedbackMode)}")
+            if mode in EVALUATION_ONLY_FEEDBACK_MODES and self.training:
                 raise ValueError(
-                    "P-Samp is evaluation-only; train the checkpoint with P-SA"
+                    f"{mode} is evaluation-only; train the checkpoint with P-SA"
                 )
         if category_feedback_mode != "none" and category_feedback_candidates is None:
             raise ValueError("category feedback requires explicit category candidates")
@@ -366,12 +409,14 @@ class IntegralTB(nn.Module):
         q_after_input = q
         subject_identity_logits = self.brain.index_scores(q, identity_candidates)
         q, subject_probabilities = _index_feedback(
-            self.brain, q, identity_candidates, feedback_mode
+            self.brain, q, identity_candidates, feedback_mode,
+            feedback_gate=feedback_gate,
         )
         q_after_feedback = q
         subject_category_logits = _category_logits(self.brain, q, category_candidates)
         q, subject_category_probabilities = _category_feedback(
-            self.brain, q, category_feedback_candidates, category_feedback_mode
+            self.brain, q, category_feedback_candidates, category_feedback_mode,
+            feedback_gate=feedback_gate,
         )
         q_after_category_feedback = q
         q, context = self.brain.evolve(q, context)
@@ -391,12 +436,14 @@ class IntegralTB(nn.Module):
         q_after_input = q
         object_identity_logits = self.brain.index_scores(q, identity_candidates)
         q, object_probabilities = _index_feedback(
-            self.brain, q, identity_candidates, feedback_mode
+            self.brain, q, identity_candidates, feedback_mode,
+            feedback_gate=feedback_gate,
         )
         q_after_feedback = q
         object_category_logits = _category_logits(self.brain, q, category_candidates)
         q, object_category_probabilities = _category_feedback(
-            self.brain, q, category_feedback_candidates, category_feedback_mode
+            self.brain, q, category_feedback_candidates, category_feedback_mode,
+            feedback_gate=feedback_gate,
         )
         q_after_category_feedback = q
         q, context = self.brain.evolve(q, context)

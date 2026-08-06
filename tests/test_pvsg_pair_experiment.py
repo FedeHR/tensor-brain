@@ -4,6 +4,7 @@ import sys
 import pytest
 import torch
 
+from experiments.pvsg.pair_evaluate import reevaluate_pair_run
 from experiments.pvsg.pair_experiment import (
     PairExperimentConfig,
     _parse_args,
@@ -223,7 +224,7 @@ def test_pair_cli_accepts_the_cluster_arguments(monkeypatch, tmp_path) -> None:
         ),
         (
             "integral-p-sa",
-            {"p-sa", "p-samp"},
+            {"p-sa", "p-samp", "p-sa-sequential", "p-sa-sequential-sample"},
             {
                 "checkpoint.pt",
                 "config.json",
@@ -236,7 +237,7 @@ def test_pair_cli_accepts_the_cluster_arguments(monkeypatch, tmp_path) -> None:
         ),
         (
             "integral-cat-sa",
-            {"cat-sa", "cat-samp"},
+            {"cat-sa", "cat-samp", "cat-sa-sequential", "cat-sa-sequential-sample"},
             {
                 "checkpoint.pt",
                 "config.json",
@@ -249,7 +250,7 @@ def test_pair_cli_accepts_the_cluster_arguments(monkeypatch, tmp_path) -> None:
         ),
         (
             "integral-id-cat-sa",
-            {"id-cat-sa", "id-cat-samp"},
+            {"id-cat-sa", "id-cat-samp", "id-cat-sa-sequential", "id-cat-sa-sequential-sample"},
             {
                 "checkpoint.pt",
                 "config.json",
@@ -559,7 +560,7 @@ def test_blocked_protocol_reports_known_and_novel_entities(tmp_path, monkeypatch
     # One checkpoint, both regimes: novel entities (VRD-E) and known entities (VRD-EX).
     assert set(result["evaluation"]) == {"development", "blocked"}
     for regime in result["evaluation"].values():
-        assert set(regime) == {"p-sa", "p-samp"}
+        assert set(regime) == {"p-sa", "p-samp", "p-sa-sequential", "p-sa-sequential-sample"}
 
     known = result["evaluation"]["blocked"]["p-sa"]
     novel = result["evaluation"]["development"]["p-sa"]
@@ -628,7 +629,7 @@ def test_blocked_protocol_reports_known_and_novel_entities(tmp_path, monkeypatch
         ("union-only", {"default"}),
         ("p-direct", {"default"}),
         ("integral-none", {"none"}),
-        ("integral-p-sa", {"p-sa", "p-samp"}),
+        ("integral-p-sa", {"p-sa", "p-samp", "p-sa-sequential", "p-sa-sequential-sample"}),
     ),
 )
 def test_blocked_protocol_runs_every_array_condition(
@@ -711,3 +712,72 @@ def test_blocked_protocol_rejects_an_unenrolled_known_entity(tmp_path, monkeypat
                 device="cpu",
             ),
         )
+
+
+def test_reevaluation_reports_extra_readouts_from_a_finished_checkpoint(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "experiments.pvsg.pair_experiment.load_object_hierarchy",
+        lambda *_args, **_kwargs: _hierarchy(),
+    )
+    monkeypatch.setattr(
+        "experiments.pvsg.pair_evaluate.load_object_hierarchy",
+        lambda *_args, **_kwargs: _hierarchy(),
+    )
+    manifest_root = tmp_path / "snapshot"
+    feature_root = tmp_path / "features"
+    _blocked_manifests(manifest_root, feature_root)
+    run_pair_experiment(
+        manifest_root,
+        feature_root,
+        tmp_path / "runs",
+        PairExperimentConfig(
+            run_name="blocked",
+            condition="integral-p-sa",
+            protocol="blocked",
+            batch_size=2,
+            max_steps=2,
+            validation_every=1,
+            validation_examples=2,
+            log_every=1,
+            num_workers=0,
+            device="cpu",
+        ),
+    )
+
+    result = reevaluate_pair_run(
+        tmp_path / "runs" / "blocked",
+        manifest_root,
+        feature_root,
+        feedback_gates=(1.0, 4.0),
+        device_name="cpu",
+    )
+
+    assert result["gate_applies_to"] == "attention_and_measurement_injections"
+    assert set(result["evaluation"]) == {"development", "blocked"}
+    for readouts in result["evaluation"].values():
+        # One gate covers both operations, so every readout is reported at each beta.
+        assert set(readouts) == {
+            "expected@beta=1",
+            "expected@beta=4",
+            "winner@beta=1",
+            "winner@beta=4",
+            "sequential-argmax@beta=1",
+            "sequential-argmax@beta=4",
+            "sequential-sample@beta=1",
+            "sequential-sample@beta=4",
+        }
+    known = result["evaluation"]["blocked"]
+    assert known["expected@beta=1"]["examples"] == 2
+    # The attention-only readout responds to the gate too.
+    assert (
+        known["expected@beta=4"]["loss/predicate_kl"]
+        != known["expected@beta=1"]["loss/predicate_kl"]
+    )
+    # A larger measurement gate must actually change the measurement readout.
+    assert (
+        known["winner@beta=4"]["loss/predicate_kl"]
+        != known["winner@beta=1"]["loss/predicate_kl"]
+    )
+    assert (tmp_path / "runs" / "blocked" / "reevaluation.json").exists()
