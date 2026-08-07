@@ -33,6 +33,12 @@ This is a mechanism gate, not a benchmark. It says whether these operations can
 hold an index across time at all, which is a precondition for reading anything
 into a streaming PVSG result. Trials are resampled every training step, so a
 reported accuracy is generalization to unseen trials rather than overfitting.
+
+One caution governs every reading of it. A run that has not trained long enough
+sits at exactly chance instead of degrading gracefully, so an insufficient step
+budget is indistinguishable from a delay the mechanism cannot reach. Establish
+that a delay is unreachable by raising ``training_steps`` until the solve rate
+stops moving, never by observing chance once.
 """
 
 import math
@@ -324,8 +330,13 @@ def train_condition(
     feedback_gate: float = 1.0,
     identity_loss_weight: float = 1.0,
     batch_size: int = 128,
-    training_steps: int = 3_000,
-    learning_rate: float = 3e-3,
+    # An under-trained run fails at chance rather than degrading, so too small a
+    # budget manufactures a delay wall that looks like a capacity limit. At
+    # delay four this configuration solves 3/3 seeds at 12,000 steps and 0/5 at
+    # 3,000. Raise the budget, not the learning rate, before reading a longer
+    # delay as unreachable.
+    training_steps: int = 12_000,
+    learning_rate: float = 1e-3,
     gradient_clip: float = 1.0,
     evaluation_trials: int = 1_024,
     seed: int = 0,
