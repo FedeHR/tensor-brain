@@ -569,9 +569,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         **vars(gate),
         "recall_mode": arguments.recall_mode,
         "view_noise": arguments.view_noise,
+        "probe_mix": arguments.probe_mix,
         "evolution": arguments.evolution,
         "training_steps": arguments.training_steps,
         "learning_rate": arguments.learning_rate,
+        # The ablation forces zero regardless of the flag, so record what the
+        # model actually used rather than what was asked for.
+        "feedback_gate": arguments.feedback_gate if arguments.condition == "feedback" else 0.0,
     }
     record["seeds"] = list(gate.seeds)
     line = json.dumps(record, sort_keys=True)

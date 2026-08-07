@@ -77,7 +77,12 @@ CONDITION="${CONDITIONS[$(( SLURM_ARRAY_TASK_ID % ${#CONDITIONS[@]} ))]}"
 DELAY="${DELAYS[$(( SLURM_ARRAY_TASK_ID / ${#CONDITIONS[@]} ))]}"
 
 OUTPUT_ROOT="${MASTER_ROOT}/runs/toy/${TOY_RUN_GROUP:-delayed-recall}"
-RESULTS_PATH="$OUTPUT_ROOT/${RECALL_MODE}-noise${VIEW_NOISE}-${EVOLUTION}.jsonl"
+# One file per array task. Concurrent appends to a shared file are not atomic on
+# NFS, so a throttle wider than one could silently drop a finished cell and leave
+# a gap indistinguishable from a job that never ran. Reassemble with
+#   cat "$OUTPUT_ROOT"/<stem>-task*.jsonl
+STEM="${RECALL_MODE}-noise${VIEW_NOISE}-${EVOLUTION}"
+RESULTS_PATH="$OUTPUT_ROOT/${STEM}-task${SLURM_ARRAY_TASK_ID}.jsonl"
 
 export TMPDIR="$MASTER_ROOT/tmp/${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "$TMPDIR" "$OUTPUT_ROOT"
