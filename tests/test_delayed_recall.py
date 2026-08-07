@@ -1,4 +1,7 @@
+import math
+
 import torch
+from torch.nn import functional as F
 
 from experiments.delayed_recall import (
     build_model,
@@ -15,12 +18,14 @@ SMALL = {
     "hidden_dim": 32,
     "gru_hidden_dim": 16,
 }
+BANK = make_item_bank(SMALL["num_items"], SMALL["feature_dim"])
 
 
 def _small_model(condition: str, *, feedback_gate: float = 1.0):
     return build_model(
         condition,
-        make_item_bank(SMALL["num_items"], SMALL["feature_dim"]),
+        SMALL["num_items"],
+        SMALL["feature_dim"],
         state_dim=SMALL["state_dim"],
         hidden_dim=SMALL["hidden_dim"],
         gru_hidden_dim=SMALL["gru_hidden_dim"],
@@ -31,42 +36,95 @@ def _small_model(condition: str, *, feedback_gate: float = 1.0):
 
 
 def test_item_bank_has_unit_per_component_rms() -> None:
-    bank = make_item_bank(8, 16)
-
-    assert bank.shape == (8, 16)
-    assert torch.allclose(bank.norm(dim=-1), torch.full((8,), 4.0), atol=1e-5)
+    assert BANK.shape == (8, 16)
+    assert torch.allclose(BANK.norm(dim=-1), torch.full((8,), 4.0), atol=1e-5)
 
 
 def test_distractors_are_never_the_cue() -> None:
-    trials = sample_trials(4, 6, 256, generator=torch.Generator().manual_seed(0))
+    trials = sample_trials(BANK, 6, 256, generator=torch.Generator().manual_seed(0))
 
     assert trials.presented.shape == (256, 7)
+    assert trials.views.shape == (256, 7, SMALL["feature_dim"])
     assert torch.equal(trials.presented[:, 0], trials.cue)
     assert bool((trials.presented[:, 1:] != trials.cue.unsqueeze(-1)).all())
 
 
 def test_only_the_first_step_is_flagged_as_the_cue() -> None:
-    trials = sample_trials(8, 3, 16, generator=torch.Generator().manual_seed(1))
+    trials = sample_trials(BANK, 3, 16, generator=torch.Generator().manual_seed(1))
 
     assert bool((trials.cue_flag[:, 0] == 1.0).all())
     assert bool((trials.cue_flag[:, 1:] == 0.0).all())
 
 
-def test_zero_delay_presents_only_the_cue() -> None:
-    trials = sample_trials(8, 0, 16, generator=torch.Generator().manual_seed(2))
+def test_noiseless_views_are_exactly_the_prototypes() -> None:
+    trials = sample_trials(BANK, 3, 16, generator=torch.Generator().manual_seed(2))
 
-    assert trials.presented.shape == (16, 1)
+    assert torch.allclose(trials.views, BANK[trials.presented])
+    assert trials.probe_view is None and trials.lure is None
+
+
+def test_noisy_views_differ_per_presentation_but_keep_the_input_scale() -> None:
+    trials = sample_trials(
+        BANK, 5, 64, view_noise=0.5, generator=torch.Generator().manual_seed(3)
+    )
+    expected = math.sqrt(SMALL["feature_dim"])
+
+    assert not torch.allclose(trials.views, BANK[trials.presented])
+    assert torch.allclose(
+        trials.views.norm(dim=-1), torch.full((64, 6), expected), atol=1e-4
+    )
+
+
+def test_the_probe_is_equidistant_between_the_cue_and_its_lure() -> None:
+    trials = sample_trials(
+        BANK, 2, 512, recall_mode="probe", generator=torch.Generator().manual_seed(4)
+    )
+
+    assert trials.lure is not None and trials.probe_view is not None
+    assert bool((trials.lure != trials.cue).all())
+    to_cue = F.cosine_similarity(trials.probe_view, BANK[trials.cue], dim=-1)
+    to_lure = F.cosine_similarity(trials.probe_view, BANK[trials.lure], dim=-1)
+    assert torch.allclose(to_cue, to_lure, atol=1e-5)
+
+
+def test_probe_mode_reports_the_two_candidate_floor() -> None:
+    probe = train_condition(
+        "gru", delay=0, recall_mode="probe", training_steps=1, evaluation_trials=64, **SMALL
+    )
+    silent = train_condition(
+        "gru", delay=0, training_steps=1, evaluation_trials=64, **SMALL
+    )
+
+    assert probe.chance == 0.5
+    assert silent.chance == 1.0 / SMALL["num_items"]
 
 
 def test_both_models_decode_every_step_and_the_recall() -> None:
-    trials = sample_trials(
-        SMALL["num_items"], 3, 5, generator=torch.Generator().manual_seed(3)
-    )
+    trials = sample_trials(BANK, 3, 5, generator=torch.Generator().manual_seed(5))
     for condition in ("feedback", "gru"):
         recall_logits, identity_logits = _small_model(condition)(trials)
 
         assert recall_logits.shape == (5, SMALL["num_items"])
         assert identity_logits.shape == (5, 4, SMALL["num_items"])
+
+
+def test_both_models_read_the_probe_when_there_is_one() -> None:
+    """A probe that changed nothing would make probe mode a silent run."""
+
+    generator = torch.Generator().manual_seed(6)
+    silent = sample_trials(BANK, 2, 32, generator=generator)
+    probed = sample_trials(
+        BANK, 2, 32, recall_mode="probe", generator=torch.Generator().manual_seed(6)
+    )
+    assert torch.equal(silent.views, probed.views)
+
+    for condition in ("feedback", "gru"):
+        torch.manual_seed(11)
+        model = _small_model(condition)
+        recall_silent, _ = model(silent)
+        recall_probed, _ = model(probed)
+
+        assert not torch.allclose(recall_silent, recall_probed)
 
 
 def test_the_ablation_removes_the_injection_and_changes_nothing_else() -> None:
@@ -84,9 +142,7 @@ def test_the_ablation_removes_the_injection_and_changes_nothing_else() -> None:
     assert with_feedback.feedback_gate == 1.0
     assert without_feedback.feedback_gate == 0.0
 
-    trials = sample_trials(
-        SMALL["num_items"], 3, 16, generator=torch.Generator().manual_seed(8)
-    )
+    trials = sample_trials(BANK, 3, 16, generator=torch.Generator().manual_seed(8))
     recall_with, _identity_with = with_feedback(trials)
     recall_without, _identity_without = without_feedback(trials)
 
@@ -96,9 +152,7 @@ def test_the_ablation_removes_the_injection_and_changes_nothing_else() -> None:
 def test_the_recall_readout_is_not_the_last_identity_readout() -> None:
     """Recall must name the cue, so it cannot reuse the final item's state."""
 
-    trials = sample_trials(
-        SMALL["num_items"], 2, 16, generator=torch.Generator().manual_seed(9)
-    )
+    trials = sample_trials(BANK, 2, 16, generator=torch.Generator().manual_seed(9))
     for condition in ("feedback", "gru"):
         recall_logits, identity_logits = _small_model(condition)(trials)
 
@@ -107,12 +161,7 @@ def test_the_recall_readout_is_not_the_last_identity_readout() -> None:
 
 def test_the_tensor_brain_learns_delayed_recall_above_chance() -> None:
     result = train_condition(
-        "feedback",
-        delay=2,
-        evolution="qtb-relu",
-        training_steps=1_500,
-        seed=0,
-        **SMALL,
+        "feedback", delay=2, training_steps=1_500, seed=0, **SMALL
     )
 
     assert result.identity_accuracy > 0.95
@@ -120,21 +169,13 @@ def test_the_tensor_brain_learns_delayed_recall_above_chance() -> None:
 
 
 def test_the_baseline_learns_delayed_recall_above_chance() -> None:
-    result = train_condition(
-        "gru", delay=2, training_steps=1_500, seed=0, **SMALL
-    )
+    result = train_condition("gru", delay=2, training_steps=1_500, seed=0, **SMALL)
 
     assert result.recall_accuracy > 4 * result.chance
 
 
 def test_the_gate_aggregates_seeds_into_a_solve_rate() -> None:
-    gate = run_gate(
-        "gru",
-        delay=1,
-        seeds=(0, 1),
-        training_steps=800,
-        **SMALL,
-    )
+    gate = run_gate("gru", delay=1, seeds=(0, 1), training_steps=800, **SMALL)
 
     assert gate.seeds == (0, 1)
     assert 0.0 <= gate.solve_rate <= 1.0

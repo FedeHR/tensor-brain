@@ -3,36 +3,42 @@
 The XOR diagnostic in :mod:`experiments.evolution_overfit` establishes that an
 evolution operator can create a nonlinear boundary inside one concept window.
 This diagnostic asks the separate question the PVSG streaming experiments
-depend on: can a symbolic index survive a delay filled with competing input?
+depend on: is there any regime in which index feedback is worth more than the
+analog trace the same observation already left in ``q``?
 
-One trial presents a flagged cue item, then ``delay`` unflagged distractor items
-drawn from the same bank, then a recall step with no input at all. That last
-step is original Algorithm 1 with ``u = 0``, which QTB Equation (47) writes as
-``q <- Wh + g(nu) + sum_k a_k`` with ``g(nu) = 0``. Every presented item is
-decoded against the same index bank *before* its own feedback, so no readout
-confirms itself, and the recall readout must name the cue rather than the item
-seen most recently.
+One trial presents a flagged cue, then ``delay`` distractor items drawn from the
+same bank, then a recall step. Every presented item is decoded against the
+shared bank *before* its own feedback, so no readout confirms itself, and the
+recall readout must name the cue rather than the item seen most recently.
+Distractors come from the cue's own bank, so maintenance survives interference
+rather than only decay.
 
-Three conditions answer the gate:
+Two design choices decide whether the comparison can say anything at all.
 
-``feedback``
-    the full mechanism, with index feedback at ``feedback_gate``;
-``no-feedback``
-    the identical schedule with the injection removed, so the cue survives only
-    as the analog trace its input left in ``q``;
-``gru``
-    a capacity-comparable recurrent baseline reading the same inputs.
+**Views, not fixed features.** Each item owns a prototype, and every
+presentation is a noisy view of it. With one fixed feature per item the index
+embedding ``a_k`` would be a deterministic re-encoding of the input that a
+learned ``g`` can reproduce, so feedback could not carry information and a null
+would be a property of the task rather than of the mechanism. Under noisy views
+``a_k`` is instead a prototype accumulated across occurrences, which is the
+claim original §6 makes for entity indices on VRD-EX.
 
-Distractors are drawn from the same bank as the cue, so maintenance has to
-survive interference rather than merely decay. Recall accuracy as a function of
-``delay`` is the measurement. The gate passes when ``feedback`` clears chance at
-a delay where ``no-feedback`` does not; it fails, informatively, when the two
-coincide at every delay.
+**The recall step.** ``silent`` presents nothing -- original Algorithm 1 with
+``u = 0``, which QTB Equation (47) writes as ``q <- Wh + g(nu) + sum_k a_k``
+with ``g(nu) = 0``. ``probe`` instead presents a view that is deliberately
+ambiguous between the cue and a lure item, so bottom-up evidence narrows the
+answer to two candidates and cannot choose between them. Only what was retained
+from the cue's earlier presentation separates them, which is the toy form of
+re-identifying an entity after occlusion against a visually similar distractor.
 
-This is a mechanism gate, not a benchmark. It says whether these operations can
-hold an index across time at all, which is a precondition for reading anything
-into a streaming PVSG result. Trials are resampled every training step, so a
-reported accuracy is generalization to unseen trials rather than overfitting.
+Three conditions share the optimizer, learning rate, gradient clip and step
+budget: ``feedback`` is the full mechanism, ``no-feedback`` is the identical
+schedule with the injection removed, and ``gru`` is a capacity-comparable
+recurrent baseline reading the same inputs under the same supervision.
+
+This is a mechanism gate, not a benchmark, and it is not evidence about PVSG.
+It says whether these operations pay off anywhere; whether PVSG contains the
+regime in which they pay is a separate question about the dataset.
 
 One caution governs every reading of it. A run that has not trained long enough
 sits at exactly chance instead of degrading gracefully, so an insufficient step
@@ -41,9 +47,12 @@ that a delay is unreachable by raising ``training_steps`` until the solve rate
 stops moving, never by observing chance once.
 """
 
+import argparse
+import json
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 import torch
@@ -56,6 +65,7 @@ from tb.model import ScoreMode
 
 RecallCondition = Literal["feedback", "no-feedback", "gru"]
 EvolutionVariant = Literal["original", "qtb-sigmoid", "qtb-relu"]
+RecallMode = Literal["silent", "probe"]
 
 # The item bank and the evaluation trials are drawn from dedicated generators so
 # that every condition and every delay sees the same sensory vocabulary and the
@@ -66,17 +76,25 @@ EVALUATION_SEED = 20_260_808
 
 @dataclass(frozen=True)
 class RecallTrials:
-    """A batch of trials: the presented item sequence and the cue to recall.
+    """A batch of trials: what perception receives, and what recall must name.
 
-    ``presented[:, 0]`` is the cue and the remaining columns are distractors, so
-    ``presented.shape[1] - 1`` is the delay. ``cue_flag`` marks the first column
-    and is the only thing distinguishing the cue from a distractor at input
-    time; without it the task would be unsolvable rather than merely hard.
+    ``views`` is what the model sees; ``presented`` is the identity supervision
+    for those same steps. ``presented[:, 0]`` is the cue and the remaining
+    columns are distractors, so ``presented.shape[1] - 1`` is the delay.
+    ``cue_flag`` marks the first column and is the only thing distinguishing the
+    cue from a distractor at input time.
+
+    ``probe_view`` and ``lure`` are present only in ``probe`` recall mode. The
+    probe is ambiguous between the cue and the lure by construction, so a model
+    reading it alone cannot exceed one half.
     """
 
+    views: Float[Tensor, "batch steps feature"]
     presented: Int[Tensor, "batch steps"]
     cue_flag: Float[Tensor, "batch steps"]
     cue: Int[Tensor, " batch"]
+    lure: Int[Tensor, " batch"] | None = None
+    probe_view: Float[Tensor, "batch feature"] | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +104,7 @@ class RecallResult:
     seed: int
     recall_accuracy: float
     identity_accuracy: float
+    lure_rate: float
     chance: float
     parameter_count: int
     loss_history: tuple[float, ...]
@@ -95,11 +114,10 @@ class RecallResult:
 class GateResult:
     """One condition at one delay, aggregated over seeds.
 
-    Outcomes here are close to bimodal: a run either maintains the cue and
-    approaches one, or collapses to exactly chance. A mean over seeds therefore
-    reports how often the mechanism is reachable rather than how well it works,
-    which is what a gate should measure, so ``solve_rate`` is the headline and
-    ``mean_recall_accuracy`` is reported beside it rather than instead of it.
+    Outcomes are close to bimodal: a run either maintains the cue and approaches
+    one, or collapses to chance. A mean over seeds therefore reports how often
+    the mechanism is reachable rather than how well it works, so ``solve_rate``
+    is the headline and ``mean_recall_accuracy`` is reported beside it.
     """
 
     condition: RecallCondition
@@ -108,33 +126,37 @@ class GateResult:
     mean_recall_accuracy: float
     best_recall_accuracy: float
     mean_identity_accuracy: float
+    mean_lure_rate: float
     chance: float
     parameter_count: int
     seeds: tuple[int, ...]
 
 
+def _rms_normalize(features: Float[Tensor, "*rows feature"]) -> Float[Tensor, "*rows feature"]:
+    """Put features at unit per-component RMS, as the PVSG loader does."""
+
+    return math.sqrt(features.shape[-1]) * F.normalize(features, p=2, dim=-1)
+
+
 def make_item_bank(
     num_items: int, feature_dim: int, *, seed: int = ITEM_BANK_SEED
 ) -> Float[Tensor, "items feature"]:
-    """Return fixed sensory features standing in for frozen DINO evidence.
-
-    Each item is scaled to unit per-component RMS by the same convention the
-    PVSG loader applies to real features, so the input reaching ``g`` has the
-    pre-CBS scale the rest of the project assumes.
-    """
+    """Return fixed item prototypes standing in for a frozen visual backbone."""
 
     if num_items <= 1 or feature_dim <= 0:
         raise ValueError("num_items must exceed one and feature_dim must be positive")
     generator = torch.Generator().manual_seed(seed)
-    raw = torch.randn(num_items, feature_dim, generator=generator)
-    return math.sqrt(feature_dim) * F.normalize(raw, p=2, dim=-1)
+    return _rms_normalize(torch.randn(num_items, feature_dim, generator=generator))
 
 
 def sample_trials(
-    num_items: int,
+    item_bank: Float[Tensor, "items feature"],
     delay: int,
     batch_size: int,
     *,
+    view_noise: float = 0.0,
+    recall_mode: RecallMode = "silent",
+    probe_mix: float = 0.5,
     generator: torch.Generator | None = None,
 ) -> RecallTrials:
     """Draw trials whose distractors are never the cue itself.
@@ -142,18 +164,50 @@ def sample_trials(
     Adding an offset in ``1, ..., num_items - 1`` modulo the bank size draws
     uniformly from the non-cue items without rejection sampling. Distractors may
     repeat across the delay, which keeps the task defined when ``delay`` exceeds
-    the number of remaining items.
+    the number of remaining items. The lure is drawn the same way, so it is
+    never the cue but may coincide with a distractor.
     """
 
     if delay < 0 or batch_size <= 0:
         raise ValueError("delay must be non-negative and batch_size positive")
+    if view_noise < 0:
+        raise ValueError("view_noise must be non-negative")
+    if not 0.0 <= probe_mix <= 1.0:
+        raise ValueError("probe_mix must lie between zero and one")
+    num_items = item_bank.shape[0]
+
     cue = torch.randint(num_items, (batch_size,), generator=generator)
     offsets = torch.randint(1, num_items, (batch_size, delay), generator=generator)
-    distractors = (cue.unsqueeze(-1) + offsets) % num_items
-    presented = torch.cat([cue.unsqueeze(-1), distractors], dim=-1)
+    presented = torch.cat([cue.unsqueeze(-1), (cue.unsqueeze(-1) + offsets) % num_items], dim=-1)
     cue_flag = torch.zeros_like(presented, dtype=torch.float32)
     cue_flag[:, 0] = 1.0
-    return RecallTrials(presented=presented, cue_flag=cue_flag, cue=cue)
+
+    views = item_bank[presented]
+    if view_noise > 0:
+        views = _rms_normalize(
+            views + view_noise * torch.randn(views.shape, generator=generator)
+        )
+
+    if recall_mode == "silent":
+        return RecallTrials(views=views, presented=presented, cue_flag=cue_flag, cue=cue)
+    if recall_mode != "probe":
+        raise ValueError(f"unknown recall mode: {recall_mode}")
+
+    lure_offset = torch.randint(1, num_items, (batch_size,), generator=generator)
+    lure = (cue + lure_offset) % num_items
+    # An equal mixture of the two prototypes is equidistant from both, so the
+    # probe alone identifies the pair but never which member of it.
+    blended = probe_mix * item_bank[cue] + (1.0 - probe_mix) * item_bank[lure]
+    if view_noise > 0:
+        blended = blended + view_noise * torch.randn(blended.shape, generator=generator)
+    return RecallTrials(
+        views=views,
+        presented=presented,
+        cue_flag=cue_flag,
+        cue=cue,
+        lure=lure,
+        probe_view=_rms_normalize(blended),
+    )
 
 
 def make_evolution(
@@ -174,15 +228,17 @@ class TensorBrainRecall(nn.Module):
     """The Tensor Brain schedule for one delayed-recall trial.
 
     Per presented item the schedule is input, identity readout, index feedback,
-    evolution. The recall step then evolves once more with no input and reads the
-    bank again, so the state that names the cue is one transition past the state
-    that named the last distractor. ``feedback_gate`` of zero is the ablation:
-    the code path is identical and only the injected embedding disappears.
+    evolution. The recall step then evolves once more -- integrating the probe
+    first when there is one -- and reads the bank again, so the state that names
+    the cue is one transition past the state that named the last distractor.
+    ``feedback_gate`` of zero is the ablation: the code path is identical and
+    only the injected embedding disappears.
     """
 
     def __init__(
         self,
-        item_bank: Float[Tensor, "items feature"],
+        num_items: int,
+        feature_dim: int,
         *,
         state_dim: int,
         hidden_dim: int,
@@ -191,8 +247,6 @@ class TensorBrainRecall(nn.Module):
         feedback_gate: float,
     ) -> None:
         super().__init__()
-        num_items, feature_dim = item_bank.shape
-        self.register_buffer("items", item_bank)
         # The cue flag is one extra input component, so g maps feature_dim + 1
         # into pre-CBS coordinates. Everything before the Tensor Brain core is
         # the experiment's own perception, exactly as on PVSG.
@@ -210,8 +264,7 @@ class TensorBrainRecall(nn.Module):
     ) -> tuple[Float[Tensor, "batch items"], Float[Tensor, "batch steps items"]]:
         """Return the recall logits and the per-step identity logits."""
 
-        features = self.items[trials.presented]
-        drive = self.g(torch.cat([features, trials.cue_flag.unsqueeze(-1)], dim=-1))
+        drive = self.g(torch.cat([trials.views, trials.cue_flag.unsqueeze(-1)], dim=-1))
         q = drive.new_zeros(drive.shape[0], self.brain.state_dim)
         context = None
         identity_logits = []
@@ -220,7 +273,11 @@ class TensorBrainRecall(nn.Module):
             identity_logits.append(self.brain.index_scores(q))
             q, _probabilities = self.brain.attend(q, feedback_gate=self.feedback_gate)
             q, context = self.brain.evolve(q, context)
-        # Recall: no input integration, one transition, then read the same bank.
+        if trials.probe_view is not None:
+            probe_flag = trials.probe_view.new_zeros(trials.probe_view.shape[0], 1)
+            q = self.brain.integrate_input(
+                q, self.g(torch.cat([trials.probe_view, probe_flag], dim=-1))
+            )
         q, context = self.brain.evolve(q, context)
         return self.brain.index_scores(q), torch.stack(identity_logits, dim=1)
 
@@ -230,21 +287,21 @@ class GRURecall(nn.Module):
 
     It reads the identical ``g`` output, carries a distributed hidden state
     instead of a pre-CBS with index feedback, and decodes through an ordinary
-    readout head rather than through the shared index bank. The final zero-input
-    cell application mirrors the Tensor Brain's recall transition, so both models
-    place exactly one transition between the last item and the recall readout.
+    readout head rather than through the shared index bank. The final cell
+    application mirrors the Tensor Brain's recall transition, so both models
+    place exactly one transition between the last item and the recall readout,
+    and both see the probe when there is one.
     """
 
     def __init__(
         self,
-        item_bank: Float[Tensor, "items feature"],
+        num_items: int,
+        feature_dim: int,
         *,
         state_dim: int,
         hidden_dim: int,
     ) -> None:
         super().__init__()
-        num_items, feature_dim = item_bank.shape
-        self.register_buffer("items", item_bank)
         self.g = nn.Linear(feature_dim + 1, state_dim)
         self.cell = nn.GRUCell(state_dim, hidden_dim)
         self.readout = nn.Linear(hidden_dim, num_items)
@@ -253,14 +310,18 @@ class GRURecall(nn.Module):
     def forward(
         self, trials: RecallTrials
     ) -> tuple[Float[Tensor, "batch items"], Float[Tensor, "batch steps items"]]:
-        features = self.items[trials.presented]
-        drive = self.g(torch.cat([features, trials.cue_flag.unsqueeze(-1)], dim=-1))
+        drive = self.g(torch.cat([trials.views, trials.cue_flag.unsqueeze(-1)], dim=-1))
         hidden = drive.new_zeros(drive.shape[0], self.hidden_dim)
         identity_logits = []
         for step in range(drive.shape[1]):
             hidden = self.cell(drive[:, step], hidden)
             identity_logits.append(self.readout(hidden))
-        hidden = self.cell(torch.zeros_like(drive[:, 0]), hidden)
+        if trials.probe_view is None:
+            recall_drive = torch.zeros_like(drive[:, 0])
+        else:
+            probe_flag = trials.probe_view.new_zeros(trials.probe_view.shape[0], 1)
+            recall_drive = self.g(torch.cat([trials.probe_view, probe_flag], dim=-1))
+        hidden = self.cell(recall_drive, hidden)
         return self.readout(hidden), torch.stack(identity_logits, dim=1)
 
 
@@ -288,7 +349,8 @@ def _recall_losses(
 
 def build_model(
     condition: RecallCondition,
-    item_bank: Float[Tensor, "items feature"],
+    num_items: int,
+    feature_dim: int,
     *,
     state_dim: int,
     hidden_dim: int,
@@ -301,7 +363,8 @@ def build_model(
 
     if condition in ("feedback", "no-feedback"):
         return TensorBrainRecall(
-            item_bank,
+            num_items,
+            feature_dim,
             state_dim=state_dim,
             hidden_dim=hidden_dim,
             evolution=evolution,
@@ -309,7 +372,9 @@ def build_model(
             feedback_gate=feedback_gate if condition == "feedback" else 0.0,
         )
     if condition == "gru":
-        return GRURecall(item_bank, state_dim=state_dim, hidden_dim=gru_hidden_dim)
+        return GRURecall(
+            num_items, feature_dim, state_dim=state_dim, hidden_dim=gru_hidden_dim
+        )
     raise ValueError(f"unknown recall condition: {condition}")
 
 
@@ -317,6 +382,9 @@ def train_condition(
     condition: RecallCondition,
     *,
     delay: int,
+    recall_mode: RecallMode = "silent",
+    view_noise: float = 0.0,
+    probe_mix: float = 0.5,
     num_items: int = 16,
     feature_dim: int = 32,
     state_dim: int = 64,
@@ -325,14 +393,14 @@ def train_condition(
     # Tensor Brain's at the default dimensions; both counts are reported so the
     # comparability is checkable rather than asserted.
     gru_hidden_dim: int = 32,
-    evolution: EvolutionVariant = "qtb-sigmoid",
+    evolution: EvolutionVariant = "qtb-relu",
     score_mode: ScoreMode = "direct",
     feedback_gate: float = 1.0,
     identity_loss_weight: float = 1.0,
     batch_size: int = 128,
     # An under-trained run fails at chance rather than degrading, so too small a
     # budget manufactures a delay wall that looks like a capacity limit. At
-    # delay four this configuration solves 3/3 seeds at 12,000 steps and 0/5 at
+    # delay four the silent task solves 3/3 seeds at 12,000 steps and 0/5 at
     # 3,000. Raise the budget, not the learning rate, before reading a longer
     # delay as unreachable.
     training_steps: int = 12_000,
@@ -343,7 +411,7 @@ def train_condition(
 ) -> RecallResult:
     """Train one condition at one delay and evaluate it on held-out trials.
 
-    Every condition receives the same optimizer, learning rate, gradient clip,
+    Every condition receives the same optimizer, learning rate, gradient clip
     and step budget. Gradient clipping is ordinary practice for training through
     a recurrence and is applied identically everywhere; without it the runs are
     sharply bimodal and a single seed reports initialization rather than
@@ -352,9 +420,15 @@ def train_condition(
 
     torch.manual_seed(seed)
     item_bank = make_item_bank(num_items, feature_dim)
+    trial_options = {
+        "view_noise": view_noise,
+        "recall_mode": recall_mode,
+        "probe_mix": probe_mix,
+    }
     model = build_model(
         condition,
-        item_bank,
+        num_items,
+        feature_dim,
         state_dim=state_dim,
         hidden_dim=hidden_dim,
         gru_hidden_dim=gru_hidden_dim,
@@ -367,7 +441,7 @@ def train_condition(
 
     model.train()
     for _step in range(training_steps):
-        trials = sample_trials(num_items, delay, batch_size)
+        trials = sample_trials(item_bank, delay, batch_size, **trial_options)
         optimizer.zero_grad()
         recall_logits, identity_logits = model(trials)
         loss = _recall_losses(
@@ -383,19 +457,24 @@ def train_condition(
         losses.append(float(loss.detach()))
 
     evaluation = sample_trials(
-        num_items,
+        item_bank,
         delay,
         evaluation_trials,
         generator=torch.Generator().manual_seed(EVALUATION_SEED),
+        **trial_options,
     )
     model.eval()
     with torch.no_grad():
         recall_logits, identity_logits = model(evaluation)
-        recall_accuracy = float(
-            (recall_logits.argmax(dim=-1) == evaluation.cue).float().mean()
-        )
+        decoded = recall_logits.argmax(dim=-1)
+        recall_accuracy = float((decoded == evaluation.cue).float().mean())
         identity_accuracy = float(
             (identity_logits.argmax(dim=-1) == evaluation.presented).float().mean()
+        )
+        lure_rate = (
+            float((decoded == evaluation.lure).float().mean())
+            if evaluation.lure is not None
+            else 0.0
         )
 
     return RecallResult(
@@ -404,7 +483,11 @@ def train_condition(
         seed=seed,
         recall_accuracy=recall_accuracy,
         identity_accuracy=identity_accuracy,
-        chance=1.0 / num_items,
+        lure_rate=lure_rate,
+        # A probe narrows the answer to the cue and its lure, so a model reading
+        # only the probe scores one half. That, not 1/num_items, is the floor a
+        # probe-mode result has to clear.
+        chance=0.5 if recall_mode == "probe" else 1.0 / num_items,
         parameter_count=sum(
             parameter.numel() for parameter in model.parameters() if parameter.requires_grad
         ),
@@ -417,50 +500,87 @@ def run_gate(
     *,
     delay: int,
     seeds: Sequence[int] = (0, 1, 2, 3, 4),
-    solved_threshold: float = 0.5,
+    solved_margin: float = 0.25,
     **options: Any,
 ) -> GateResult:
     """Aggregate one condition at one delay over seeds.
 
-    ``solved_threshold`` separates the two modes rather than setting a quality
-    bar. At sixteen items, chance is 0.0625 and a maintaining run lands near one,
-    so any cut well inside that gap gives the same solve rate.
+    ``solved_margin`` separates the two modes rather than setting a quality bar:
+    a run counts as solved when it clears chance by that margin. Silent recall
+    lands near one against a chance of 1/16, and probe recall has to clear one
+    half, so the same margin serves both without a mode-specific threshold.
     """
 
     if not seeds:
         raise ValueError("at least one seed is required")
     results = [train_condition(condition, delay=delay, seed=seed, **options) for seed in seeds]
     accuracies = [result.recall_accuracy for result in results]
+    chance = results[0].chance
     return GateResult(
         condition=condition,
         delay=delay,
-        solve_rate=sum(value >= solved_threshold for value in accuracies) / len(accuracies),
+        solve_rate=sum(value >= chance + solved_margin for value in accuracies) / len(accuracies),
         mean_recall_accuracy=sum(accuracies) / len(accuracies),
         best_recall_accuracy=max(accuracies),
         mean_identity_accuracy=sum(result.identity_accuracy for result in results)
         / len(results),
-        chance=results[0].chance,
+        mean_lure_rate=sum(result.lure_rate for result in results) / len(results),
+        chance=chance,
         parameter_count=results[0].parameter_count,
         seeds=tuple(seeds),
     )
 
 
+def _parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--condition", required=True, choices=("feedback", "no-feedback", "gru"))
+    parser.add_argument("--delay", type=int, required=True)
+    parser.add_argument("--recall-mode", default="silent", choices=("silent", "probe"))
+    parser.add_argument("--view-noise", type=float, default=0.0)
+    parser.add_argument("--probe-mix", type=float, default=0.5)
+    parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
+    parser.add_argument(
+        "--evolution", default="qtb-relu", choices=("original", "qtb-sigmoid", "qtb-relu")
+    )
+    parser.add_argument("--num-items", type=int, default=16)
+    parser.add_argument("--training-steps", type=int, default=12_000)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--feedback-gate", type=float, default=1.0)
+    parser.add_argument("--output", type=Path, help="append the gate result as one JSON line")
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    arguments = _parse_arguments(argv)
+    gate = run_gate(
+        arguments.condition,
+        delay=arguments.delay,
+        seeds=tuple(arguments.seeds),
+        recall_mode=arguments.recall_mode,
+        view_noise=arguments.view_noise,
+        probe_mix=arguments.probe_mix,
+        evolution=arguments.evolution,
+        num_items=arguments.num_items,
+        training_steps=arguments.training_steps,
+        learning_rate=arguments.learning_rate,
+        feedback_gate=arguments.feedback_gate,
+    )
+    record = {
+        **vars(gate),
+        "recall_mode": arguments.recall_mode,
+        "view_noise": arguments.view_noise,
+        "evolution": arguments.evolution,
+        "training_steps": arguments.training_steps,
+        "learning_rate": arguments.learning_rate,
+    }
+    record["seeds"] = list(gate.seeds)
+    line = json.dumps(record, sort_keys=True)
+    print(line, flush=True)
+    if arguments.output is not None:
+        arguments.output.parent.mkdir(parents=True, exist_ok=True)
+        with arguments.output.open("a", encoding="utf-8") as handle:
+            handle.write(f"{line}\n")
+
+
 if __name__ == "__main__":
-    _conditions: tuple[RecallCondition, ...] = ("feedback", "no-feedback", "gru")
-    for _evolution in ("qtb-sigmoid", "qtb-relu", "original"):
-        print(f"\nevolution={_evolution}")
-        print(
-            f"{'delay':>6} {'condition':>12} {'solved':>7} "
-            f"{'mean':>7} {'best':>7} {'identity':>9} {'params':>8}"
-        )
-        for _delay in (1, 2, 4, 8, 16):
-            for _condition in _conditions:
-                _gate = run_gate(_condition, delay=_delay, evolution=_evolution)
-                print(
-                    f"{_gate.delay:>6} {_gate.condition:>12} "
-                    f"{_gate.solve_rate:>7.2f} "
-                    f"{_gate.mean_recall_accuracy:>7.3f} "
-                    f"{_gate.best_recall_accuracy:>7.3f} "
-                    f"{_gate.mean_identity_accuracy:>9.3f} "
-                    f"{_gate.parameter_count:>8}"
-                )
+    main()
