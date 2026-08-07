@@ -4,7 +4,14 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1
+#SBATCH --mem=8G
 #SBATCH --array=0-15%16
+
+# `--mem` is host RAM, and 8G is generous: the peak is one shard held before it
+# is written (24 episodes x 1000 steps x 12,288 bytes = 295 MB, briefly doubled
+# by the concatenate) plus MuJoCo and PyTorch. Any value passed to
+# `submit_filter.sh` overrides this, since sbatch command-line arguments win
+# over #SBATCH directives.
 
 set -euo pipefail
 
@@ -23,20 +30,27 @@ set -euo pipefail
 REPOSITORY_ROOT="${TB_REPO_ROOT:-${MASTER_ROOT:-/nfs/data8/harjes/MASTER}/tensor-brain}"
 source "$REPOSITORY_ROOT/cluster/agency/common.sh"
 
-# 600 train / 100 probe / 100 test episodes at 1000 steps: about 9.8 GB.
+# 576 train / 96 probe / 96 test episodes at 1000 steps: about 9.4 GB.
 # Tasks 0-11 render train, 12-13 probe, 14-15 test.
+#
+# 48 episodes per task and 24 per shard, because `CorpusConfig` requires both to
+# be multiples of the batch width (8 environments) -- episodes are produced a
+# full batch at a time, so a count that is not a multiple would leave a partial
+# batch with nowhere to go.
+EPISODES=48
+SHARD_EPISODES=24
+
 TASK="$SLURM_ARRAY_TASK_ID"
 if (( TASK < 12 )); then
-  SPLIT=train; CHUNK=$TASK;  EPISODES=50
+  SPLIT=train; CHUNK=$TASK
 elif (( TASK < 14 )); then
-  SPLIT=probe; CHUNK=$((TASK - 12)); EPISODES=50
+  SPLIT=probe; CHUNK=$((TASK - 12))
 else
-  SPLIT=test;  CHUNK=$((TASK - 14)); EPISODES=50
+  SPLIT=test;  CHUNK=$((TASK - 14))
 fi
 
 # Distinct shard indices so the jobs never collide, and distinct seeds so they
 # never render the same maze twice. Both are required; either alone is a bug.
-SHARD_EPISODES=25
 SHARD_OFFSET=$((CHUNK * EPISODES / SHARD_EPISODES))
 case "$SPLIT" in
   train) SEED_BASE=0 ;;

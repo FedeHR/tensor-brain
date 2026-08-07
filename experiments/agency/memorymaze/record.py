@@ -28,7 +28,9 @@ from experiments.agency.memorymaze.explorer import ExplorerConfig
 # Episodes per split in the reference corpus. Train is what Phase 1 fits on;
 # the probe fits on `probe` and scores on `test`, and both are held out from
 # Phase 1 so a probe never reads a state whose weights saw that episode.
-DEFAULT_EPISODES = {"train": 600, "probe": 100, "test": 100}
+# Multiples of both the batch width (8 environments) and the shard size (24),
+# which `CorpusConfig` enforces.
+DEFAULT_EPISODES = {"train": 576, "probe": 96, "test": 96}
 
 
 def main() -> None:
@@ -39,7 +41,7 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=None)
     parser.add_argument("--episode-steps", type=int, default=1000)
     parser.add_argument("--num-envs", type=int, default=8)
-    parser.add_argument("--shard-episodes", type=int, default=20)
+    parser.add_argument("--shard-episodes", type=int, default=24)
     parser.add_argument("--dwell-mean", type=float, default=6.0)
     parser.add_argument(
         "--seed",

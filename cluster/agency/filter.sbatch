@@ -4,7 +4,18 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
+#SBATCH --mem=16G
 #SBATCH --array=0-26%9
+
+# `--mem` is host RAM. The corpus is read through mmap, so its pages are file
+# cache rather than anonymous memory: under a cgroup they count toward the limit
+# but are reclaimable, so a job is throttled rather than killed. 16G leaves room
+# for the batch tensors and the reader.
+#
+# GPU memory is a separate budget and is not requested here. Activations
+# dominate it and scale with batch_size x segment_steps (24 x 64 by default);
+# if a card is too small, pass --batch-size or --segment-steps through to
+# run_filter.py rather than changing the architecture.
 
 set -euo pipefail
 

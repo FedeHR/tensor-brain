@@ -83,7 +83,9 @@ class CorpusConfig:
     # exactly 1000 steps. Truncating would shorten the only axis the
     # memory-horizon curve varies over.
     episode_steps: int = 1000
-    shard_episodes: int = 20
+    # Both this and `episodes` must be multiples of `num_envs`, since episodes
+    # are produced a full batch at a time. 24 at 1000 steps is a 295 MB shard.
+    shard_episodes: int = 24
     # Environments stepped per process. Rendering does not parallelise inside a
     # process, so this buys convenience, not speed; speed comes from running
     # several record jobs over disjoint episode ranges.
@@ -93,9 +95,20 @@ class CorpusConfig:
 
     def __post_init__(self) -> None:
         if self.episodes % self.num_envs:
-            raise ValueError("episodes must be a multiple of num_envs")
+            raise ValueError(
+                f"episodes ({self.episodes}) must be a multiple of "
+                f"num_envs ({self.num_envs}): episodes are recorded a batch at a time"
+            )
         if self.shard_episodes % self.num_envs:
-            raise ValueError("shard_episodes must be a multiple of num_envs")
+            raise ValueError(
+                f"shard_episodes ({self.shard_episodes}) must be a multiple of "
+                f"num_envs ({self.num_envs})"
+            )
+        if self.episodes % self.shard_episodes:
+            raise ValueError(
+                f"episodes ({self.episodes}) must be a multiple of "
+                f"shard_episodes ({self.shard_episodes}), or the last shard is short"
+            )
 
 
 def _stack(observations: list[dict], key: str, dtype: str) -> np.ndarray:

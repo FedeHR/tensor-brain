@@ -109,13 +109,27 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output-root", type=Path, default=Path("runs/agency/filter"))
     parser.add_argument("--steps", type=int, default=None, help="override Phase-1 steps")
+    # The two knobs that set GPU memory. Activations dominate, and they scale
+    # with the product of these, so halving either roughly halves the footprint.
+    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--segment-steps", type=int, default=None)
     parser.add_argument("--probe-episodes", type=int, default=100)
     parser.add_argument("--in-memory", action="store_true", help="load the corpus into RAM")
     arguments = parser.parse_args()
 
-    train_config = TrainConfig(seed=arguments.seed)
-    if arguments.steps is not None:
-        train_config = TrainConfig(seed=arguments.seed, steps=arguments.steps)
+    defaults = TrainConfig()
+    train_config = TrainConfig(
+        seed=arguments.seed,
+        steps=arguments.steps if arguments.steps is not None else defaults.steps,
+        batch_size=(
+            arguments.batch_size if arguments.batch_size is not None else defaults.batch_size
+        ),
+        segment_steps=(
+            arguments.segment_steps
+            if arguments.segment_steps is not None
+            else defaults.segment_steps
+        ),
+    )
 
     output = run_cell(
         arguments.corpus,

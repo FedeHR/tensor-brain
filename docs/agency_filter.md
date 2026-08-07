@@ -132,10 +132,10 @@ is reported as a gap over that baseline; raw accuracy is not interpretable here.
 
 | | |
 | --- | --- |
-| splits | 600 train / 100 probe / 100 test episodes |
+| splits | 576 train / 96 probe / 96 test episodes |
 | episode | 1000 steps (the 9x9 level runs 250 s at 4 Hz control) |
 | frame | 64x64x3 `uint8` = 12,288 bytes |
-| size | ~9.8 GB |
+| size | ~9.4 GB |
 | render time | ~10 minutes across 16 array tasks |
 
 Behaviour is a **momentum random walk**, not a uniform random policy. The walker is a rolling ball
@@ -153,6 +153,7 @@ re-rendering to revise it. The raw geometry is stored and visibility is derived 
 
 ```bash
 # Cluster, in order. The second requires the first to have finished.
+cluster/agency/setup.sh                      # on a COMPUTE node: uv sync + render smoke test
 cluster/agency/submit_filter.sh corpus --partition=<name> --time=01:00:00
 cluster/agency/submit_filter.sh grid   --partition=<name> --time=04:00:00
 ```

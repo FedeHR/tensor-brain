@@ -9,6 +9,8 @@ source "$SCRIPT_DIRECTORY/common.sh"
 
 mkdir -p \
   "$MEMORYMAZE_RUN_ROOT" \
+  "$MEMORYMAZE_CORPUS_ROOT" \
+  "$FILTER_RUN_ROOT" \
   "$SLURM_LOG_ROOT" \
   "$UV_CACHE_DIR" \
   "$XDG_CACHE_HOME" \

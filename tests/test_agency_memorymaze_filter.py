@@ -286,6 +286,49 @@ def test_zero_masking_is_in_the_grid_as_the_control() -> None:
     assert 0.0 in MASK_PROBABILITIES
 
 
+# ------------------------------------------------------------------- corpus
+
+
+def test_the_default_corpus_config_is_valid() -> None:
+    """Regression: the shipped defaults once violated their own constraint.
+
+    `shard_episodes=20` against `num_envs=8` raised at construction, and no test
+    caught it because every other test passed explicit small values.
+    """
+
+    from experiments.agency.memorymaze.corpus import CorpusConfig
+
+    assert CorpusConfig().shard_episodes % CorpusConfig().num_envs == 0
+
+
+def test_every_shipped_split_size_is_recordable() -> None:
+    """The CLI defaults must satisfy the config's divisibility rules."""
+
+    from experiments.agency.memorymaze.corpus import CorpusConfig
+    from experiments.agency.memorymaze.record import DEFAULT_EPISODES
+
+    for split, episodes in DEFAULT_EPISODES.items():
+        CorpusConfig(episodes=episodes), f"{split} is not recordable"
+
+
+def test_the_cluster_array_chunk_is_recordable() -> None:
+    """The sbatch renders 48 episodes in 24-episode shards; both must divide."""
+
+    from experiments.agency.memorymaze.corpus import CorpusConfig
+
+    CorpusConfig(episodes=48, shard_episodes=24, num_envs=8)
+
+
+@pytest.mark.parametrize(
+    ("episodes", "shard_episodes"), [(50, 24), (48, 25), (48, 32)]
+)
+def test_indivisible_corpus_sizes_fail_loudly(episodes: int, shard_episodes: int) -> None:
+    from experiments.agency.memorymaze.corpus import CorpusConfig
+
+    with pytest.raises(ValueError):
+        CorpusConfig(episodes=episodes, shard_episodes=shard_episodes, num_envs=8)
+
+
 # -------------------------------------------------------------- diagnostics
 
 
