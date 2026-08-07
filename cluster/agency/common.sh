@@ -24,3 +24,8 @@ export PYTHONUNBUFFERED=1
 # spawns a full thread pool and they contend rather than run.
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
+
+# The offline filter study. The corpus is rendered once and replayed by every
+# filter run, so it lives beside the runs rather than inside either.
+MEMORYMAZE_CORPUS_ROOT="${MEMORYMAZE_CORPUS_ROOT:-$AGENCY_RUN_ROOT/corpus}"
+FILTER_RUN_ROOT="${FILTER_RUN_ROOT:-$AGENCY_RUN_ROOT/filter}"

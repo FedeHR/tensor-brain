@@ -23,6 +23,11 @@ The agency research line - action indices, environment coupling, and planning - 
 [Agency results](docs/agency_results.md), carried to a published benchmark in
 [Action indices on BabyAI / MiniGrid](docs/agency_minigrid.md), and tested as a Bayes filter in
 [Is the measurement update a useful Bayes filter?](docs/agency_bayes.md).
+Memory Maze carries it further in two stages: a policy study that probes a trained agent against
+the benchmark's ground truth, in
+[Probing the belief instead of scoring the task](docs/agency_memorymaze.md), and a study that
+trains no policy at all and evaluates the measurement update purely as a belief filter over
+recorded trajectories, in [Memory Maze as a filter benchmark](docs/agency_filter.md).
 
 The repository and distribution are named `tensor-brain`; the import package is the shorter
 `tb` and lives under `src/tb`:

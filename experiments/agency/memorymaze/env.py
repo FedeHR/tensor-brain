@@ -73,7 +73,11 @@ COLOR_NAMES = ("red", "green", "blue")
 DISTANCE_NAMES = ("near", "far")
 NOTHING = "nothing_visible"
 REWARD_POSITIVE = "reward_positive"
-ACTION_NAMES = ("noop", "forward", "back", "left", "right", "turn")
+# The six discrete actions, in the order `memory_maze.tasks` builds them:
+# `DiscreteActionSetWrapper(env, [[0,0], [-1,0], [0,-1], [0,+1], [-1,-1], [-1,+1]])`.
+# The walker is a rolling ball driven by torques, not a grid mover, so these are
+# accelerations and the ball carries momentum between steps.
+ACTION_NAMES = ("noop", "forward", "left", "right", "forward_left", "forward_right")
 NEAR_RADIUS = 3.0
 
 # The maze sizes Memory Maze ships, named by the `memory_maze.tasks` factory that
@@ -187,6 +191,21 @@ class VectorMemoryMaze:
     @property
     def observation_dim(self) -> int:
         return IMAGE_SIDE * IMAGE_SIDE * 3
+
+    def raw_observations(self) -> list[dict]:
+        """The per-environment observation dicts exactly as Memory Maze emits them.
+
+        The corpus recorder needs fields this adapter does not otherwise surface
+        (``targets_vec``, ``maze_layout``), and needs them without the float cast
+        ``ground_truth`` applies, so it reads the dicts directly.
+        """
+
+        return self._observations
+
+    def target_slots(self) -> np.ndarray:
+        """Which of the three targets is currently requested, as a slot index."""
+
+        return self._target_slots()
 
     def _target_slots(self) -> np.ndarray:
         """Which of the three targets is currently being asked for.

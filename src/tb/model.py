@@ -145,6 +145,7 @@ class TensorBrain(nn.Module):
         selection: Literal["teacher", "sample", "argmax"] = "sample",
         retain_gate: Float[Tensor, "..."] | float = 1.0,
         feedback_gate: Float[Tensor, "..."] | float = 1.0,
+        drift_correction: bool = False,
     ) -> tuple[
         Float[Tensor, "*batch state"],
         Int[Tensor, "*batch"],
@@ -161,6 +162,22 @@ class TensorBrain(nn.Module):
         index layer. The update is
         :math:`q' = \alpha q + \beta a_k`. Gates may be tensors, including
         learned parameters; their parameterization is owned by the experiment.
+
+        ``drift_correction`` replaces the write :math:`a_k` with the centered
+        write :math:`a_k - \sum_j p_j a_j`, which is the same sample with its
+        expectation under the candidate distribution removed. The motivation is
+        empirical rather than paper-faithful: the raw write has nonzero mean, so
+        repeated measurement pushes ``q`` along :math:`\mathbb{E}_p[a]` until
+        units saturate, and saturated units carry no information. Subtracting
+        the mean is a control variate -- it leaves the *contrast* between the
+        drawn index and the alternatives, which is the part that identifies
+        which index was drawn, and removes the part that does not.
+
+        Note the limiting behaviour, because it bounds what this variant can do:
+        as the candidate softmax sharpens, :math:`p \to \delta_k` and the
+        correction cancels the write entirely. So this is a fix for the diffuse,
+        many-measurements regime, and reduces to no feedback at all in the sharp
+        regime.
         """
 
         indices = self._resolve_candidate_indices(candidates, q.device)
@@ -182,6 +199,8 @@ class TensorBrain(nn.Module):
                 "measurement selection mode not supported, must be one of sample, argmax"
             )
         outcome_embedding = self.A.T[outcome_index]
+        if drift_correction:
+            outcome_embedding = outcome_embedding - probabilities @ self.A[:, indices].T
         q_next = retain_gate * q + feedback_gate * outcome_embedding
         return q_next, outcome_index, probabilities
 

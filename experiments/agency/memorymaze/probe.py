@@ -45,6 +45,7 @@ from torch import Tensor
 
 from experiments.agency.agent import TensorBrainAgent
 from experiments.agency.memorymaze.env import COLOR_NAMES, VectorMemoryMaze
+from experiments.agency.memorymaze.linear_probe import classification_probe, regression_probe
 
 # Ground-truth fields worth probing, and why each is included.
 REGRESSION_TARGETS: dict[str, str] = {
@@ -130,72 +131,33 @@ def record(
     )
 
 
-def _ridge(
-    inputs: Float[Tensor, "samples width"],
-    outputs: Float[Tensor, "samples dims"],
-    penalty: float,
-) -> Float[Tensor, "width1 dims"]:
-    """Closed-form ridge regression with an unpenalised bias column."""
-
-    design = torch.cat([inputs, torch.ones(inputs.shape[0], 1)], dim=1).double()
-    gram = design.T @ design
-    regularizer = penalty * torch.eye(gram.shape[0], dtype=gram.dtype)
-    regularizer[-1, -1] = 0.0  # never penalise the bias
-    return torch.linalg.solve(gram + regularizer, design.T @ outputs.double())
-
-
-def _apply(
-    weights: Float[Tensor, "width1 dims"], inputs: Float[Tensor, "samples width"]
-) -> Float[Tensor, "samples dims"]:
-    return torch.cat([inputs, torch.ones(inputs.shape[0], 1)], dim=1).double() @ weights
-
-
 def probe_regression(
     train: Recording, test: Recording, key: str, *, penalty: float = 1.0
 ) -> dict[str, float]:
-    r"""Fit state -> ground truth and report held-out :math:`R^2`.
+    r"""Fit state -> ground truth and report held-out :math:`R^2`."""
 
-    :math:`R^2` is computed against the *test* mean, so 0 is the score of
-    predicting the mean and a negative score means the probe is worse than that.
-    """
-
-    target_train = train.ground_truth[key]
-    target_test = test.ground_truth[key]
-    weights = _ridge(train.state, target_train, penalty)
-    prediction = _apply(weights, test.state)
-
-    residual = ((prediction - target_test.double()) ** 2).sum()
-    total = ((target_test.double() - target_test.double().mean(dim=0)) ** 2).sum()
-    return {
-        "r2": float(1.0 - residual / total.clamp_min(1e-12)),
-        "rmse": float(((prediction - target_test.double()) ** 2).mean().sqrt()),
-        "dims": int(target_test.shape[1]),
-    }
+    return regression_probe(
+        train.state,
+        train.ground_truth[key],
+        test.state,
+        test.ground_truth[key],
+        penalty=penalty,
+    )
 
 
 def probe_colors(
     train: Recording, test: Recording, *, penalty: float = 1.0
 ) -> dict[str, float]:
-    """Linear probe for *which colour is nearest*, the quantity (2) reads natively.
+    """Linear probe for *which colour is nearest*, the quantity (2) reads natively."""
 
-    Fitting one-hot targets by least squares and taking the argmax is the linear
-    readout in its simplest deterministic form; it is what makes this number
-    comparable across architectures rather than a property of an optimiser.
-    """
-
-    classes = len(COLOR_NAMES) + 1  # the three colours plus "nothing visible"
-    onehot = torch.zeros(len(train), classes)
-    onehot.scatter_(1, train.percept_label[:, None], 1.0)
-    weights = _ridge(train.state, onehot, penalty)
-    predicted = _apply(weights, test.state).argmax(dim=1)
-
-    correct = (predicted == test.percept_label).double().mean()
-    majority = test.percept_label.bincount(minlength=classes).max() / len(test)
-    return {
-        "accuracy": float(correct),
-        "majority_baseline": float(majority),
-        "chance": 1.0 / classes,
-    }
+    return classification_probe(
+        train.state,
+        train.percept_label,
+        test.state,
+        test.percept_label,
+        classes=len(COLOR_NAMES) + 1,  # the three colours plus "nothing visible"
+        penalty=penalty,
+    )
 
 
 def native_readout(recording: Recording) -> dict[str, float] | None:
