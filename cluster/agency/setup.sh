@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prepare the cluster for the Memory Maze study and prove the rendering backend
-# works *before* an array job discovers otherwise nine times in parallel.
+# Create the run roots and sync the Python 3.12 environment.
+#
+# This half needs the **network** and no GPU, so it is safe on a login node --
+# and it is also what `setup.sbatch` runs, for a cluster where the login node
+# has no network or where interactive work is not allowed at all.
+#
+# The other half, proving that MuJoCo can render, needs a **GPU** and no
+# network. It lives in `render_check.sh` and is submitted through
+# `submit_filter.sh setup`.
 
 SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIRECTORY/common.sh"
@@ -19,25 +26,9 @@ mkdir -p \
 cd "$TB_REPO_ROOT"
 uv sync --frozen --python "$MEMORYMAZE_PYTHON_VERSION" --extra memorymaze
 
-# The smoke test: build one environment, take one step, and confirm the
-# observation is the 64x64 RGB image the encoder expects and that ground truth
-# is present. Run this on a *compute* node, not the login node -- the login node
-# usually has no GPU, so EGL will fail there even when the batch nodes are fine.
-uv run --frozen --no-sync --python "$MEMORYMAZE_PYTHON_VERSION" python - <<'PYTHON'
-import os
-import torch
-
-from experiments.agency.memorymaze.env import VectorMemoryMaze
-
-environment = VectorMemoryMaze(1, seed=0)
-observation = environment.observation()
-truth = environment.ground_truth()
-environment.step(torch.zeros(1, dtype=torch.long))
-print(f"MUJOCO_GL={os.environ['MUJOCO_GL']}")
-print(f"observation={tuple(observation.shape)} expected=(1, {environment.observation_dim})")
-assert observation.shape == (1, environment.observation_dim)
-assert {"agent_pos", "targets_pos", "target_slot"} <= set(truth)
-print("ground truth:", {key: tuple(value.shape) for key, value in truth.items()})
-environment.close()
-print("memory maze OK")
-PYTHON
+echo
+echo "Environment synced. Rendering is not verified yet -- it needs a GPU."
+echo "Submit the render check with:"
+echo
+echo "    cluster/agency/submit_filter.sh setup --partition=<name> --time=00:15:00"
+echo

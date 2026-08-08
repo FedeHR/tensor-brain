@@ -151,9 +151,12 @@ re-rendering to revise it. The raw geometry is stored and visibility is derived 
 
 ## 6. Reproduce
 
+Every stage is a batch job; none of it needs an interactive compute node. Each stage requires the
+previous one to have finished, and there is no dependency wiring, so check the log before
+submitting the next.
+
 ```bash
-# Cluster, in order. The second requires the first to have finished.
-cluster/agency/setup.sh                      # on a COMPUTE node: uv sync + render smoke test
+cluster/agency/submit_filter.sh setup  --partition=<name> --time=00:30:00
 cluster/agency/submit_filter.sh corpus --partition=<name> --time=01:00:00
 cluster/agency/submit_filter.sh grid   --partition=<name> --time=04:00:00
 ```

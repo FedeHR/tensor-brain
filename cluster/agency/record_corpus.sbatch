@@ -71,6 +71,14 @@ if [[ -n "${CUDA_VISIBLE_DEVICES:-}" && "$MUJOCO_GL" == "egl" ]]; then
   export MUJOCO_EGL_DEVICE_ID="${CUDA_VISIBLE_DEVICES%%,*}"
 fi
 
+# Preflight. A few seconds, and it turns "this task occupied a slot for an hour
+# without ever producing a frame" into an immediate, legible failure.
+if ! cluster/agency/render_check.sh; then
+  echo "preflight FAILED: no usable rendering backend (MUJOCO_GL=$MUJOCO_GL)." >&2
+  echo "On a node without a usable EGL device, resubmit with MUJOCO_GL=osmesa." >&2
+  exit 1
+fi
+
 uv run --frozen --no-sync --python "$MEMORYMAZE_PYTHON_VERSION" \
   python -m experiments.agency.memorymaze.record \
   --root "$MEMORYMAZE_CORPUS_ROOT" \

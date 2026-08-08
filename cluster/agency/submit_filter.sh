@@ -2,23 +2,31 @@
 set -euo pipefail
 
 # Submit one stage of the offline filter study. Extra arguments pass through to
-# `sbatch`, which is where partition and time limit belong:
+# `sbatch`, which is where partition, time limit, memory and GPU belong -- and
+# sbatch command-line arguments override the #SBATCH directives in the scripts,
+# so nothing here needs editing to change resources:
 #
+#   cluster/agency/submit_filter.sh setup  --partition=<name> --time=00:15:00
 #   cluster/agency/submit_filter.sh corpus --partition=<name> --time=01:00:00
-#   cluster/agency/submit_filter.sh grid   --partition=<name> --time=04:00:00
+#   cluster/agency/submit_filter.sh grid   --partition=<name> --time=04:00:00 --mem=32G
 #
-# `corpus` renders the offline trajectories once; `grid` fits and probes the
-# nine conditions at three masking levels over that corpus. The second requires
-# the first to have finished.
+# `setup` syncs the environment and proves MuJoCo can render; `corpus` renders
+# the offline trajectories once; `grid` fits and probes the nine conditions at
+# three masking levels over that corpus. Each stage requires the previous one to
+# have finished -- there is no dependency wiring, so check the logs before
+# submitting the next.
+#
+# Every stage is a batch job, so none of this needs an interactive node.
 
 SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIRECTORY/common.sh"
 
 STAGE="${1:-}"
 case "$STAGE" in
+  setup)  BATCH="$SCRIPT_DIRECTORY/setup.sbatch" ;;
   corpus) BATCH="$SCRIPT_DIRECTORY/record_corpus.sbatch" ;;
   grid)   BATCH="$SCRIPT_DIRECTORY/filter.sbatch" ;;
-  *) echo "usage: $0 {corpus|grid} [sbatch arguments...]" >&2; exit 2 ;;
+  *) echo "usage: $0 {setup|corpus|grid} [sbatch arguments...]" >&2; exit 2 ;;
 esac
 shift
 

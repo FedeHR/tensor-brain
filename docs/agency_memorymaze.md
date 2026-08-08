@@ -117,12 +117,17 @@ MUJOCO_GL=glfw uv run --frozen --no-sync python -m experiments.agency.memorymaze
 On the cluster:
 
 ```bash
-# On a compute node: syncs the 3.12 environment and proves the render backend works.
-# Run it there, not on the login node -- a login node usually has no GPU, so EGL
-# fails there even when the batch nodes are fine.
+# Setup as a batch job: syncs the 3.12 environment and proves the render backend
+# works. Submitted rather than run directly, because the sync needs the network
+# and the render check needs a GPU, and neither belongs on a login node.
+cluster/agency/submit_filter.sh setup --partition=<name> --time=00:30:00
+
+# If the compute nodes have no network access, sync on the login node first --
+# `setup.sh` is idempotent, so the job above will then only run the render check.
 cluster/agency/setup.sh
 
-# Nine array tasks: three conditions at three seeds.
+# Nine array tasks: three conditions at three seeds. Use `--array=0,3,6` for
+# seed 0 only, since the task index encodes condition and seed together.
 cluster/agency/submit_memorymaze.sh --partition=<name> --time=04:00:00
 
 # Then, over the finished checkpoints:
