@@ -156,6 +156,16 @@ def main() -> None:
     walk(score)
     print(f"score: [{time.time() - started:.0f}s]", flush=True)
 
+    # Leave-one-out subtracts each observation from the accumulated total, which is
+    # only valid if the score pass replays exactly the events the fit pass saw.
+    # Decoding is greedy and the prompts are fixed, so it should -- but a silent
+    # divergence would corrupt every additive number, so check rather than assume.
+    replayed = grid_count["additive"]
+    accumulated = int(accumulators.count.sum())
+    if replayed != accumulated:
+        print(f"WARNING: score pass replayed {replayed} corrections but the fit pass "
+              f"accumulated {accumulated}; leave-one-out is not exact", flush=True)
+
     summary = report.summary()
     counts_by = {k: len(v) for k, v in report.rows.items()}
     base = summary["kl_do_nothing"]
