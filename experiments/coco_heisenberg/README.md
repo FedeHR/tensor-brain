@@ -90,6 +90,99 @@ is a product of Bernoullis. It is included as the ceiling that separates "the
 update rule is wrong" from "the factorized prior is wrong", which the scoping
 work showed are confounded and must be reported apart.
 
+## The takeaway
+
+Run: 117,266 images, 93,813 train / 23,453 held out, `n = 12`, `K = 1000`, 6,000
+evaluation images per point, `A` fitted in 14 s on CPU. Held-out symbol NLL
+**5.639** against 6.908 for a uniform vocabulary, so the index layer carries
+1.27 nats about the named word — it is not collapsing to an indicator matrix.
+`Var[log Z] = 0.0139`, affine fraction **0.690**. Every rule agrees with the
+reference implementation to ≤ 2.2e-15.
+
+**In one sentence: with a genuinely learned index layer, the Heisenberg update is
+an excellent approximation, and — up to a measurable amount of evidence — a
+*better decision rule* than the exact Bayesian posterior it approximates.**
+
+Four findings, in the order they matter.
+
+### 1. Fidelity and downstream quality disagree, and the crossover is locatable
+
+![dissociation](../../output/coco_heisenberg/figures/01_dissociation.png)
+
+At `M = 4` the Heisenberg belief is the **furthest of the four rules** from the
+exact posterior (0.078 nats of marginal KL, against ADF's 0.002) and
+simultaneously **predicts the true supercategories better than exact Bayes
+does** (−0.025 nats of NLL, 95% CI [−0.033, −0.017]). By `M = 6` that reverses,
+and at `M = 8` exact Bayes is ahead by 0.158 nats.
+
+![contrasts](../../output/coco_heisenberg/figures/02_contrasts.png)
+
+So the honest answer to "is the additive rule good enough?" is **not a single
+number but a budget**: it is better than exact inference while fewer than about
+five symbols have been absorbed, and worse after. The quadratic error law is what
+sets the boundary, which makes the boundary predictable rather than empirical.
+
+The likely mechanism — and it should be presented as a hypothesis, because this
+experiment does not isolate it — is that two misspecifications partly cancel. The
+factorized prior misses the strong positive correlations between supercategories
+(`kitchen`+`food`+`appliance`), which makes exact Bayes under that prior
+*under*-confident about co-occurring categories; dropping `log Z` makes the
+additive rule *over*-confident. The `exact-empirical-prior` row supports this:
+given the correct joint prior, NLL falls sharply at every `M`.
+
+**Consequence for the thesis:** posterior fidelity is a diagnostic, not the
+objective. A chapter that reported only KL would have concluded the additive rule
+is uniformly worse, which is false for the decision the state actually feeds.
+
+### 2. The gauge fix is free and wins everywhere
+
+`q ← q + a_k − c`, with `c` the least-squares slope of `log Z` under the prior,
+is `O(n)`, exactly order-invariant, and a **re-normalization of trained weights**
+rather than a change to the inference loop. It improves downstream NLL at every
+`M` — −0.007, −0.024, −0.083, −0.154, **−0.235** nats — on 68–76% of individual
+images, and cuts ECE at `M = 8` from 0.060 to **0.021**.
+
+Chapter 4 derives this correction (around line 1054) and never implements it.
+This is its first measurement, and it is the clearest practical recommendation
+the experiment produces: **always gauge-fix a trained index layer.**
+
+### 3. The `M²` error law survives the move to a learned layer
+
+![error law](../../output/coco_heisenberg/figures/03_error_law.png)
+
+The law was derived and tested on synthetic i.i.d. Gaussian `A`. On `A` fitted to
+COCO captions the measured exponent is **1.99 over `M ≤ 4`** and 1.92 over the
+full range — the shape transfers intact.
+
+The coefficient needs care, and this is worth stating precisely because it is
+easy to get wrong: the law is `KL ≈ ½M²·Var_{P(·|k)}[log Z]`, weighted by the
+**posterior**. Using the prior-weighted variance over-predicts by 29% at `M = 1`
+and 41% at `M = 8`; using the posterior-weighted variance the ratio is 0.75 at
+`M = 1` and **0.94 at `M = 8`**. The posterior concentrates as evidence
+accumulates, so the prior-weighted variance drifts further wrong exactly where
+the error is largest.
+
+### 4. Most of the remaining error is the prior, not the update rule
+
+![error budget](../../output/coco_heisenberg/figures/04_error_budget.png)
+
+Splitting the gap to the best belief reachable with the correct joint prior: the
+update rule costs between −0.03 and +0.16 nats, the **factorized prior costs
+0.24–0.38 nats at every `M`** — two to twenty times more. No agent whose state is
+a product of Bernoullis can recover that, whatever its update rule.
+
+**Consequence:** effort spent on better update rules is capped. The `O(nK)`
+prediction-error correction demonstrates this directly — it improves fidelity
+but *hurts* downstream NLL at `M = 2, 4, 6`, and is beaten at every `M` by the
+free `O(n)` gauge fix.
+
+### What this does not show
+
+The measurement-process question is untouched. Only the caption channel is used
+here, so the gated-versus-exhaustive contrast — the one that would test the
+saliency-gating claim on real data — is still open, and with it the τ estimate.
+`A` is also fitted once; the sweep varies evaluation images, not fit seeds.
+
 ## Caveats worth stating in the thesis
 
 - The five captions per image are **not** conditionally independent given `x`;

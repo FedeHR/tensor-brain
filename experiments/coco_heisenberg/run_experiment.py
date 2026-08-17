@@ -109,6 +109,7 @@ def main() -> None:
 
     sweep: dict[str, dict[str, dict[str, float]]] = {}
     paired: dict[str, dict[str, dict[str, float]]] = {}
+    posterior_variance: dict[str, float] = {}
     for count in args.symbol_counts:
         started = time.time()
         rows, per_image = E.evaluate(
@@ -121,6 +122,11 @@ def main() -> None:
             rows, DOWNSTREAM,
         )
         _print_table(f"M = {count}   (fidelity to the exact posterior, nats)", rows, FIDELITY)
+
+        # the error law wants the posterior-weighted variance, not the prior one
+        posterior_variance[str(count)] = E.posterior_partition_variance(
+            pre, test, num_symbols=count, seed=args.seed, limit=min(args.limit, 2000)
+        )
 
         contrasts = {}
         print(f"\nM = {count}   paired per-image differences (negative favours the first rule)")
@@ -163,6 +169,7 @@ def main() -> None:
         "cross_check": checks,
         "sweep": sweep,
         "paired": paired,
+        "posterior_partition_variance": posterior_variance,
         "categories": corpus.categories,
         "source": _revision(Path(__file__).resolve().parents[2]),
     }

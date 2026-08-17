@@ -87,6 +87,44 @@ def affine_correction(pre: Precomputed) -> torch.Tensor:
     return solution[1:, 0]
 
 
+def posterior_partition_variance(
+    pre: Precomputed,
+    corpus: Corpus,
+    *,
+    num_symbols: int,
+    seed: int = 0,
+    limit: int = 2000,
+) -> float:
+    """Mean of ``Var_{P(x|k)}[log Z]`` over evaluation images.
+
+    The error law is ``KL ~ (M^2/2) Var_{P(.|k)}[log Z]`` -- the variance is
+    weighted by the **posterior**, not the prior. The posterior concentrates as
+    evidence accumulates, so the prior-weighted variance systematically
+    over-predicts, and by more at larger ``M``.
+    """
+
+    rng = np.random.default_rng(seed)
+    order = np.arange(corpus.num_images)
+    if limit < len(order):
+        order = rng.choice(order, size=limit, replace=False)
+
+    values: list[float] = []
+    for index in order:
+        available = corpus.symbols[int(index)]
+        if len(available) < num_symbols:
+            continue
+        revealed = rng.permutation(len(available))[:num_symbols]
+        ks = torch.as_tensor(
+            [int(available[j]) for j in sorted(revealed)], dtype=torch.long
+        )
+        posterior = torch.softmax(
+            pre.log_prior_factorized + pre.log_cond[:, ks].sum(dim=1), dim=0
+        )
+        mean = (posterior * pre.log_partition).sum()
+        values.append(float((posterior * (pre.log_partition - mean) ** 2).sum()))
+    return float(np.mean(values))
+
+
 def log_partition_stats(pre: Precomputed) -> dict[str, float]:
     weight = torch.softmax(pre.log_prior_factorized, dim=0)
     mean = (weight * pre.log_partition).sum()
