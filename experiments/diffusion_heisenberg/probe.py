@@ -65,6 +65,19 @@ class Accumulators:
             return None
         return (self.total[row] - delta.to(DTYPE).cpu()) / (self.count[row] - 1)
 
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save({"vocab_size": self.vocab_size, "tokens": self.tokens,
+                    "total": self.total, "count": self.count}, path)
+
+    @classmethod
+    def load(cls, path: Path) -> Accumulators:
+        payload = torch.load(path, weights_only=True)
+        instance = cls(vocab_size=payload["vocab_size"], tokens=list(payload["tokens"]))
+        instance.total = payload["total"]
+        instance.count = payload["count"]
+        return instance
+
 
 def materialize(name: str, cache: Path) -> Path:
     """Snapshot the repo locally and drop a dead demo import from its modeling file.
@@ -158,27 +171,51 @@ def _kl(log_p: torch.Tensor, log_q: torch.Tensor) -> torch.Tensor:
     return (log_p.exp() * (log_p - log_q)).sum(-1)
 
 
+def scaled_kl_curve(
+    reference: torch.Tensor,
+    baseline: torch.Tensor,
+    direction: torch.Tensor,
+    scales: torch.Tensor,
+) -> torch.Tensor:
+    r"""``KL(reference ‖ softmax(baseline + s·direction))`` for every ``s``.
+
+    With ``baseline`` already normalized (``logsumexp = 0``) the curve is
+
+        KL(s) = KL(0) + logsumexp(baseline + s·direction) − s·⟨p, direction⟩
+
+    so each scale costs one log-sum-exp rather than a full log-softmax and a
+    weighted sum, and ``⟨p, direction⟩`` is computed once. Exact, not an
+    approximation -- it is the same quantity, rearranged.
+    """
+
+    probability = reference.exp()
+    base = float(_kl(reference, baseline))
+    projection = float(probability @ direction)
+    values = torch.empty(len(scales))
+    for index, scale in enumerate(scales.tolist()):
+        shift = float(torch.logsumexp(baseline + scale * direction, dim=-1))
+        values[index] = base + shift - scale * projection
+    return values
+
+
 def best_scaled_kl(
     reference: torch.Tensor,
     baseline: torch.Tensor,
     direction: torch.Tensor,
     scales: torch.Tensor,
 ) -> tuple[float, float]:
-    """Smallest ``KL(reference ‖ softmax(baseline + s·direction))`` over ``s``.
+    """Smallest ``KL`` over ``scales``, and the scale that achieves it.
 
-    Fitting ``s`` by least squares in logit space is not the same as minimising
-    KL, and can land on a scale that makes the approximation worse than doing
-    nothing. Searching the scale directly gives the honest best case for this
-    direction, and includes ``s = 0`` so it can never be worse than the baseline.
+    Fitting the scale by least squares in logit space is not the same as
+    minimising KL, and can land on a value that makes the approximation worse
+    than doing nothing. Searching KL directly gives the honest best case for this
+    direction, and the grid includes ``s = 0`` so it can never lose to the
+    baseline.
     """
 
-    best_kl, best_scale = float("inf"), 0.0
-    for scale in scales.tolist():
-        candidate = (baseline + scale * direction).log_softmax(-1)
-        value = float(_kl(reference, candidate))
-        if value < best_kl:
-            best_kl, best_scale = value, scale
-    return best_kl, best_scale
+    curve = scaled_kl_curve(reference, baseline, direction, scales)
+    index = int(curve.argmin())
+    return float(curve[index]), float(scales[index])
 
 
 @dataclass
@@ -194,7 +231,18 @@ class Report:
         return {k: float(sum(v) / len(v)) for k, v in self.rows.items() if v}
 
 
-def free_correction(model, token: int) -> torch.Tensor:
+def embedding_matrix(model) -> torch.Tensor:
+    """A single float32 copy of the embedding table, held on the CPU.
+
+    Materializing this per call is what makes the free correction expensive: at
+    151,936 x 1024 a float32 copy is ~600 MB, and building one for every committed
+    token exhausts an accelerator quickly. Build it once, keep it off the device.
+    """
+
+    return model.get_input_embeddings().weight.detach().to(DTYPE).cpu()
+
+
+def free_correction(embedding: torch.Tensor, token: int) -> torch.Tensor:
     """The parameter-free correction: unembedding applied to the token's embedding.
 
     With tied weights the unembedding *is* the embedding matrix, so this is the
@@ -202,9 +250,7 @@ def free_correction(model, token: int) -> torch.Tensor:
     vocabulary entry is to the one just written. No fitting, no new parameters.
     """
 
-    embedding = model.get_input_embeddings().weight
-    vector = embedding[token].to(DTYPE)
-    return (embedding.to(DTYPE) @ vector)
+    return embedding @ embedding[token]
 
 
 def load_questions(path: Path, limit: int) -> list[str]:

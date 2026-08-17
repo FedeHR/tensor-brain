@@ -42,6 +42,8 @@ def main() -> None:
     parser.add_argument("--device", default=None)
     parser.add_argument("--output", type=Path, default=Path("output/diffusion_heisenberg"))
     parser.add_argument("--model-cache", type=Path, default=Path("data/models"))
+    parser.add_argument("--reuse-fit", action="store_true",
+                        help="load the cached scan/fit instead of recomputing them")
     args = parser.parse_args()
 
     device = args.device or ("cuda" if torch.cuda.is_available() else
@@ -64,38 +66,54 @@ def main() -> None:
                                       max_targets=args.max_targets, exclude=exclude):
                 handler(*event)
 
-    # ---- scan -------------------------------------------------------------
-    started = time.time()
-    counts: Counter = Counter()
-    walk(lambda token, *_: counts.update([token]))
-    probe_tokens = [t for t, c in counts.most_common(args.probe_tokens)
-                    if c >= args.min_observations]
-    print(f"scan: {sum(counts.values())} commits, {len(counts)} distinct tokens, "
-          f"{len(probe_tokens)} with >= {args.min_observations} observations "
-          f"[{time.time() - started:.0f}s]", flush=True)
-    if not probe_tokens:
-        raise SystemExit("no token committed often enough; raise --num-questions")
-    print("  most committed: " +
-          ", ".join(f"{tokenizer.decode([t])!r}×{counts[t]}" for t in probe_tokens[:10]),
-          flush=True)
+    # Scan and fit are deterministic given the questions and the model, so their
+    # result is cached: scoring is the part worth iterating on.
+    checkpoint = args.output / "fit.pt"
+    counts_path = args.output / "counts.json"
 
-    # ---- fit --------------------------------------------------------------
-    accumulators = P.Accumulators(vocab_size=model.config.vocab_size, tokens=probe_tokens)
+    if args.reuse_fit and checkpoint.exists() and counts_path.exists():
+        accumulators = P.Accumulators.load(checkpoint)
+        counts = Counter({int(k): v for k, v in json.loads(counts_path.read_text()).items()})
+        probe_tokens = accumulators.tokens
+        print(f"reusing cached fit: {len(probe_tokens)} probe tokens, "
+              f"{int(accumulators.count.sum())} corrections", flush=True)
+    else:
+        started = time.time()
+        counts = Counter()
+        walk(lambda token, *_: counts.update([token]))
+        probe_tokens = [t for t, c in counts.most_common(args.probe_tokens)
+                        if c >= args.min_observations]
+        print(f"scan: {sum(counts.values())} commits, {len(counts)} distinct tokens, "
+              f"{len(probe_tokens)} with >= {args.min_observations} observations "
+              f"[{time.time() - started:.0f}s]", flush=True)
+        if not probe_tokens:
+            raise SystemExit("no token committed often enough; raise --num-questions")
+        print("  most committed: " +
+              ", ".join(f"{tokenizer.decode([t])!r}×{counts[t]}" for t in probe_tokens[:10]),
+              flush=True)
+
+        accumulators = P.Accumulators(vocab_size=model.config.vocab_size, tokens=probe_tokens)
+        probe_only = set(probe_tokens)
+        started = time.time()
+
+        def accumulate(token, position, targets, before, after) -> None:
+            if token not in probe_only:
+                return
+            for j in targets:
+                accumulators.add(token, after[j] - before[j])
+
+        walk(accumulate)
+        print(f"fit: accumulated {int(accumulators.count.sum())} corrections "
+              f"[{time.time() - started:.0f}s]", flush=True)
+        args.output.mkdir(parents=True, exist_ok=True)
+        accumulators.save(checkpoint)
+        counts_path.write_text(json.dumps({str(k): v for k, v in counts.items()}))
+
     probe_set = set(probe_tokens)
-    started = time.time()
-
-    def accumulate(token, position, targets, before, after) -> None:
-        if token not in probe_set:
-            return
-        for j in targets:
-            accumulators.add(token, after[j] - before[j])
-
-    walk(accumulate)
-    print(f"fit: accumulated {int(accumulators.count.sum())} corrections "
-          f"[{time.time() - started:.0f}s]", flush=True)
 
     # ---- score ------------------------------------------------------------
     report = P.Report()
+    embedding = P.embedding_matrix(model)
     free_cache: dict[int, torch.Tensor] = {}
     scales = torch.linspace(0.0, 1.5, 16)
     started = time.time()
@@ -109,7 +127,7 @@ def main() -> None:
         if token not in probe_set:
             return
         if token not in free_cache:
-            free_cache[token] = P.free_correction(model, token).cpu()
+            free_cache[token] = P.free_correction(embedding, token)
         free = free_cache[token]
         for j in targets:
             reference = after[j].cpu()
@@ -126,10 +144,7 @@ def main() -> None:
             for name, direction in (("additive", mean), ("free", free)):
                 if direction is None:
                     continue
-                curve = torch.tensor([
-                    float(P._kl(reference, (baseline + s * direction).log_softmax(-1)))
-                    for s in scales.tolist()
-                ])
+                curve = P.scaled_kl_curve(reference, baseline, direction, scales)
                 grid[name] += curve
                 grid_count[name] += 1
                 report.add(f"kl_{name}_oracle", float(curve.min()))

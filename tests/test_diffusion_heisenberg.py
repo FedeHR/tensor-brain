@@ -48,6 +48,53 @@ def test_kl_is_zero_for_identical_rows_and_positive_otherwise():
     assert float(P._kl(a, b)) > 0.0
 
 
+def test_scaled_kl_curve_matches_the_naive_computation():
+    """The rearranged curve must equal a full log-softmax evaluation, exactly."""
+
+    torch.manual_seed(0)
+    reference = torch.randn(40).log_softmax(-1)
+    baseline = torch.randn(40).log_softmax(-1)
+    direction = torch.randn(40)
+    scales = torch.linspace(0.0, 1.5, 7)
+
+    fast = P.scaled_kl_curve(reference, baseline, direction, scales)
+    naive = torch.tensor([
+        float(P._kl(reference, (baseline + s * direction).log_softmax(-1)))
+        for s in scales.tolist()
+    ])
+    assert torch.allclose(fast, naive, atol=1e-5)
+
+
+def test_scaled_kl_curve_starts_at_the_do_nothing_value():
+    reference = torch.tensor([0.6, 0.3, 0.1]).log()
+    baseline = torch.tensor([0.2, 0.3, 0.5]).log()
+    curve = P.scaled_kl_curve(reference, baseline, torch.randn(3),
+                              torch.tensor([0.0, 0.5]))
+    assert float(curve[0]) == pytest.approx(float(P._kl(reference, baseline)), abs=1e-6)
+
+
+def test_free_correction_is_the_gram_column():
+    embedding = torch.randn(7, 3)
+    correction = P.free_correction(embedding, 2)
+    assert torch.allclose(correction, embedding @ embedding[2])
+    # the committed token is its own best match
+    assert int(correction.argmax()) == 2
+
+
+def test_accumulators_round_trip_through_disk(tmp_path):
+    acc = P.Accumulators(vocab_size=5, tokens=[3, 9])
+    acc.add(3, torch.arange(5, dtype=torch.float32))
+    acc.add(9, torch.ones(5))
+    path = tmp_path / "fit.pt"
+    acc.save(path)
+
+    restored = P.Accumulators.load(path)
+    assert restored.tokens == [3, 9]
+    assert torch.equal(restored.total, acc.total)
+    assert torch.equal(restored.count, acc.count)
+    assert restored.index == acc.index
+
+
 def test_best_scaled_kl_never_loses_to_doing_nothing():
     reference = torch.tensor([0.7, 0.2, 0.1]).log()
     baseline = torch.tensor([0.3, 0.3, 0.4]).log()

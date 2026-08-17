@@ -721,6 +721,11 @@ heuristic it would supplement. Their own limitation quote concedes the point.
 
 ### 4.4 Exact experimental procedure
 
+**Stage 0 is implemented** in
+[`experiments/diffusion_heisenberg/`](../experiments/diffusion_heisenberg/) and
+run on a 0.6 B MDLM pilot; see that README for the measurement, its honesty
+controls, and the results.
+
 **Stage 0 — the de-risking measurement. Do this first; it is cheap and it can
 kill the idea.** Nothing is built until this passes.
 
