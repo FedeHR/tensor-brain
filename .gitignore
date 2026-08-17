@@ -232,3 +232,5 @@ tmp/
 runs/
 # COCO annotations and derived corpora (large, re-derivable)
 data/coco/
+data/gsm8k/
+data/models/
