@@ -721,10 +721,45 @@ heuristic it would supplement. Their own limitation quote concedes the point.
 
 ### 4.4 Exact experimental procedure
 
-**Stage 0 is implemented** in
-[`experiments/diffusion_heisenberg/`](../experiments/diffusion_heisenberg/) and
-run on a 0.6 B MDLM pilot; see that README for the measurement, its honesty
-controls, and the results.
+> ## ⛔ Stage 0 has run, and it kills this direction
+>
+> Implemented in
+> [`experiments/diffusion_heisenberg/`](../experiments/diffusion_heisenberg/),
+> measured on **38,808 (commit, target) pairs** from a 0.6 B masked diffusion LM
+> on GSM8K, leave-one-out throughout.
+>
+> | rule | mean KL, nats | captured |
+> |---|---|---|
+> | do nothing (what decoders do now) | 0.2008 | 0.0% |
+> | additive `q += a_k` (gain 1) | 0.2028 | **−1.0%** |
+> | additive `q += 0.40·a_k` (global gain) | 0.1991 | **0.9%** |
+> | free `λ·E Eᵀ e_k` (global gain **0.00**) | 0.2008 | −0.0% |
+> | additive, per-event gain (**oracle**) | 0.1852 | 7.8% |
+>
+> The interaction is real and local — a commit moves the adjacent position by
+> 0.32 nats, decaying to 0.07 beyond ten tokens — so the rule is not failing for
+> want of something to find. It fails because the movement is **not a fixed
+> function of the committed token**. The tell is that the global-gain rule works
+> only adjacent to the commit (7.9%, collapsing to <1% by three tokens) while the
+> *oracle* stays flat at 6–12% everywhere: the direction carries a little signal,
+> but the right scale is per-event. That is context dependence, which is exactly
+> the assumption §4.3 makes and exactly the risk §4.6 flagged.
+>
+> **A rescue would require state dependence, which forfeits the `O(n)` cost and
+> exact order invariance that motivated the proposal in the first place** — a
+> state-dependent correction is just a cheap approximation to the forward pass it
+> was trying to avoid. Stages 1–3 below are therefore not worth running. Cost of
+> finding out: about forty minutes of laptop compute, which is what stage 0 was
+> for.
+>
+> The contrast with §2.6 is the part worth keeping: on COCO a *fixed* correction
+> (the gauge fix) won at every evidence count, and here it does nothing. The
+> additive update is useful exactly where the dropped log-partition is close to
+> affine in the carried statistics, and a token committed into a sentence is
+> nowhere near that regime.
+>
+> The remaining sections of §4 are kept as written, because the reasoning that
+> led to the measurement is what made the measurement worth doing.
 
 **Stage 0 — the de-risking measurement. Do this first; it is cheap and it can
 kill the idea.** Nothing is built until this passes.
@@ -819,8 +854,12 @@ is deliberately last.
      set), to answer whether the probabilistic machinery earns its place;
    - **seed replication** of the fit itself — §2.6 varies evaluation images but
      fits `A` once.
-4. **Task 2: run stage 0 of §4.4.** It is the cheapest decisive measurement in the
-   whole document, it cannot fail uninformatively, and it gates everything else.
+4. ~~Task 2: run stage 0 of §4.4~~ — **done, and it returned a decisive negative**;
+   see the box in §4.4. The diffusion-decoding direction is closed. If a task-2
+   thread is still wanted, §3.3's remaining candidates are unaffected: ① the
+   exactness condition for DeltaNet's identity-covariance assumption and ③ the
+   tight-frame/neural-collapse link are both theory contributions testable at
+   small scale, and neither depends on what stage 0 measured.
 5. **In parallel, cheap and non-committal:** submit the eBird data-access request
    (7-day turnaround), so it is off the critical path if the ecological arm is
    wanted.

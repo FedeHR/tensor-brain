@@ -133,6 +133,100 @@ demo block containing `import dllm` — a package that is not on PyPI, and which
 `transformers` refuses the file over even though the block never executes. Weights
 and forward pass are untouched.
 
+## Result: the idea is dead as posed
+
+![stage 0 verdict](../../output/diffusion_heisenberg/figures/01_stage0_verdict.png)
+
+400 GSM8K questions, 48 masked positions each, 14 commits measured per question:
+5,600 commits over 1,110 distinct tokens, 55 of them committed at least 10 times,
+**38,808 (commit, target) pairs** scored leave-one-out.
+
+| rule | mean KL, nats | captured |
+|---|---|---|
+| do nothing (what decoders do now) | 0.2008 | 0.0% |
+| additive `q += a_k` (LOO, gain 1) | 0.2028 | **−1.0%** |
+| additive `q += 0.40·a_k` (global gain) | 0.1991 | **0.9%** |
+| free `λ·E Eᵀ e_k` (global gain **0.00**) | 0.2008 | −0.0% |
+| additive, per-event gain (**oracle**) | 0.1852 | 7.8% |
+
+Three readings, in order of how much they matter.
+
+**1. A token-only additive correction captures essentially nothing.** At its own
+fitted gain it recovers 0.9%; at gain 1 it is *worse* than doing nothing. The
+parameter-free variant is starker still: given the whole scale grid, the best
+thing to do with the `E Eᵀ e_k` direction is **not use it** — its fitted gain is
+exactly zero. And the per-event oracle, which requires knowing the answer and is
+therefore an upper bound rather than a method, reaches only 7.8%. No deployable
+rule beats its own oracle, so ~8% caps *any* token-only additive correction here.
+
+**2. The interaction is real and strongly local — the rule is not failing for
+want of something to find.** The movement a commit causes falls monotonically
+with distance, 0.32 nats at the adjacent position down to 0.07 beyond ten tokens.
+Committing a token genuinely does change what the model believes elsewhere; the
+additive rule simply cannot express that change.
+
+| distance | pairs | do nothing | global gain | oracle | captured |
+|---|---|---|---|---|---|
+| 1 | 4,216 | 0.3229 | 0.2974 | 0.2848 | **7.9%** |
+| 2 | 4,212 | 0.2830 | 0.2718 | 0.2598 | 4.0% |
+| 3 | 4,149 | 0.2460 | 0.2451 | 0.2295 | 0.4% |
+| 4 | 4,047 | 0.2290 | 0.2282 | 0.2129 | 0.3% |
+| 5–6 | 7,824 | 0.1998 | 0.1985 | 0.1858 | 0.7% |
+| 7–9 | 9,867 | 0.1436 | 0.1434 | 0.1349 | 0.2% |
+| 10+ | 4,493 | 0.0697 | 0.0697 | 0.0655 | 0.1% |
+
+**3. The failure mode is exactly context dependence, and the numbers name it.**
+The global-gain rule works best adjacent to the commit (7.9%) and collapses to
+under 1% by three tokens away. But the *oracle* stays roughly flat at 6–12% across
+every distance. So the additive direction carries a little signal everywhere —
+what varies is the **right scale for this particular event**. A rule forced to
+pick one gain in advance cannot exploit it. That is the assumption `q ← q + a_k`
+makes, stated precisely, and the data refuses it.
+
+### Why this is a kill and not a setback
+
+A rescue would have to make the correction depend on the current state. But
+state dependence is exactly what forfeits the properties that motivated the
+proposal: `O(n)` cost, exact order invariance, and no extra pass over the
+vocabulary. A state-dependent correction is just a cheap approximation to the
+forward pass it was trying to avoid — so even a variant that worked would not be
+*this* idea, and would have to justify itself against the incumbent on its own
+terms.
+
+Stages 1–3 in the design document are therefore not worth running, which is what
+stage 0 existed to decide. Total cost: about forty minutes of laptop compute.
+
+### The contrast with the COCO result is the interesting part
+
+On COCO (`experiments/coco_heisenberg`) a **fixed** correction — the gauge fix —
+improved the belief at every evidence count, by up to 0.235 nats, and cut ECE from
+0.060 to 0.021. Here a fixed correction does nothing. The difference is what
+"context" means in each setting. On COCO the state is 12 factorized presence bits
+and the interaction between them is weak enough that one constant vector absorbs
+most of it. In a language model the context is the whole surrounding sequence, and
+the effect of writing a token genuinely depends on it.
+
+That is a sharper statement of the exactness criterion than either experiment
+gives alone: the additive update is useful exactly when the log-partition it drops
+is close to affine in the carried statistics, and a token committed into a
+sentence is nowhere near that regime.
+
+### What would still be worth measuring
+
+Not a rescue of this proposal, but two things this data motivates:
+
+- **The same probe on LLaDA-8B or Dream-7B.** The pilot is 0.6 B; the effect
+  sizes are so small that a reversal is unlikely, but the claim "additive
+  corrections do not transfer to diffusion decoding" is worth one confirmation at
+  the scale the incumbent paper uses. `cluster/diffusion/stage0.sbatch` runs it
+  unchanged.
+- **The measurement itself as a contribution.** Nobody has characterised how
+  additive the post-commit structure of a diffusion LM is. The incumbent paper
+  concedes its own interaction matrix "does not recover the true joint conditional
+  distribution" but does not quantify what recovering it would require. The
+  distance profile above is a first answer, and the negative is more informative
+  than the positive would have been.
+
 ## Layout
 
 | file | what it does |
