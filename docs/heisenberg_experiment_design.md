@@ -427,8 +427,24 @@ Every CI above excludes zero.
    sweep. This is the strongest available validation of chapter 4's central law
    outside the synthetic setting it was derived in.
 
-Written up with figures in
-[`experiments/coco_heisenberg/README.md`](../experiments/coco_heisenberg/README.md#the-takeaway).
+6. **The standard classification metrics disagree with each other**, and this is
+   the sharpest practical finding. Dropping `log Z` makes the belief
+   overconfident, so at a 0.5 threshold it predicts more positives: macro recall
+   rises to 0.716 against exact Bayes' 0.616, macro precision falls to 0.754
+   against 0.853. Macro-F1 rewards that on rare categories and puts the additive
+   rule **ahead at every `M`** (0.726 vs 0.699 at `M=8`); Hamming and subset
+   accuracy are dominated by true negatives and **cross over near `M=6`**; mAP
+   is essentially tied. A chapter reporting only macro-F1 would conclude the
+   additive rule beats exact inference outright; one reporting only subset
+   accuracy would conclude the opposite. Report several.
+
+   A corollary worth stating in the thesis: **mAP is identical for the plain rule
+   and the gauge fix to five decimals at every `M`**, because a constant shift
+   cannot change within-category ranking. The gauge fix changes calibration, not
+   ordering, and a rank-based metric is blind to it by construction.
+
+Full description of the dataset, task, training and metrics, with seven figures,
+in [`experiments/coco_heisenberg/README.md`](../experiments/coco_heisenberg/README.md).
 
 **A caveat on the mechanism.** The likely reason the additive rule wins at low
 `M` is that two misspecifications partly cancel: the factorized prior misses the
