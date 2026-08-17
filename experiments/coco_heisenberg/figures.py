@@ -122,10 +122,10 @@ def figure_dissociation(payload: dict, out: Path) -> None:
     # Plotting absolute NLL would hide the effect: the spread between rules is a
     # few hundredths of a nat against ~4 nats of absolute NLL.
     panels = (
-        (axes[0], "nll", "Downstream: NLL of the true supercategory set",
-         "excess NLL vs exact Bayes, nats", True),
-        (axes[1], "marginal_kl", "Fidelity: KL to the exact posterior of the same model",
+        (axes[0], "marginal_kl", "Fidelity: KL to the exact posterior of the same model",
          "KL from exact Bayes, nats", False),
+        (axes[1], "nll", "Downstream: NLL of the true supercategory set",
+         "excess NLL vs exact Bayes, nats", True),
     )
     for ax, metric, title, ylabel, relative in panels:
         _style(ax)
@@ -149,8 +149,8 @@ def figure_dissociation(payload: dict, out: Path) -> None:
         ax.set_ylim(min(e[0] for e in entries) - margin, max(e[0] for e in entries) + margin)
         _label_column(ax, counts[-1], entries)
 
-    lo, hi = axes[0].get_ylim()
-    axes[0].annotate("better than\nexact Bayes", xy=(counts[0] - 0.1, lo + (hi - lo) * 0.10),
+    lo, hi = axes[1].get_ylim()
+    axes[1].annotate("better than\nexact Bayes", xy=(counts[0] - 0.1, lo + (hi - lo) * 0.10),
                      color=INK_MUTED, fontsize=8.5, va="center")
 
     fig.suptitle(
@@ -333,6 +333,168 @@ def figure_error_budget(payload: dict, out: Path) -> None:
     plt.close(fig)
 
 
+def figure_classification_metrics(payload: dict, out: Path) -> None:
+    """The task in the metrics a multi-label recogniser is normally judged by."""
+
+    counts = payload["config"]["symbol_counts"]
+    sweep = payload["sweep"]
+    order = ["heisenberg", "heisenberg-gauge", "heisenberg-pe", "adf"]
+    metrics = (
+        ("mean_ap", "mean average precision  (mAP)", "ranking quality, threshold-free"),
+        ("macro_f1", "macro-F1", "unweighted mean of per-category F1, at 0.5"),
+        ("accuracy", "Hamming accuracy", "fraction of the 12 label decisions correct"),
+        ("exact_set", "subset accuracy", "all 12 labels correct at once"),
+    )
+
+    fig, axes = plt.subplots(2, 2, figsize=(12.4, 8.2), facecolor=SURFACE)
+    for ax, (metric, title, note) in zip(axes.ravel(), metrics, strict=True):
+        _style(ax)
+        entries = []
+        for rule in order:
+            y = [sweep[str(m)][rule][metric] for m in counts]
+            ax.plot(counts, y, color=SERIES[rule], linewidth=2, marker="o", markersize=5,
+                    markeredgecolor=SURFACE, markeredgewidth=1.2, zorder=3)
+            entries.append((y[-1], LABEL[rule], SERIES[rule], "normal"))
+        y = [sweep[str(m)]["exact"][metric] for m in counts]
+        ax.plot(counts, y, color=INK, linewidth=2, linestyle=(0, (5, 2)), zorder=2)
+        entries.append((y[-1], "exact Bayes", INK, "bold"))
+        y = [sweep[str(m)]["prior"][metric] for m in counts]
+        ax.plot(counts, y, color=INK_MUTED, linewidth=1.6, linestyle=(0, (1, 2)), zorder=2)
+        entries.append((y[-1], "prior (no evidence)", INK_MUTED, "normal"))
+
+        ax.set_title(title, color=INK, fontsize=11, loc="left", pad=16)
+        ax.annotate(note, xy=(0, 1.015), xycoords="axes fraction",
+                    color=INK_MUTED, fontsize=8.5, va="bottom")
+        ax.set_xlabel("symbols absorbed  (M)", color=INK_SOFT, fontsize=9.5)
+        ax.set_xticks(counts)
+        ax.set_xlim(counts[0] - 0.3, counts[-1] + 5.6)
+        _label_column(ax, counts[-1], entries, gap_frac=0.075)
+
+    fig.suptitle(
+        "The task, in the metrics it is normally judged by",
+        color=INK, fontsize=14, x=0.038, ha="left", y=0.99, fontweight="bold",
+    )
+    fig.text(
+        0.038, 0.945,
+        "Higher is better in all four panels. mAP is rank-based, so it cannot see the "
+        "gauge fix at all —\nthat correction is a constant shift and leaves every "
+        "within-category ranking untouched.",
+        color=INK_SOFT, fontsize=9.5, ha="left", va="top", linespacing=1.5,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.90))
+    fig.savefig(out, dpi=200, facecolor=SURFACE)
+    plt.close(fig)
+
+
+def figure_metric_disagreement(payload: dict, out: Path) -> None:
+    """Why the standard metrics disagree: the additive rule trades precision for recall."""
+
+    counts = payload["config"]["symbol_counts"]
+    sweep = payload["sweep"]
+    fig, axes = plt.subplots(1, 2, figsize=(12.0, 4.8), facecolor=SURFACE)
+
+    ax = axes[0]
+    _style(ax)
+    entries = []
+    for rule, color in (("heisenberg", "#2a78d6"), ("exact", INK)):
+        for metric, dash in (("macro_recall", None), ("macro_precision", (0, (5, 2)))):
+            y = [sweep[str(m)][rule][metric] for m in counts]
+            ax.plot(counts, y, color=color, linewidth=2, linestyle=dash or "solid",
+                    marker="o", markersize=4.5, markeredgecolor=SURFACE,
+                    markeredgewidth=1.1, zorder=3)
+            entries.append((y[-1], f"{LABEL[rule]} · {metric.split('_')[1]}", color,
+                            "bold" if rule == "exact" else "normal"))
+    ax.set_title("The additive rule predicts more positives", color=INK,
+                 fontsize=11, loc="left", pad=10)
+    ax.set_ylabel("macro precision / recall", color=INK_SOFT, fontsize=9.5)
+    ax.set_xlabel("symbols absorbed  (M)", color=INK_SOFT, fontsize=9.5)
+    ax.set_xticks(counts)
+    ax.set_xlim(counts[0] - 0.3, counts[-1] + 8.4)
+    _label_column(ax, counts[-1], entries, gap_frac=0.08, size=8.5)
+
+    ax = axes[1]
+    _style(ax)
+    ax.axhline(0, color=INK, linewidth=1.5, zorder=2)
+    entries = [(0.0, "exact Bayes", INK, "bold")]
+    for metric, color, label in (
+        ("macro_f1", "#eb6834", "macro-F1"),
+        ("accuracy", "#4a3aa7", "Hamming accuracy"),
+        ("exact_set", "#1baf7a", "subset accuracy"),
+    ):
+        y = [sweep[str(m)]["heisenberg"][metric] - sweep[str(m)]["exact"][metric]
+             for m in counts]
+        ax.plot(counts, y, color=color, linewidth=2.2, marker="o", markersize=5,
+                markeredgecolor=SURFACE, markeredgewidth=1.2, zorder=3)
+        entries.append((y[-1], label, color, "normal"))
+    ax.set_title("…so the verdict depends on the metric", color=INK,
+                 fontsize=11, loc="left", pad=10)
+    ax.set_ylabel("Heisenberg − exact Bayes", color=INK_SOFT, fontsize=9.5)
+    ax.set_xlabel("symbols absorbed  (M)", color=INK_SOFT, fontsize=9.5)
+    ax.set_xticks(counts)
+    ax.set_xlim(counts[0] - 0.3, counts[-1] + 6.4)
+    _label_column(ax, counts[-1], entries, gap_frac=0.075)
+
+    fig.suptitle(
+        "One rule, three standard metrics, three different answers",
+        color=INK, fontsize=13.5, x=0.04, ha="left", y=0.985, fontweight="bold",
+    )
+    fig.text(
+        0.04, 0.925,
+        "Dropping log Z makes the belief overconfident, which at a 0.5 threshold means "
+        "more positive predictions:\nrecall rises, precision falls. Macro-F1 rewards that "
+        "on rare categories; accuracy, dominated by true negatives, punishes it.",
+        color=INK_SOFT, fontsize=9.5, ha="left", va="top", linespacing=1.5,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.84))
+    fig.savefig(out, dpi=200, facecolor=SURFACE)
+    plt.close(fig)
+
+
+def figure_per_category(payload: dict, out: Path, *, at_m: int = 4) -> None:
+    """Which supercategories the task is actually hard for."""
+
+    categories = payload["categories"]
+    row = payload["sweep"][str(at_m)]["heisenberg"]
+    ap = np.array(row["per_category_ap"])
+    prevalence = np.array(row["per_category_prevalence"])
+    order = np.argsort(ap)
+
+    fig, ax = plt.subplots(figsize=(9.6, 5.6), facecolor=SURFACE)
+    _style(ax)
+    ax.grid(True, axis="y", color=SURFACE, linewidth=0)
+
+    y = np.arange(len(order))
+    ax.barh(y, ap[order], height=0.62, color="#2a78d6", zorder=3)
+    # a surface ring keeps the nested prevalence bar from reading as a stacked segment
+    ax.barh(y, prevalence[order], height=0.24, color="#eb6834", zorder=4,
+            edgecolor=SURFACE, linewidth=1.6)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels([categories[i] for i in order], fontsize=9.5, color=INK)
+    ax.set_xlim(0, 1.0)
+    ax.set_xlabel("average precision (thick)  ·  prevalence in the corpus (thin)",
+                  color=INK_SOFT, fontsize=9.5)
+    for pos, i in enumerate(order):
+        ax.annotate(f"{ap[i]:.2f}", xy=(ap[i], pos), xytext=(4, 0),
+                    textcoords="offset points", va="center", color="#2a78d6",
+                    fontsize=8.5, fontweight="bold")
+
+    fig.suptitle(
+        f"Per-category difficulty, Heisenberg at M = {at_m}",
+        color=INK, fontsize=13.5, x=0.045, ha="left", y=0.985, fontweight="bold",
+    )
+    fig.text(
+        0.045, 0.925,
+        "Average precision tracks how nameable a category is in a caption, not how common "
+        "it is.\n'appliance' is the rarest of the twelve yet scores 0.70; 'accessory' is "
+        "twice as common and scores 0.50.",
+        color=INK_SOFT, fontsize=9.5, ha="left", va="top", linespacing=1.5,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.85))
+    fig.savefig(out, dpi=200, facecolor=SURFACE)
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results", type=Path,
@@ -348,7 +510,10 @@ def main() -> None:
     figure_contrasts(payload, out / "02_contrasts.png")
     figure_error_law(payload, out / "03_error_law.png")
     figure_error_budget(payload, out / "04_error_budget.png")
-    print(f"wrote 4 figures to {out}")
+    figure_classification_metrics(payload, out / "05_classification_metrics.png")
+    figure_metric_disagreement(payload, out / "06_metric_disagreement.png")
+    figure_per_category(payload, out / "07_per_category.png")
+    print(f"wrote 7 figures to {out}")
 
 
 if __name__ == "__main__":

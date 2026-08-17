@@ -24,7 +24,8 @@ from . import data as D
 from . import evaluation as E
 from . import model as Mo
 
-DOWNSTREAM = ("nll", "accuracy", "macro_f1", "mean_ap", "exact_set", "ece")
+DOWNSTREAM = ("mean_ap", "macro_f1", "micro_f1", "accuracy", "exact_set", "nll", "ece")
+OPERATING = ("macro_precision", "macro_recall", "predicted_positive_rate", "true_positive_rate")
 FIDELITY = ("joint_kl", "marginal_kl")
 
 
@@ -118,9 +119,10 @@ def main() -> None:
         )
         sweep[str(count)] = rows
         _print_table(
-            f"M = {count} symbols absorbed   (downstream: predict the true supercategory set)",
+            f"M = {count} symbols absorbed   (multi-label recognition of the 12 supercategories)",
             rows, DOWNSTREAM,
         )
+        _print_table(f"M = {count}   (where the threshold sits)", rows, OPERATING)
         _print_table(f"M = {count}   (fidelity to the exact posterior, nats)", rows, FIDELITY)
 
         # the error law wants the posterior-weighted variance, not the prior one

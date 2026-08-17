@@ -240,6 +240,18 @@ def _average_precision(scores: np.ndarray, labels: np.ndarray) -> float:
     return float((precision * labels).sum() / labels.sum())
 
 
+def _macro(values: list[float]) -> float:
+    """Mean over categories, ignoring the undefined ones.
+
+    A category with no predicted positives has undefined precision, and one absent
+    from the sample has undefined AP; averaging over an all-undefined list is
+    itself undefined rather than an error.
+    """
+
+    defined = [v for v in values if not np.isnan(v)]
+    return float(np.mean(defined)) if defined else float("nan")
+
+
 def _expected_calibration_error(prob: np.ndarray, actual: np.ndarray, bins: int = 12) -> float:
     edges = np.linspace(0.0, 1.0, bins + 1)
     total = 0.0
@@ -285,25 +297,45 @@ class Accumulator:
     def summary(self) -> dict[str, float]:
         predicted = np.stack(self.predicted)
         actual = np.stack(self.actual)
+        categories = predicted.shape[1]
         per_category_ap = [
-            _average_precision(predicted[:, i], actual[:, i]) for i in range(predicted.shape[1])
+            _average_precision(predicted[:, i], actual[:, i]) for i in range(categories)
         ]
         threshold = predicted > 0.5
-        f1 = []
-        for i in range(predicted.shape[1]):
-            tp = float((threshold[:, i] & (actual[:, i] > 0.5)).sum())
-            fp = float((threshold[:, i] & (actual[:, i] < 0.5)).sum())
-            fn = float((~threshold[:, i] & (actual[:, i] > 0.5)).sum())
-            denominator = 2 * tp + fp + fn
-            f1.append(2 * tp / denominator if denominator > 0 else float("nan"))
+        truth = actual > 0.5
+
+        f1, precision, recall = [], [], []
+        for i in range(categories):
+            tp = float((threshold[:, i] & truth[:, i]).sum())
+            fp = float((threshold[:, i] & ~truth[:, i]).sum())
+            fn = float((~threshold[:, i] & truth[:, i]).sum())
+            f1.append(2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else float("nan"))
+            precision.append(tp / (tp + fp) if (tp + fp) > 0 else float("nan"))
+            recall.append(tp / (tp + fn) if (tp + fn) > 0 else float("nan"))
+
+        # micro averages pool every (image, category) decision before dividing
+        tp = float((threshold & truth).sum())
+        fp = float((threshold & ~truth).sum())
+        fn = float((~threshold & truth).sum())
+        micro_f1 = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else float("nan")
+
         row = {
             "nll": float(np.mean(self.nll)),
             "accuracy": float(np.mean(self.accuracy)),
+            "hamming_loss": 1.0 - float(np.mean(self.accuracy)),
             "exact_set": float(np.mean(self.exact_set)),
-            "macro_f1": float(np.nanmean(f1)),
-            "mean_ap": float(np.nanmean(per_category_ap)),
+            "macro_f1": _macro(f1),
+            "micro_f1": float(micro_f1),
+            "macro_precision": _macro(precision),
+            "macro_recall": _macro(recall),
+            "predicted_positive_rate": float(threshold.mean()),
+            "true_positive_rate": float(truth.mean()),
+            "mean_ap": _macro(per_category_ap),
             "ece": _expected_calibration_error(predicted.ravel(), actual.ravel()),
             "ms": 1000.0 * float(np.mean(self.seconds)),
+            "per_category_ap": [float(v) for v in per_category_ap],
+            "per_category_f1": [float(v) for v in f1],
+            "per_category_prevalence": [float(v) for v in truth.mean(axis=0)],
         }
         if self.joint_kl:
             row["joint_kl"] = float(np.mean(self.joint_kl))
