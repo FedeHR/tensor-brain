@@ -418,6 +418,18 @@ Every CI above excludes zero.
    Bernoullis agent can recover regardless of its update rule. This is §1.4's
    required decomposition, measured.
 
+5. **The `M²` error law survives the move to a learned index layer.** Derived and
+   tested on synthetic i.i.d. Gaussian `A`, it holds on `A` fitted to COCO
+   captions with a measured exponent of **1.99 over `M ≤ 4`** and 1.92 over the
+   full range. The coefficient needs the **posterior**-weighted variance, as the
+   theory states: `Var_prior[log Z]` over-predicts by 29% at `M=1` and 41% at
+   `M=8`, while `Var_posterior[log Z]` gives ratios of 0.75 → **0.94** across the
+   sweep. This is the strongest available validation of chapter 4's central law
+   outside the synthetic setting it was derived in.
+
+Written up with figures in
+[`experiments/coco_heisenberg/README.md`](../experiments/coco_heisenberg/README.md#the-takeaway).
+
 **A caveat on the mechanism.** The likely reason the additive rule wins at low
 `M` is that two misspecifications partly cancel: the factorized prior misses the
 strong positive correlations between supercategories (`kitchen`+`food`+
