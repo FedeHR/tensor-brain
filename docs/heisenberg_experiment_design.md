@@ -590,18 +590,204 @@ as reaching it through a summarising fetch with unverified details.
 
 ---
 
-## 4. Next steps
+## 4. Parallel decoding for discrete diffusion — a full assessment
 
-1. **Pilot before committing** (Mac, hours): download COCO annotations, build the
-   `(x, [k])` adapter for both channels, fit `(A, a0)`, and measure `Var[log Z]`
-   and the affine fraction. This decides whether question 1 has a measurable
-   answer and costs almost nothing.
+The paper is real: **"Mean-Field Parallel Decoding for Discrete Diffusion
+Language Models"**, Zoabi, Ali, Ringel & Wolf (arXiv:2606.15805). I read it
+directly; what follows is checked against the text, not the earlier second-hand
+summary.
+
+### 4.1 What it actually does
+
+Masked diffusion LMs can unmask several positions per forward pass, but tokens
+chosen independently from their marginals form incompatible configurations —
+"New City" instead of "New York". The paper picks *which* positions are safe to
+commit together, by structured inference over binary indicators `S ∈ {0,1}^m`:
+
+```
+P(S) ∝ exp( Σ_i c_i s_i  −  Σ_{i≠j} D_ij s_i s_j )
+c_i  = log π_i(v_i⁽¹⁾) − log π_i(v_i⁽²⁾)        top-2 log margin (confidence)
+D_ij = 1 − JSD(π_i, π_j)/ln 2                    normalized, zero diagonal
+```
+
+solved by a mean-field fixed point `q_i = σ(c_i − Σ_j D_ij q_j)`, `R = 2`
+iterations from `q⁽⁰⁾ = σ(c)`, at `O(m²|V|)` per denoising step. Average speedup
+5.12× over entropy-based decoding on GSM8K / MATH / HumanEval / MBPP with
+LLaDA-8B, LLaDA-1.5 and Dream-7B.
+
+### 4.2 The obvious mapping is a re-description, not a contribution
+
+Their state is a product of Bernoullis; their initialization `q⁽⁰⁾ = σ(c)` is the
+belief with the interaction term **dropped**; each iteration adds the
+state-dependent coupling. That is exactly the thesis's ladder — plain additive
+rule, first-order correction, CAVI fixed point — and the correspondence is
+structural, not analogical.
+
+But it cuts the wrong way. Their `q⁽⁰⁾` *is* the zeroth-order additive rule, and
+their whole contribution is that you need the correction on top of it. Applying
+the thesis here would recommend the thing they improved on. Worse, their energy
+is **constructed heuristically**, not derived from a likelihood, so there is no
+`Z` and the `½M²Var[log Z]` law has nothing to attach to.
+
+Say this plainly rather than dressing it up: on the selection problem the thesis
+explains their method, it does not beat it.
+
+### 4.3 The real opening, which their limitations section names
+
+Two facts from the paper decide this, both verified in the text:
+
+1. **They never update the other positions.** After committing, the method
+   "proceeds to the next denoising step with a fresh forward pass" — the tokens
+   just committed do not correct the still-masked positions' distributions.
+2. **`D` is built from marginals alone.** In their own words, the JSD score *"is
+   a lightweight proxy for unsafe simultaneous commitment; it captures pairwise
+   predictive overlap but does not explicitly model higher-order structure or
+   recover the true joint conditional distribution."*
+
+And they discuss no pointwise mutual information, no conditional dependence
+measure, and no additive logit correction anywhere.
+
+So the unoccupied move is not *which positions to commit* but **what to do to the
+rest once you have committed**. Exactly:
+
+```
+log P(x_j = v | ctx, x_i = k)  =  log π_j(v)  +  PMI(x_j = v ; x_i = k)
+```
+
+The correction to position `j`'s logits is a PMI vector. Approximating it by a
+vector that depends only on the committed token,
+
+```
+logits_j  ←  logits_j + a_k          for every still-masked j
+```
+
+**is the Heisenberg update**, with `q` the logit vector at a masked position and
+`a_k` the column of a shared index matrix. Its exactness condition is the
+thesis's own: the update is exact exactly when the relevant log-partition is
+affine, i.e. when the PMI is separable across positions and context.
+
+This is complementary to their method, not competing. They commit fewer, safer
+positions; this commits and *corrects*, inside one forward pass. The two stack.
+
+Three further things transfer, and none of them exist in that literature:
+
+- **A parameter-free `A`.** Taking `A = W_U W_E^ᵀ` — unembedding times embedding —
+  gives a rank-`d_model` additive correction with **no new parameters**, and it is
+  precisely the Tensor Brain's own "shared bidirectionally" structure. A full
+  `|V|×|V|` table would be ~1B entries and is not an option, so the low-rank
+  route is a requirement, not an elegance.
+- **The gauge freedom.** `a_k` is identified only up to a per-position constant,
+  because softmax is shift-invariant. So the free, order-invariant gauge fix
+  applies unchanged — and it is the correction that just won at every `M` on
+  COCO (§2.6).
+- **A quantitative prediction the field lacks.** The `M²` law says degradation
+  from committing `M` tokens in one pass grows quadratically. The field currently
+  chooses how many tokens to commit with thresholds and heuristics. A predicted
+  *shape* for the accuracy-versus-parallelism curve is a real contribution even
+  if it never beats their throughput.
+
+A last argument in favour: JSD similarity is not statistical dependence — two
+positions can have identical marginals and be independent. PMI measures
+dependence directly, so the proposed quantity is better founded than the
+heuristic it would supplement. Their own limitation quote concedes the point.
+
+### 4.4 Exact experimental procedure
+
+**Stage 0 — the de-risking measurement. Do this first; it is cheap and it can
+kill the idea.** Nothing is built until this passes.
+
+1. Take a masked diffusion LM (LLaDA-8B-Instruct or Dream-v0-7B) and a few
+   hundred prompts from GSM8K.
+2. At a denoising step with `m` masked positions, record `π_j` for all `j` — one
+   forward pass.
+3. Commit the argmax token `k` at one position `i`. Run a **second** forward pass.
+   Record `π'_j` for all `j ≠ i`.
+4. The ground-truth correction is `Δ_j = log π'_j − log π_j`. This is the object
+   an additive rule must approximate.
+5. Fit and compare, on held-out steps:
+   - **do nothing** (the current behaviour within a pass): `KL(π'_j ‖ π_j)`
+   - **additive, token-only**: `KL(π'_j ‖ softmax(log π_j + a_k))`, `a_k` fitted
+     across all positions and contexts
+   - **additive, gauge-fixed**: the same with the free per-position shift removed
+   - **additive, low-rank free**: `a_k = λ · W_U W_E^ᵀ e_k`, one scalar `λ`
+   - **distance-modulated**: `a_k` scaled by a function of `|i − j|`
+6. Report the fraction of the available correction each captures,
+   `1 − KL(π'_j ‖ approx) / KL(π'_j ‖ π_j)`, and `Var` of the residual — the
+   direct analogue of `Var[log Z]`, and the quantity the error law needs.
+
+**Decision rule.** If the additive rule captures a large fraction, proceed to
+stage 1. If the residual is dominated by context-dependent structure, stop — and
+publish that, because it is a clean measurement of *why* parallel decoding is
+hard and nobody has made it.
+
+**Stage 1 — intra-pass sequential commitment.** Within one forward pass: commit
+the highest-confidence position, apply `logits_j ← logits_j + a_k` to the rest,
+re-rank, commit the next, repeat `M` times. Measure accuracy and tokens/second
+against `M ∈ {1,2,4,8}`, with and without the gauge fix, and against the paper's
+own selection rule as the baseline at matched throughput.
+
+**Stage 2 — the law.** Plot degradation against `M` and test the predicted
+quadratic. Estimate `Var[residual]` by sampling (never by enumeration — `|V|` is
+32k) and check whether it predicts the coefficient across models and datasets.
+
+**Stage 3 — composition.** Stack the additive correction *on top of* their
+mean-field selection and ask whether the commit set can be enlarged at equal
+accuracy. This is the only stage that claims a speedup over the incumbent, and it
+is deliberately last.
+
+### 4.5 What results are available, ranked by value
+
+1. **The error law predicts the accuracy/parallelism curve.** The most valuable
+   outcome and it does not require beating anyone. The field manages parallelism
+   with heuristics; a derived `M²` shape with a measurable coefficient explains
+   them. This is also the result that most directly validates the thesis's
+   central law in a current setting.
+2. **A free, parameter-free correction improves parallel decoding.** If
+   `A = W_U W_E^ᵀ` with one fitted scalar buys extra tokens per pass, that is a
+   strong, cheap, training-free result with an immediately reusable artifact.
+3. **A clean negative with a mechanism.** If the additive approximation fails,
+   the measured residual structure says *what kind* of dependence parallel
+   decoding must model — a sharper statement than the paper's own admission that
+   its proxy "does not recover the true joint conditional distribution".
+4. **The gauge fix transfers.** Cheap to test at every stage, and it already
+   replicated on COCO.
+
+### 4.6 Risks, stated honestly
+
+- **The core assumption is strong.** A state-independent `a_k` says the effect of
+  committing a token is the same regardless of context. Language dependence is
+  famously contextual — "New" → "York" depends on the rest of the sentence — so
+  stage 0 exists precisely to measure this before anything is built.
+- **Compute.** Stages 1–3 need GPU inference on 7–8B models. Inference-only and
+  cluster-appropriate, but not a laptop experiment. Stage 0 is the cheapest
+  possible probe and needs only two forward passes per step.
+- **A moving target.** This is a June 2026 paper in a fast area; the baseline may
+  shift. The `M²` result (outcome 1) is robust to that, the speedup claim
+  (outcome 2) is not.
+- **Scope.** This is a *decoding* contribution, not a Tensor Brain contribution.
+  It borrows the update rule and its analysis; it says nothing about perception,
+  evolution or the index layer. Worth stating so the thesis does not overclaim
+  continuity.
+
+---
+
+## 5. Next steps
+
+1. ~~Pilot the COCO fit~~ — **done**; see §2.6. The gap is measurable, the
+   dissociation is real, and the crossover is located between `M=4` and `M=6`.
 2. **Write the ledger row** in `docs/fidelity.md` classifying the extension.
-3. **Land C1–C4** with paired bootstrap CIs, downstream metrics first.
-4. **Then choose one task-2 direction.** ① and ③ are theory contributions
-   testable at small scale and fit the compute posture; ④ and ⑤ are systems
-   contributions needing external data. They are not mutually exclusive but a
-   thesis chapter should pick one.
+3. **Remaining task-1 arms**, in order of value:
+   - the **instance channel** (C4), giving the paired gated-vs-exhaustive
+     contrast on the same images — the only arm that tests the measurement-process
+     claim on real data;
+   - the **τ estimate** (§1.1) on that contrast, which is what makes the claim
+     quantitative rather than binary;
+   - a **capacity-matched non-TB baseline** (DeepSets/MLP over the same symbol
+     set), to answer whether the probabilistic machinery earns its place;
+   - **seed replication** of the fit itself — §2.6 varies evaluation images but
+     fits `A` once.
+4. **Task 2: run stage 0 of §4.4.** It is the cheapest decisive measurement in the
+   whole document, it cannot fail uninformatively, and it gates everything else.
 5. **In parallel, cheap and non-committal:** submit the eBird data-access request
    (7-day turnaround), so it is off the critical path if the ecological arm is
    wanted.
