@@ -28,6 +28,15 @@ import torch
 from . import probe as P
 
 
+def _bucket(offset: int) -> str:
+    """Group target distances so each bucket keeps enough samples to mean over."""
+
+    for edge in (1, 2, 3, 4, 6, 9):
+        if offset <= edge:
+            return f"{edge}" if edge <= 4 else f"<={edge}"
+    return ">9"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default="dllm-hub/Qwen3-0.6B-diffusion-mdlm-v0.1")
@@ -122,6 +131,8 @@ def main() -> None:
     # fact rather than per sample -- the per-sample optimum is an oracle
     grid = {"additive": torch.zeros(len(scales)), "free": torch.zeros(len(scales))}
     grid_count = {"additive": 0, "free": 0}
+    by_distance: dict[str, dict] = {}
+    filtered: list[int] = []
 
     def score(token, position, targets, before, after) -> None:
         if token not in probe_set:
@@ -136,9 +147,13 @@ def main() -> None:
 
             do_nothing = float(P._kl(reference, baseline))
             if do_nothing < 1e-6:
+                # the commit left this position untouched; nothing to correct
+                filtered.append(1)
                 continue
             report.add("kl_do_nothing", do_nothing)
-            report.add("offset", float(abs(j - position)))
+            offset = abs(j - position)
+            report.add("offset", float(offset))
+            bucket = _bucket(offset)
 
             mean = accumulators.leave_one_out(token, delta)
             for name, direction in (("additive", mean), ("free", free)):
@@ -152,19 +167,35 @@ def main() -> None:
                 if name == "additive":
                     report.add("kl_additive_unscaled",
                                float(P._kl(reference, (baseline + mean).log_softmax(-1))))
+                    # is the failure uniform, or does the rule work near the commit?
+                    entry = by_distance.setdefault(
+                        bucket,
+                        {"n": 0, "do_nothing": 0.0, "oracle": 0.0,
+                         "curve": torch.zeros(len(scales))},
+                    )
+                    entry["n"] += 1
+                    entry["do_nothing"] += do_nothing
+                    entry["oracle"] += float(curve.min())
+                    entry["curve"] += curve
 
     walk(score)
     print(f"score: [{time.time() - started:.0f}s]", flush=True)
 
     # Leave-one-out subtracts each observation from the accumulated total, which is
-    # only valid if the score pass replays exactly the events the fit pass saw.
-    # Decoding is greedy and the prompts are fixed, so it should -- but a silent
-    # divergence would corrupt every additive number, so check rather than assume.
-    replayed = grid_count["additive"]
+    # only sound if the score pass replays the events the fit pass saw. Decoding is
+    # greedy over fixed prompts so it should -- but a silent divergence would
+    # corrupt every additive number, so check rather than assume. The near-zero
+    # targets skipped above were accumulated during the fit and legitimately remain
+    # in the "other observations" pool, so they are added back before comparing.
+    replayed = grid_count["additive"] + len(filtered)
     accumulated = int(accumulators.count.sum())
     if replayed != accumulated:
         print(f"WARNING: score pass replayed {replayed} corrections but the fit pass "
-              f"accumulated {accumulated}; leave-one-out is not exact", flush=True)
+              f"accumulated {accumulated}; the trajectories diverged and "
+              f"leave-one-out is not exact", flush=True)
+    else:
+        print(f"replay check: {grid_count['additive']} scored + {len(filtered)} "
+              f"below threshold = {accumulated} accumulated", flush=True)
 
     summary = report.summary()
     counts_by = {k: len(v) for k, v in report.rows.items()}
@@ -199,6 +230,27 @@ def main() -> None:
           f"free {summary.get('free_oracle_scale', float('nan')):.3f}")
     print(f"mean target distance from the commit: {summary.get('offset', float('nan')):.1f} tokens")
 
+    # Does the rule work near the commit and fail far away, or fail everywhere?
+    distance_rows = {}
+    order = ["1", "2", "3", "4", "<=6", "<=9", ">9"]
+    print(f"\n{'distance':<12}{'pairs':>8}{'do nothing':>13}{'global gain':>13}"
+          f"{'oracle':>10}{'captured':>11}")
+    print("-" * 67)
+    for key in order:
+        entry = by_distance.get(key)
+        if not entry or entry["n"] < 20:
+            continue
+        n = entry["n"]
+        curve = entry["curve"] / n
+        best = float(curve.min())
+        nothing = entry["do_nothing"] / n
+        oracle = entry["oracle"] / n
+        distance_rows[key] = {"pairs": n, "do_nothing": nothing, "global": best,
+                              "oracle": oracle, "scale": float(scales[int(curve.argmin())]),
+                              "captured": 1 - best / nothing}
+        print(f"{key:<12}{n:>8}{nothing:>13.4f}{best:>13.4f}{oracle:>10.4f}"
+              f"{1 - best / nothing:>10.1%}")
+
     args.output.mkdir(parents=True, exist_ok=True)
     config = {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}
     payload = {
@@ -209,6 +261,9 @@ def main() -> None:
         "counts": counts_by,
         "scales": scales.tolist(),
         "global_gain": best_global,
+        "by_distance": distance_rows,
+        "replay_check": {"scored": grid_count["additive"], "below_threshold": len(filtered),
+                         "accumulated": int(accumulators.count.sum())},
         "captured": {
             "additive_gain_1": 1 - summary["kl_additive_unscaled"] / base
             if "kl_additive_unscaled" in summary else None,
