@@ -353,6 +353,80 @@ Note `all_states` refuses `n > 20` and every `Var[log Z]`/gauge-fix routine
 currently enumerates `2^n`. At `n=12` that is irrelevant; the MC estimator is
 needed for task 2, not task 1.
 
+### 2.6 Results — the experiment is built and run
+
+Implemented in [`experiments/coco_heisenberg/`](../experiments/coco_heisenberg/),
+tested in `tests/test_coco_heisenberg.py` (10 tests), and cross-checked against
+the reference rules in the analysis worktree to **≤ 2.2e-15** on every rule.
+
+117,266 images, 93,813 train / 23,453 held out, `n = 12`, `K = 1000`, 6,000
+evaluation images per point. The fit takes 14 s on CPU. Held-out symbol NLL is
+**5.639** against 6.908 for a uniform vocabulary, so the learned layer carries
+1.27 nats about the named word — `A` is doing real work, not collapsing to an
+indicator matrix.
+
+`Var[log Z] = 0.0139`, **affine fraction 0.690**.
+
+**Downstream (NLL of the true supercategory set) and fidelity (joint KL), by M:**
+
+| rule | M=1 | M=2 | M=4 | M=6 | M=8 |
+|---|---|---|---|---|---|
+| prior | 5.453 / 0.222 | 5.453 / 0.518 | 5.453 / 1.180 | 5.453 / 1.778 | 5.445 / 2.299 |
+| **heisenberg** | 4.773 / 0.007 | 4.240 / 0.026 | 3.503 / 0.096 | 3.123 / 0.191 | 2.952 / 0.298 |
+| **heisenberg-gauge** | 4.766 / 0.002 | 4.215 / 0.009 | 3.420 / 0.040 | 2.969 / 0.090 | 2.718 / 0.152 |
+| heisenberg-pe | 4.769 / 0.005 | 4.256 / 0.017 | 3.555 / 0.051 | 3.169 / 0.090 | 2.926 / 0.127 |
+| adf | 4.783 / 0.002 | 4.254 / 0.007 | 3.486 / 0.020 | 3.030 / 0.035 | 2.735 / 0.048 |
+| exact | 4.783 / 0.002 | 4.266 / 0.006 | 3.528 / 0.017 | 3.089 / 0.027 | 2.794 / 0.034 |
+| *exact-empirical-prior* | 4.540 / 0.111 | 3.907 / 0.247 | 3.150 / 0.459 | 2.766 / 0.558 | 2.547 / 0.592 |
+
+**Paired per-image differences, 95% bootstrap CI, negative favours the first rule:**
+
+| contrast | M=1 | M=2 | M=4 | M=6 | M=8 |
+|---|---|---|---|---|---|
+| heisenberg − exact | −0.0097 | −0.0263 | **−0.0252** | **+0.0343** | +0.1580 |
+| heisenberg-gauge − heisenberg | −0.0070 | −0.0244 | −0.0828 | −0.1539 | **−0.2345** |
+| heisenberg-pe − heisenberg | −0.0040 | +0.0159 | +0.0528 | +0.0456 | −0.0264 |
+| heisenberg − exact-empirical-prior | +0.2325 | +0.3326 | +0.3526 | +0.3574 | +0.4051 |
+
+Every CI above excludes zero.
+
+**Four findings.**
+
+1. **Fidelity and downstream performance dissociate, and there is a crossover.**
+   At `M=4` the Heisenberg posterior is 5.6× further from the exact posterior
+   (0.096 vs 0.017 nats) yet **wins** on downstream NLL by 0.025 nats. That
+   reverses by `M=6` and the loss grows to +0.158 by `M=8`. The `M²` error law
+   shows up as a *crossover in a decision metric*: the additive rule's
+   misspecification advantage is real but finite, and the accumulating normalizer
+   error eventually overwhelms it. This directly answers the question of whether
+   fidelity is the right objective — it is not, and now there is a measured
+   regime boundary rather than an argument.
+2. **The gauge fix wins at every `M`, and the margin grows.** −0.007 → −0.235
+   nats, better on 68–76% of individual images, and it cuts ECE at `M=8` from
+   0.060 to **0.021**. It is free, `O(n)`, exactly order-invariant, and a
+   re-normalization of trained weights rather than a change to the inference
+   loop. Chapter 4 derives `q ← q + a_k − c` and never implements it; this is the
+   first measurement of it, and it is the chapter's clearest practical
+   recommendation.
+3. **The `O(nK)` prediction-error correction is not worth its cost here.** It
+   improves fidelity but *hurts* downstream NLL at `M = 2, 4, 6`. The free
+   `O(n)` gauge fix dominates it on the decision metric at every `M`.
+4. **Most of the achievable gain is in the prior, not the update rule.** The gap
+   to `exact-empirical-prior` stays at +0.23…+0.41 nats across the whole sweep,
+   while the gap to `exact` moves from −0.01 to +0.16. So roughly 70% of what is
+   left on the table belongs to the factorized state, which *no* product-of-
+   Bernoullis agent can recover regardless of its update rule. This is §1.4's
+   required decomposition, measured.
+
+**A caveat on the mechanism.** The likely reason the additive rule wins at low
+`M` is that two misspecifications partly cancel: the factorized prior misses the
+strong positive correlations between supercategories (`kitchen`+`food`+
+`appliance`), which makes exact Bayes under that prior *under*-confident relative
+to truth, while dropping `log Z` makes the additive rule *over*-confident. The
+`exact-empirical-prior` row supports this — with the correct joint prior the NLL
+falls sharply — but the chapter should present it as a hypothesis with this
+evidence, not as an established mechanism.
+
 ---
 
 ## 3. Task 2 — where the Heisenberg update could matter

@@ -230,3 +230,5 @@ papers/
 pvsg-audit/
 tmp/
 runs/
+# COCO annotations and derived corpora (large, re-derivable)
+data/coco/
