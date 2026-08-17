@@ -1,0 +1,537 @@
+# Designing the experimental chapter for the Heisenberg update
+
+Scoping document, 2026-08-17. Covers two questions:
+
+1. **A real task with a learned `A`** — how good is the Heisenberg approximation
+   when the index layer is fitted to data rather than sampled, and does the
+   fidelity gap matter for the decisions the state feeds?
+2. **Where the Heisenberg update could matter in modern deep learning** — which
+   properties fill a real gap, and which are reframings of solved problems.
+
+Everything numeric below was run during scoping and is reproducible from the
+scripts named in each section. Nothing here has been written into the thesis.
+
+---
+
+## 0. Recommendations, up front
+
+**Task 1.** Build it on **MS-COCO**: latent `x` = the 12 supercategories present
+in an image (`2^12 = 4096` states, exact enumeration is a 4096×12 matmul), symbols
+`k` = content words drawn from the five human captions, `M` swept 2–10. COCO
+supplies two annotation channels over *the same* images and *the same* latent —
+captions (saliency-gated) and instance annotations (exhaustive) — which turns the
+theory's central claim into a paired, within-dataset test instead of a simulated
+one. No feature extraction, no GPU for the data, CC BY 4.0, instant download.
+
+**Task 2.** Do not go looking for a leaderboard win. The existing analysis
+already rules out the advantages that would produce one — no robustness gain
+under misspecification, worse under redundant evidence, learning does not fix the
+approximation. The rule's genuine edges are *structural*: exactness under
+selection-gated evidence, `O(n)` cost independent of state-space size, exact
+order invariance, and being the provable zeroth-order term of CAVI. So the
+target must be a setting whose **pipeline shape** matches, not a task where the
+numbers happen to be better. Ranked candidates are in §3.
+
+**One framing change that affects both.** Posterior fidelity and downstream
+decision quality genuinely dissociate, and they dissociate in the direction that
+favours the additive rule. §1.4 shows plain Heisenberg beating exact Bayes on
+downstream NLL in 10/10 seeds while being, by construction, further from the
+exact posterior. Fidelity belongs in the chapter as a *diagnostic*; the decision
+is the objective.
+
+---
+
+## 1. Results established while scoping
+
+These are new. They change what the experiment should measure, and two of them
+correct existing material. Every table below is reproduced by a script in
+[`experiments/heisenberg_scoping/`](../experiments/heisenberg_scoping/); see its
+README for how to run them.
+
+### 1.1 A one-parameter family unifies the two measurement models
+
+Let a concept window open with probability `π(x) = Z(x)^τ / C`, then draw
+`k ~ softmax(a0 + Aᵀx)`. Over `M` fired windows,
+
+```
+P(x | k_1..k_M)  ∝  p(x) · exp(Σ_m a_{k_m}ᵀx) · Z(x)^{M(τ−1)}
+```
+
+so the additive rule needs a correction of `(1−τ)·M·log Z(x)`. `τ = 0` is the
+unconditional model of chapter 3; `τ = 1` is the saliency-gated model where plain
+Heisenberg is exact. Verified over 12 random models (`n=8, K=16, M=3`):
+
+| τ | KL(exact ‖ τ-corrected) | KL(exact ‖ plain additive) |
+|---|---|---|
+| 0.00 | −1.0e-16 | 0.4694 |
+| 0.25 | −3.7e-17 | 0.2623 |
+| 0.50 | 5.0e-18 | 0.1142 |
+| 0.75 | −7.1e-17 | 0.0275 |
+| 1.00 | 1.6e-17 | 0.0000 |
+
+Because only the affine part of `log Z` is needed in practice, the usable rule
+stays a pure sum and keeps exact order invariance:
+
+```
+q ← q + a_k − (1−τ)·c
+```
+
+**Why this matters.** On real data you cannot *assume* a measurement model. But
+τ is estimable. Simulating a corpus where the count of recorded observations is
+gated (`count | x ~ Poisson(λ·Z(x)^τ)`) and fitting τ by Poisson regression of
+counts on `log Z`:
+
+| true τ | n=500 | n=2000 | n=10000 | n=50000 |
+|---|---|---|---|---|
+| 0.00 | 0.016±0.053 | 0.019±0.050 | −0.004±0.016 | 0.000±0.010 |
+| 0.25 | 0.278±0.079 | 0.236±0.040 | 0.248±0.021 | 0.252±0.009 |
+| 0.50 | 0.536±0.074 | 0.510±0.032 | 0.495±0.020 | 0.500±0.008 |
+| 0.75 | 0.780±0.069 | 0.756±0.044 | 0.742±0.016 | 0.750±0.006 |
+| 1.00 | 1.014±0.081 | 0.996±0.043 | 0.995±0.019 | 1.000±0.006 |
+
+Unbiased, and a few thousand labelled instances separate τ=0 from τ=1
+decisively. **τ becomes a measurable property of a data pipeline, and it tells
+you exactly how much normalizer correction that pipeline needs.**
+
+⚠️ **The naive version of this test is confounded.** `log Z(x)` is large exactly
+when many categories are present, and images with many categories present have
+more objects to annotate for reasons unrelated to saliency gating. A plain
+regression of annotation count on `log Z` reports τ > 0 trivially. The test is
+only meaningful against a corpus whose annotation is known to be **exhaustive**,
+so the two processes can be contrasted on the same images with the same latent.
+This is the single strongest argument for the COCO design in §2.
+
+*Scripts: `tau_check.py`, `tau_identify.py`.*
+
+### 1.2 The general gate law
+
+For *any* trigger of the form `π(x) = g(Z(x))/C`, the exact posterior needs
+
+```
+correction  =  M · [ log Z(x) − log g(Z(x)) ]
+```
+
+Verified to machine precision for four gate shapes (12 models, `M=3`):
+
+| gate | KL(exact ‖ corrected) | KL(exact ‖ plain additive) |
+|---|---|---|
+| unconditional, `g(Z)=1` | −1.0e-16 | 0.4694 |
+| full gate, `g(Z)=Z` | 1.6e-17 | 0.0000 |
+| partial, `g(Z)=Z^0.5` | 5.0e-18 | 0.1142 |
+| logistic, `g(Z)=Z/(1+Z)` | 1.4e-17 | 0.0021 |
+
+Exact cancellation requires a gate **linear in `Z`** (Bernoulli/Poisson
+thinning). A discrete-choice modeller reaching for the logit-with-outside-option
+form `Z/(1+Z)` would *not* get cancellation in general.
+
+### 1.3 …but the QTB offset widens which gates qualify
+
+The logistic row above looks nearly harmless (0.0021). That is not general — it
+is a consequence of the scale of `Z`. Sweeping an offset shift:
+
+| E[Z] | sd log Z | sd log(1+Z) | plain \| uncond | plain \| logistic | plain \| full gate |
+|---|---|---|---|---|---|
+| 0.063 | 0.363 | 0.021 | 0.4694 | 0.0021 | 0.0000 |
+| 1.256 | 0.363 | 0.196 | 0.4694 | 0.1424 | 0.0000 |
+| 25.2 | 0.363 | 0.347 | 0.4694 | 0.4274 | 0.0000 |
+| 507 | 0.363 | 0.362 | 0.4694 | 0.4671 | 0.0000 |
+
+A saturating gate cancels only where it is locally linear, i.e. `Z ≪ 1`. And the
+paper's own offset `a0_k = −Σᵢ softplus(A_ik)` forces `E[Z] = K·2^{−n}`, which
+stays far below 1 at any realistic `K/n` (at `n=12, K=500`: 0.12). **The QTB
+normalization convention places the model in the regime where a broad class of
+saliency gates — not only the exactly-linear one — make the additive update
+nearly exact.** That widens the trigger theorem's reach considerably, and it is
+a second, independent reason the offset is load-bearing rather than cosmetic.
+
+*Scripts: `gate_family.py`, `gate_scale.py`.*
+
+### 1.4 The scene A/B result is confounded — correction to `tb_update_generalized.md` §10
+
+§10 reports a ranking flip between an unconditionally-sampled corpus and a
+saliency-gated one, justified by: *"Scenes are drawn from the model's own prior
+in both, so 'exact Bayes' is genuinely exact for A."*
+
+**That does not match the code.** `scene.scene_dataset` builds scenes with
+`sample_scene`, which draws from a **5-situation mixture** with correlated
+categories, while the inference model assumes an independent Bernoulli prior. The
+prior is misspecified in *both* arms. Rebuilding the corpus from the model's own
+factorized prior separates the two causes (10 corpus seeds, 300 scenes, 4 named
+objects, paired per seed):
+
+| corpus | measurement | paired TB − ExactBayes (NLL) | TB better |
+|---|---|---|---|
+| situation mixture (as shipped) | unconditional | **−0.186 ± 0.058** | 10/10 |
+| situation mixture (as shipped) | gated | −0.889 ± 0.044 | 10/10 |
+| model's own prior | unconditional | **+0.450 ± 0.060** | **0/10** |
+| model's own prior | gated | −0.464 ± 0.044 | 10/10 |
+
+**The flip is real — but only with a correctly specified prior.** As shipped,
+plain TB wins in *both* arms, so that experiment does not demonstrate a flip; it
+shows TB winning everywhere for two confounded reasons. Prior misspecification
+and measurement-process misspecification both favour the additive rule.
+
+This is a design requirement, not a footnote. **On real data the factorized prior
+is always misspecified**, because real category co-occurrence is correlated. The
+chapter must decompose the additive rule's advantage into a prior component and a
+gating component, or the headline is uninterpretable.
+
+*Scripts: `seed_sensitivity.py`, `confound_test.py`.*
+
+### 1.5 Realistic structure makes the free gauge fix worth more
+
+With ontology-structured `A` (PVSG hierarchy, 12 coarse categories, K=95
+objects), `Var[log Z] = 0.092`, giving measurable KL of 0.16 / 0.51 / 0.93 nats
+at `M = 2 / 4 / 6`. So the experiment is not at risk of being a null.
+
+More interestingly the **affine fraction is 0.735**, against ~0.60 in the
+synthetic study. The gauge fix `A ← A − c1ᵀ` — free, order-invariant, a
+re-normalization of trained weights rather than a change to the update rule —
+removes 66–70% of the error here. **Prediction to test on learned `A`: the
+affine fraction rises further with realistic structure.**
+
+*Script: `gap_probe.py`.*
+
+---
+
+## 2. Task 1 — the experiment
+
+### 2.1 What is already covered
+
+Chapter 3 is entirely synthetic. `A` is sampled i.i.d. Gaussian and never
+learned; the inference model exactly matches the data generator; `n ≤ 18` by
+enumeration; the only task metric is per-bit accuracy against the generating
+state. Its own scope statement names the gaps verbatim:
+
+> "The index matrix is sampled rather than learned; the inference model matches
+> the data generator; […] Candidate restriction, perceptual uncertainty, state
+> evolution, measurement selection, and prior mismatch are absent."
+
+There is **no mention of any real dataset anywhere in the thesis**. Two further
+openings: the corrected update `q ← q + a_k − c` is derived in ch.4 (~line 1054)
+but never implemented or measured, and the `D_local` diagnostic is defined and
+never evaluated.
+
+### 2.2 Dataset: MS-COCO, supercategory latent + caption-word symbols
+
+| | |
+|---|---|
+| Access | `annotations_trainval2017.zip` (~241 MB) + `captions_train2017.json`; images not needed. CC BY 4.0, direct download. |
+| Scale | 118,287 train / 5,000 val images, 5 captions each |
+| `x` | the 12 COCO supercategories present → **n = 12, 4096 states** |
+| `k` | lemmatized content words from captions, top **K ≈ 500–2000** |
+| `M` | 20–40 available symbols/image; sweep **M = 2–10** |
+| Downstream | predict the 12-dim presence vector from revealed words |
+
+Four properties make it the right choice:
+
+1. **Ground-truth `x`.** Derived from the exhaustive instance annotations — a
+   *different* channel from the captions that supply the symbols. So posterior
+   fidelity *and* task accuracy are both measurable against truth.
+2. **Two annotation channels over the same latent.** Captions are
+   saliency-gated; instance annotations are exhaustive by protocol. The A/B
+   contrast that §1.4 showed is confounded in simulation becomes a paired,
+   within-image, same-latent comparison.
+3. **`n = 12` exactly in the enumerable range**, with `K/n ≈ 40–170` — past the
+   `K/n ≤ 16` range chapter 3 swept, in the direction chapter 3 found favourable.
+4. **No feature extraction, no GPU for the data.** The first exact-vs-additive
+   numbers are reachable on the Mac inside the smoke-test budget, before anything
+   goes to Slurm.
+
+It also permits something chapter 3 structurally cannot: with 118k images at
+`n=12` you can estimate the **full empirical joint prior over all 4096 states**,
+and so decompose the error into "non-factorized prior" and "non-factorized
+likelihood" — which is exactly the decomposition §1.4 proved is necessary.
+
+⚠️ **The degeneracy trap.** Any framing where `x` is a lookup from `k` voids the
+experiment: `A` becomes an indicator matrix and both rules are trivially perfect.
+COCO instance→supercategory is deterministic metadata, so the instance channel
+must hold out half the 80 fine categories as symbols and define `x` from the
+other half. This same trap **eliminates PVSG** — its reviewed hierarchy maps each
+fine label to its coarse parent deterministically — and Instacart
+(product→department). Worth stating in the thesis so a reader does not ask why
+the existing PVSG pipeline was not reused.
+
+**Other pitfalls.** `person` appears in ~half of all images while
+`accessory`/`indoor` are rare — report per-supercategory metrics and consider an
+`n=10` variant. Supercategories are strongly correlated (`kitchen`+`food`+
+`appliance`), which is a feature: it is precisely what a factorized belief gets
+wrong.
+
+**Backups.** *eBird* complete checklists — the ecological occupancy model *is*
+latent presence + gated detection, with a 20-year literature and genuine
+certified non-detections for the silence rider; costs a 7-day access request and
+has **no ground truth for `x`**. *Coat / Yahoo R3 / Open Bandit Dataset* — the
+only designs where gated vs ungated evidence is **randomized** rather than
+argued; small, but they convert the gate from an observational claim into an
+intervention. Suggested shape if time allows: COCO as the main experiment
+(measured gate), eBird as ecological validation (structural gate), Coat as a
+randomized control — three genuinely different gate arguments rather than three
+variations of one.
+
+### 2.3 Protocol
+
+**Fit.** Learn `(A, a0)` by maximum likelihood of `P(k|x)` on ground-truth `x`.
+This keeps the likelihood component well specified so the comparison is about the
+*update rule*, not model quality. The prior is fitted separately — both a
+factorized Bernoulli (matching the theory) and the full empirical joint (the
+ceiling), so the prior-misspecification component of §1.4 is measured rather than
+assumed.
+
+**Compare.** All rules already exist in `experiments/bayes_approximation/` and
+operate on a plain `GenerativeModel(q_prior, A, a0)` dataclass, so a learned `A`
+drops straight in: `prior`, `tb`, `tb_affine` (gauge-fixed), `tb_predictive_error`
+(gradient / secant / CAVI), `assumed_density_filter`, `exact`, `exact_marginals`.
+Add one non-TB baseline of comparable capacity — a DeepSets/MLP multi-label
+classifier over the same symbol set — to answer "does the probabilistic machinery
+buy anything over just training a classifier on the same inputs?"
+
+**Conditions.** Keep the set minimal:
+
+| # | condition | question |
+|---|---|---|
+| C1 | ML fit, factorized prior | the baseline comparison |
+| C2 | C1 + gauge fix | is the free correction free on real data? |
+| C3 | C1 + empirical joint prior | how much of the gap is the prior? |
+| C4 | caption channel vs instance channel | does the ranking flip? |
+
+End-to-end training through the update, and the `Var[log Z]` penalty, are a
+*different* question (does learning fix the approximation?) — the synthetic study
+answered it negatively, and replicating that on real data is a strong result but
+a separate arm. Hold it back unless C1–C4 land.
+
+**Metrics, in priority order.** Downstream first: mAP and macro-F1 on
+supercategory presence, Bernoulli NLL, ECE. Then fidelity as diagnostic: joint
+KL, marginal KL, recovery `R`. Then the structural advantages that are real and
+cheap to measure: cost per symbol, and **order invariance** — permute the naming
+order and measure how far each rule's belief moves. Measured on the scene model:
+
+```
+TB          1.1e-16      TB-affine   5.6e-17
+TB-secant   9.1e-02      Exact Bayes 4.4e-16
+```
+
+Note what this does and does not show: order invariance is an advantage over
+*state-dependent corrections*, not over exact Bayes, which is order-invariant
+because it is exact. Say so.
+
+### 2.4 The three questions, and what each outcome would mean
+
+1. **How good is the approximation with a learned `A`?** Measured by `Var[log Z]`
+   and joint KL. §1.5 predicts a measurable but not catastrophic gap, with a
+   higher affine fraction than synthetic — i.e. more of it removable for free.
+2. **Does the fidelity gap matter downstream?** §1.4 already shows the answer can
+   be *no*, and can even invert. This is the chapter's most valuable result
+   either way: a clean demonstration that posterior fidelity is the wrong
+   objective would be more interesting than confirming it is the right one.
+3. **Does the measurement process determine which rule wins?** The C4 contrast,
+   with the τ estimate of §1.1 as the quantitative bridge. This is the first test
+   of the theory's boldest claim on real data.
+
+**Pre-registered risks.** (a) If learned `A` turns out nearly flat, questions 1–2
+become null — mitigate by measuring `Var[log Z]` in a pilot *before* committing.
+(b) Effect sizes in the scene pilot were ~0.2–0.9 nats against ~5 nats of NLL, so
+paired comparisons with bootstrap CIs over instances are required, not optional.
+(c) The τ confound of §1.1 — only the exhaustive channel makes the estimate
+interpretable.
+
+### 2.5 What to reuse, what to build
+
+Reuse: the entire inference ladder, `general.gauge_fix`, `general.affine_correction`,
+`general.triggered_posterior`, `temporal.silence_correction`, `diagnostics.*`, the
+`scene.evaluate_corpus` / `scene.order_invariance` harness, the cross-worktree
+import bridge already working in `thesis/section2/run_experiments.py`, and
+`cluster/pvsg/submit.sh` as a Slurm template.
+
+Build: (i) a COCO adapter producing `(x, [k], channel)` triples; (ii) an ML fit
+for `(A, a0)`; (iii) a Monte-Carlo estimator for `Var[log Z]` and the affine
+coefficients — ~20 lines, since `affine_correction` already uses the closed form
+`c_i = E[log Z | x_i=1] − E[log Z | x_i=0]`, which samples fine; (iv) a
+`docs/fidelity.md` ledger row, since this is an experimental extension.
+
+Note `all_states` refuses `n > 20` and every `Var[log Z]`/gauge-fix routine
+currently enumerates `2^n`. At `n=12` that is irrelevant; the MC estimator is
+needed for task 2, not task 1.
+
+---
+
+## 3. Task 2 — where the Heisenberg update could matter
+
+### 3.1 The honest win condition
+
+The existing analysis already forecloses the obvious pitches: **no** robustness
+advantage under model misspecification, **worse** under redundant evidence,
+learning **does not** drive the model toward the exact regime. So a
+leaderboard-win framing is likely to fail.
+
+What survives is structural. The rule wins where the *pipeline shape* matches:
+evidence that passed a selection gate, evidence that is a set rather than a
+sequence, per-symbol cost that dominates, or a setting where being the provable
+zeroth-order term of CAVI supplies theory an incumbent method lacks.
+
+Your point about `n` is right and it matters here: the `n ≤ 20` ceiling is an
+artifact of enumerating the *reference*, so it binds only task 1. In task 2 the
+comparator is other ML methods, so `n` is unconstrained — at the cost of needing
+the Monte-Carlo `Var[log Z]` estimator instead of enumeration.
+
+### 3.2 Prior art that bounds every claim
+
+The single most important scoping finding: **the additive-conjugate mechanism is
+not new**, and it has several established homes. Claims must be pitched at the
+*specific* deleted term, exactness condition and error law — never at the general
+observation.
+
+| what | where it already lives |
+|---|---|
+| additive natural-parameter updates as approximate Bayes | Khan & Rue, *The Bayesian Learning Rule*, JMLR 2023; Conjugate-Computation VI (2017) |
+| contraction ⇒ bounded steady-state error (§13a) | Boyen & Koller, UAI 1998 — this *is* their theorem in a new family |
+| the `Z`-gate cancellation | weighted distributions / selection models: Rao (1965), Patil & Rao (1978), Bayarri & DeGroot (1992) |
+| softmax denominator = conditioning on a total count | the multinomial–Poisson transformation ("Poisson trick"), Birch 1963 / Baker 1994 / Lang 1996 |
+| additive accumulation **plus** the compensator | **Zhang et al., J. Neurophysiol. 79:1017 (1998)** — Bayesian place-cell decoding is `P(x) · Π f_i(x)^{n_i} · exp(−τ Σ f_i(x))`. The additive part is the update; the exponential is exactly the term that cancels under gating. Given this is a brain model, expect this citation in review. |
+| "silence is evidence" | event-triggered state estimation with *negative information* — a developed subfield that computes the non-transmission likelihood properly; the constant drift `c_s` is a crude version |
+| a constant intercept correction under response-based sampling | Prentice & Pyke, Biometrika 66:403 (1979) |
+| the `Var[log Z]` regularizer of §12b | the **self-normalization** penalty `α(log Z)²`, Andreas & Klein (2015) — same objective, invented for unrelated reasons |
+| trained readouts converging to a tight frame | **neural collapse** (simplex ETF) |
+
+The neuroscience and self-normalization entries are the two that most change the
+thesis. The first *grounds* the update in established neural decoding rather than
+undermining it. The second means the flatness regularizer already has a name and
+a literature.
+
+### 3.3 Ranked opportunities
+
+**① The delta rule as the first-order correction.** Two independent research
+sweeps converged on this. Modern linear-attention states update
+`S ← S + βₜ(v − Sk)kᵀ` — "write what happened minus what you predicted" — which is
+structurally identical to `q ← q + A(e_k − p)`. The difference is the likelihood:
+DeltaNet's correction is one SGD step on `½‖v − Sk‖²`, a **Gaussian** likelihood;
+yours is the gradient of categorical cross-entropy. So *the delta rule as
+deployed is the Gaussian branch of a conjugate-update family, and the Heisenberg
+correction is the categorical branch.*
+
+The Bayesian framing is taken in the Gaussian branch — I verified Gated KalmaNet
+(arXiv:2511.21016, Peng, Chattopadhyay, Zancato, Nunez, Xia, Soatto) states in
+its abstract that DeltaNet, Gated DeltaNet and Kimi Delta Attention "are
+approximations to the KF recurrence under an identity error covariance
+assumption." **What is not taken: when that assumption is true.** Your tight-frame
+criterion answers it — the covariance stays isotropic, and the delta rule is
+exact rather than approximate, exactly when the accumulated keys form a tight
+frame. That is a sharp, cheap theory note with a measurable diagnostic
+(`‖KKᵀ − cI‖_F`) predicting where full-covariance machinery buys nothing.
+Reportedly MIRAS enumerated the objective space (ℓ₂, ℓ_p, Huber, KL retention…)
+and never reached a categorical likelihood — so the exponential-family branch
+appears unoccupied.
+
+*Test:* MQAR with controlled key geometry, swept tight-frame → anisotropic at
+fixed capacity. Small (d_h=32, T≤2048).
+
+**② Mechanistic overconfidence from the dropped `log Z`.** LogitNorm documents
+the symptom ("the norm of the logit keeps increasing during training, leading to
+overconfident output") with an empirical fix and no derivation. Confidence-
+regulation neurons document a mechanism — entropy neurons modulating confidence
+through the final LayerNorm's rescaling, token-frequency neurons pulling output
+toward the unigram distribution. Nobody has the closed-form derivation. You do,
+plus two predictions: overconfidence grows as `½M²Var[log Z]`, and the tilt
+`Z(x)^M` favours states well covered by the vocabulary — for which token-frequency
+neurons look like the model's *learned counter-measure*.
+
+**③ Tight frame ⟺ exactness, bridged by neural collapse and self-normalization.**
+All ingredients published, composition not made: neural collapse says trained
+readouts converge to a simplex ETF; your criterion says a tight-frame readout
+makes the additive update exactly Bayesian. **Prediction: Heisenberg-vs-Bayes
+fidelity should improve monotonically over training, tracking the neural-collapse
+metric.** Note this sits in tension with the synthetic finding that training
+*raised* `Var[log Z]` — which is itself the interesting question, since that
+experiment used a recognition objective on a small model rather than a
+classification objective trained to the terminal phase. Cheap to test on a
+CIFAR-100/ImageNet readout, which suits the local/cluster split.
+
+**④ Selection-gated evidence in recommenders.** The strongest systems fit. Standard
+IPS/propensity methods condition on *observables*; your gate depends on the
+**latent**, which the MNAR literature classifies as the hard nonignorable case.
+Your result says: for this one gate, no correction is needed — *ignorability by
+cancellation*. That is a contrarian, testable disagreement with deployed
+practice (the logQ correction in two-tower retrieval adds a normalizer term
+back). **Open Bandit Dataset** is the best fit anywhere: ~26M impressions with a
+uniform-random logging arm *and* a Thompson-sampling arm, true propensities
+logged — the same population sampled both ways, which almost nothing in ML
+provides.
+
+**⑤ LLM agent memory.** Best novelty-per-effort. 2026 systems are converging on
+probabilistic memory without a justified update rule — one maintains "an
+auditable log-odds stance per proposition" with no argument for why addition is
+right; another does noisy-OR belief updates with no selective-write gate
+modelled. You can supply the justification theorem, plus the prescription that
+sessions with *no* write must be counted and drifted — one counter, a few lines.
+Benchmarks: LoCoMo, ALFWorld, OAKS. Hard dependency: the rule needs a fixed
+symbol vocabulary, i.e. a closed ontology. Scope the claim and say so; the repo's
+`IndexVocabulary` work is what makes it defensible.
+
+**⑥ An `O(n)` alternative to mean-field parallel decoding.** Reportedly a June
+2026 paper attacks the known failure of masked-diffusion parallel decoding (the
+factorized reverse policy commits tokens from independent marginals, producing
+"New City" instead of "New York") with sigmoid fixed-point iterations at
+`O(m²|V|)` per step. Your rule is the `O(n)` zeroth-order term of the same CAVI,
+with an exactness condition and an error bound the incumbent lacks. Direct,
+benchmarkable competitor — but verify the paper exists and says this before
+building on it.
+
+### 3.4 What to drop, and two framing traps
+
+**Drop:** model merging / task arithmetic (saturated — Fisher merging *is* the
+second-order correction, and for an exponential family the Fisher is the Hessian
+of the log-partition; the gauge freedom has no weight-space analogue);
+associative memory (reframing); the cognitive DDM bridge (no benchmark, no
+community); ADF/EP "revival" (correct but cold — use ADF as the correctness
+argument, not the framing).
+
+**Trap 1 — RAG is the counter-example, not the application.** Fixed top-k
+retrieval is a hard, deterministic, constant-count gate: exactly k passages
+return regardless of score. That is *conditioning on the total count*, i.e. the
+multinomial side of the Poisson trick, where the normalizer does **not** cancel.
+The `Z`-gate appears only where the *number* of recorded items varies with score
+mass: threshold retrieval, abstention gates, agentic loops that decide whether to
+retrieve again. Stating that distinction is itself a contribution; pitching
+fixed-k RAG as the flagship application would be wrong.
+
+**Trap 2 — order invariance is a liability in sequence modelling.** The 2024–2026
+arc is explicitly about *destroying* commutativity to get state tracking, because
+commutative updates provably cannot do it. Frame exact order invariance as a
+property of a **global belief state**, where it is correct and desirable, and
+never as an advantage of a token mixer.
+
+**Do not lead with the SVI speedup.** It is the most impressive-sounding and
+least defensible number in the package — the obvious objection is "you beat a
+generic tool on a model where you know the conjugate structure." Lead with the
+ADF-equality and the CAVI-order decomposition; those survive an expert reviewer.
+
+### 3.5 Citation health warning
+
+Of the ~120 references surfaced during scoping, I independently verified exactly
+one: **arXiv:2511.21016 (Gated KalmaNet)**, whose title, authors and
+identity-covariance claim are confirmed. Everything else — particularly the 2026
+arXiv IDs, which are numerous and which I could not check — must be verified
+before it enters the thesis. Two were explicitly flagged by the researching agent
+as reaching it through a summarising fetch with unverified details.
+
+---
+
+## 4. Next steps
+
+1. **Pilot before committing** (Mac, hours): download COCO annotations, build the
+   `(x, [k])` adapter for both channels, fit `(A, a0)`, and measure `Var[log Z]`
+   and the affine fraction. This decides whether question 1 has a measurable
+   answer and costs almost nothing.
+2. **Write the ledger row** in `docs/fidelity.md` classifying the extension.
+3. **Land C1–C4** with paired bootstrap CIs, downstream metrics first.
+4. **Then choose one task-2 direction.** ① and ③ are theory contributions
+   testable at small scale and fit the compute posture; ④ and ⑤ are systems
+   contributions needing external data. They are not mutually exclusive but a
+   thesis chapter should pick one.
+5. **In parallel, cheap and non-committal:** submit the eBird data-access request
+   (7-day turnaround), so it is off the critical path if the ecological arm is
+   wanted.
+
+Two corrections to fold back into existing material regardless of what happens
+next: the §10 confound (§1.4 here) and the `log Z` **affine** criterion, which
+the thesis still states as "constant" in chapter 4.
