@@ -1026,22 +1026,32 @@ The measurement that separates them is `Var[log Z]`, which the harness **already
 logs** alongside `||A p||`. So the interpretation the filter study says it needs
 is available from quantities it already computes; only the reading was missing.
 
-**Finally, `alpha` is the contraction operator of §13.** The generalized gate is
-`q <- alpha q + beta a_k`, and §13a shows that a contraction converts the
-unbounded `M^2 Var[log Z]` error growth into a bounded steady state. `alpha` is
-that contraction. This reframes the single most-replicated negative result in the
-agency line — `alpha = 0` beating `alpha = 1` in three separate studies, with
-measured CBS saturation as the mechanism — as **the theory's own prediction**
-rather than a refutation of it. Error accumulates as `M^2` when nothing contracts
-it; discarding the prior sets the error to zero by discarding the belief. The
-theory then predicts an **interior optimum** as soon as retention is actually
-required, and predicts *where*: the optimal `alpha` should fall as the masking
-rate `rho` rises, because more masked steps means more accumulation between
-corrections.
+**And the contraction of §13 is the evolution operator, not `alpha`.** This
+correction matters, because the two are easy to conflate and the code settles it.
+In `src/tb/model.py`, `measure()` applies `q' = retain_gate * q + feedback_gate *
+a_k`, but in the filter step `retain_gate` is left at its default `1.0` for the
+*latent* measurement and is set from `action_retain_gate` only on the **action
+write**. So the `alpha` swept by `tb-raw-alpha0` gates the action channel, and at
+`alpha = 0` it overwrites `q` with the action embedding outright — which is much
+more drastic than "discard the prior weight" and is a different knob from the one
+§13 is about.
 
-`agency_filter.md` §1 already built `tb-raw-alpha0` to ask exactly whether the
-`alpha = 0` result reverses once retention is required. It just was not connected
-to the error law, and it does not yet contain the gauge-fixed arm.
+§13's contraction is the **transition step**, `brain.evolve(q, context)`, whose
+spectral norm is what converts unbounded `M^2 Var[log Z]` growth into a bounded
+steady state. The grid already varies it: `tb-accumulator` sets `evolution="none"`
+and propagates `q` by the identity, while every other Tensor Brain condition uses
+the QTB evolution. **That pair is the contraction contrast, and it is already
+built** — `tb-accumulator` against `tb-raw` across the `rho` sweep is a direct
+test of whether contraction bounds the error, which is the claim §13 makes and no
+experiment has examined.
+
+The consequence for the `alpha` story is a scoping one: the most-replicated
+negative in the agency line (`alpha = 0` beating `alpha = 1` in three studies) is
+*not* evidence about the contraction claim, because it varies the action gate
+rather than the transition operator. Testing a retain gate on the measurement
+channel would require a new config field. That is worth one line of code, but it
+should be reported as a new condition rather than as a reinterpretation of the
+existing result.
 
 ### 6.3 Ranked opportunities, continued
 
@@ -1070,15 +1080,21 @@ turned into a test of that theory by **one new condition and one config field**:
 - add `tb-gauge`, the fixed-`c` write `q <- q + a_k - c` with `c` estimated once
   from the prior, which is the arm that won at every `M` on COCO and the only one
   that keeps exact order invariance;
-- log `alpha` against `rho`, which the grid already sweeps.
+- optionally add a retain gate on the *latent* measurement, which is one config
+  field and is the knob §13's steady-state result actually concerns — the
+  existing `action_retain_gate` is a different channel (§6.2).
 
 Three predictions, all pre-registerable and all falsifiable by quantities the
 harness computes:
 
-1. **The optimum in `alpha` becomes interior**, and moves *down* as `rho` rises.
-   `alpha = 0` should stop winning as soon as retention is required. If `alpha = 0`
-   still wins at `rho = 0.9`, the contraction reading is wrong and §13 needs
-   rewriting — which is itself the most informative outcome available.
+1. **Contraction should bound the error, so `tb-accumulator` should degrade
+   faster in `rho` than `tb-raw`.** With `evolution="none"` the state is
+   propagated by the identity and nothing contracts the accumulated measurement
+   error, which §13 says grows as `M^2`; with the QTB evolution it should reach a
+   bounded steady state. The prediction is therefore about the *slope* of probe
+   `R^2` against `rho`, not about the level. If the two slopes match, the
+   contraction reading is wrong and §13 needs rewriting — which is itself the
+   most informative outcome available.
 2. **`tb-gauge` should rescue `alpha = 1`.** The saturation mechanism is a
    systematic translation of `q` along `A p`; §6.2 identifies that direction as
    the linear part of `log Z`; removing it is what the gauge fix does. So
@@ -1170,12 +1186,29 @@ same model — only the conditioning changes. **WRENCH** (Zhang et al., NeurIPS
 2021 Datasets & Benchmarks) supplies ~22 datasets with published labelling
 functions, so nothing has to be authored.
 
-It is also the natural home for a calibration comparison against **majority
-vote**, which is the fixed-count degenerate case of the same family: every voter
-counted once, no abstention modelled, no normalizer. If the additive rule is
-better calibrated than majority vote at matched accuracy, that is the cheapest
-possible demonstration of the whole argument. No such measurement exists in this
-repository yet; it would be produced by this experiment, not cited into it.
+**This comparison already exists in-house and it is strong.**
+`experiments/crowd/` runs exactly the majority-vote contrast — majority vote is
+the fixed-count degenerate case of the same family: every voter counted once, no
+abstention modelled, no normalizer. On the relevance task with five annotators
+(`output/crowd/relevance-5-seed0.json`, global-annotator arm), the additive rule
+matches or beats majority vote on accuracy while being roughly **ten times better
+calibrated**:
+
+| annotations | Heisenberg acc / ECE | majority acc / ECE |
+|---|---|---|
+| 1 | 0.691 / 0.094 | 0.693 / 0.360 |
+| 2 | 0.715 / **0.014** | 0.688 / 0.292 |
+| 10 | 0.735 / 0.029 | 0.734 / 0.279 |
+
+That is the dissociation of §0 in its cleanest form: accuracy is a decision
+metric and ties; ECE and NLL are probability metrics and separate by an order of
+magnitude — here in the additive rule's favour, because majority vote is the
+*more* biased aggregator once the count is fixed. The crowd experiment also
+already implements a **confidence-stopping** gate (stop querying annotators once
+the belief passes a threshold), which is a working instance of the
+self-initiated-measurement arm of ⑧ and of the variable-count regime (a). WRENCH
+would extend this from crowd labels to programmatic labelling functions, where
+abstention is intrinsic to the labeller rather than imposed by a stopping rule.
 
 *Cost:* low — CPU only, no training, public benchmark. *Risk:* real labelling
 functions abstain for reasons unrelated to `Z` (coverage rules, regex misses), so
