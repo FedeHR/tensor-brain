@@ -30,7 +30,11 @@ approximation. The rule's genuine edges are *structural*: exactness under
 selection-gated evidence, `O(n)` cost independent of state-space size, exact
 order invariance, and being the provable zeroth-order term of CAVI. So the
 target must be a setting whose **pipeline shape** matches, not a task where the
-numbers happen to be better. Ranked candidates are in §3.
+numbers happen to be better. Ranked candidates are in §3, extended by a
+second pass in §6 — which also revises this recommendation: **§6 identifies a
+second already-built experiment**, the `tb-agency` Memory Maze filter grid,
+that tests the evolution-operator theory of §13 for one new condition. See
+§6.5 for the merged priority over all eleven candidates.
 
 **One framing change that affects both.** Posterior fidelity and downstream
 decision quality genuinely dissociate, and they dissociate in the direction that
@@ -864,6 +868,432 @@ is deliberately last.
    (7-day turnaround), so it is off the critical path if the ecological arm is
    wanted.
 
+6. **See §6**, added after this list was written. It supersedes the ordering
+   here: ⑦ (the Memory Maze filter grid) is now joint-first with the instance
+   channel, and §6.2 shows why.
+
 Two corrections to fold back into existing material regardless of what happens
 next: the §10 confound (§1.4 here) and the `log Z` **affine** criterion, which
 the thesis still states as "constant" in chapter 4.
+
+---
+
+## 6. Second pass — further opportunities, ranked
+
+Added 2026-08-18, after sweeping the `tb-agency` worktree, which the first pass
+did not read. Three things changed the picture, in increasing order of how much
+they move the ranking:
+
+1. a **taxonomy correction** that both protects the novelty claim against the
+   place-cell prior art and generates most of the new candidates (§6.1);
+2. an **identity that was missed** — `grad log Z(x) = A p(x)` — which shows that
+   one of the corrections in the hierarchy is *already implemented*, under a
+   different name, in a built-and-tested-but-unrun experiment (§6.2);
+3. **five further candidates**, ⑦–⑪ (§6.3), of which the top two are in-house and
+   need one new config field rather than a new codebase.
+
+### 6.1 There are three regimes, not two
+
+The document so far treats the choice as binary: either the measurement is
+unconditional (compensator `-M log Z(x)`, §1.1 `tau = 0`) or it is `Z`-gated
+(compensator vanishes, `tau = 1`). That framing is incomplete, and completing it
+is worth doing because the missing third regime is exactly where the strongest
+prior-art threat lives.
+
+Start from the gated process and vary only **what you condition on**. A window
+opens with probability `Z(x)/C` and, having opened, reports `k` with probability
+`exp(s_k(x))/Z(x)`. Suppose `T` opportunities pass and `M` of them fire.
+
+**(a) You observe the reports, and nothing about the opportunities.** The joint
+density of "this window opened and said `k`" is
+
+```
+[Z(x)/C] * [exp(s_k(x))/Z(x)] = exp(s_k(x))/C
+```
+
+so over `M` reports the log-likelihood is `sum_m s_{k_m}(x) - M log C`, which is
+affine in `x`. **No compensator.** The additive rule is exact at every `M`. This
+is the §6 theorem of `tb_update_generalized.md`.
+
+**(b) You observe the reports *and* know how many opportunities passed.** Then
+the `T - M` silent windows are data too, and they multiply the likelihood by
+`(1 - Z(x)/C)^(T-M)`. For rare windows (`Z/C << 1`) this contributes
+
+```
+(T - M) log(1 - Z(x)/C)  ~=  -((T - M)/C) * Z(x)
+```
+
+a compensator **linear in `Z`, not in `log Z`**. Equivalently: the counts `n_k`
+are independent Poisson with mean `T exp(s_k(x))/C`, whose log-likelihood is
+`sum_k n_k s_k(x) - (T/C) Z(x)`.
+
+**(c) You observe the reports and condition on their total count.** Conditioning
+the Poisson counts on `N = sum_k n_k` is the Poisson trick, and it returns the
+multinomial with the familiar `-N log Z(x)`. This is the paper's model, and it is
+Trap 1 of §3.4 restated: fixing the count *reintroduces* the normalizer.
+
+| what you condition on | compensator | where it lives |
+|---|---|---|
+| reports only; opportunities unobserved | none — additive rule exact | the gated theorem, `tau = 1` |
+| reports plus known exposure `T` | `-(T/C) Z(x)` | Poisson / place-cell decoding |
+| reports plus their total count `N` | `-N log Z(x)` | the paper's model, `tau = 0` |
+
+Three consequences follow, and the second is the important one.
+
+**The exactness condition has a one-line English statement.** *The additive rule
+is exact when you observe the reports but not the opportunities.* That is not an
+exotic condition — it is the default shape of almost every corpus assembled by
+recording things that happened: annotation, event logs, clinical notes, citation
+graphs, retrieval logs, incident reports, species sightings. The reason is banal
+and general: opportunities are usually not instrumented, because instrumenting a
+non-event costs the same as instrumenting an event and returns nothing anyone
+asked for.
+
+**It bounds the place-cell prior art rather than being bounded by it.** §3.2 lists
+Zhang et al. (1998) as the most dangerous citation, because their decoder is
+additive accumulation *plus* the exact compensator. The taxonomy says why that is
+not a pre-emption: a spike-count decoder counts spikes **in a fixed time bin**, so
+it necessarily knows `T`, which puts it in regime (b) with the `-(T/C) Z(x)` term
+— and their compensator is indeed linear in the rate, `exp(-tau sum_i f_i(x))`,
+not logarithmic. Regime (a) is a different conditioning, and it is the one no
+neural decoder uses precisely because neurophysiology always has a clock. This
+turns the citation from a threat into a contrast that makes the claim concrete,
+which is a much better position to be in.
+
+**It supplies the missing prior-art row and a warning.** Regime (a) is exactly
+the **presence-only** problem in species distribution modelling — sightings are
+recorded, non-sightings are not — where Warton & Shepherd (2010, *Ann. Appl.
+Stat.*) and Fithian & Hastie (2013, *Ann. Appl. Stat.*) established the
+inhomogeneous-Poisson-process reading of MaxEnt. That literature has been
+thinking about this exact conditioning for fifteen years and should be cited
+before a reviewer supplies it. It also carries the standing warning of that
+field, which transfers directly: regime (a) identifies the *relative* likelihood
+of states but not the absolute rate, because `C` and `T` are confounded — which
+is the same statement as §1.1's "`tau` is confounded unless the corpus is
+known-exhaustive".
+
+> These citations are pre-2025 and I am confident of them, but per §3.5 they were
+> not re-verified here. The derivation above is new to this document and has not
+> been checked by anyone else.
+
+### 6.2 An identity that was missed: `grad log Z(x) = A p(x)`
+
+Differentiating `log Z(x) = log sum_k exp(a_{0,k} + a_k^T x)`:
+
+```
+d/dx log Z(x) = sum_k [exp(s_k(x))/Z(x)] a_k = sum_k p_k(x) a_k = A p(x)
+```
+
+verified numerically to `5e-10` relative error. So **the gradient of the
+log-partition function is the index-weighted mean column** — the quantity the
+`tb-agency` diagnostics already log as the *drift norm* `||A p||`.
+
+That is not a curiosity. It identifies two things this project has been treating
+as unrelated:
+
+**The `tb-corrected` condition of the filter study *is* the first-order
+Heisenberg correction.** `agency_filter.md` §1 lists `tb-corrected`, the write
+`q <- q + a_k - A p`, as a fix for CBS saturation motivated by control-variate
+reasoning. Under the identity, `A p` is the linear part of `log Z` at the current
+state, so `q <- q + a_k - A p` is precisely the first-order expansion of the exact
+update `q <- q + a_k - c` with `c` re-estimated every step. The condition was
+built for one reason and is an instance of something else.
+
+**And the fixed-`c` version is strictly better, for a reason the filter study
+could not have known.** Re-estimating `A p` at every step makes the update
+history-dependent, which destroys exact order invariance — the property that
+motivates the rule. The gauge-fixed variant of §1.5, `A <- A - c 1^T` with `c`
+fixed, is order-invariant, costs nothing at inference, and on COCO won at every
+`M` on both axes (§2.6). So the filter grid is currently missing the condition
+most likely to work.
+
+**It also resolves the worry in `agency_filter.md` §3, in the model's favour.**
+That section observes that as the index softmax sharpens, `p -> delta_k`, so
+`a_k - A p -> 0` and the correction cancels the write entirely — recorded there
+as a degeneracy that "a test pins". The Heisenberg reading says this is *correct
+behaviour, not a defect*: if state `x` deterministically emits symbol `k`, then
+observing `k` conveys nothing, and a zero update is the right update. What
+matters is not whether `p` is sharp but whether it is sharp on the **same** `k`
+across states:
+
+- sharp and **stable** across states — `log Z` is affine, `Var[log Z] ~= 0`, the
+  correction is near-zero *and near-zero is right*;
+- sharp but **state-dependent** — `log Z ~= max_k s_k(x)` is piecewise affine and
+  badly non-affine at the seams, `Var[log Z]` is large, and a single `c` cannot
+  fix it.
+
+The measurement that separates them is `Var[log Z]`, which the harness **already
+logs** alongside `||A p||`. So the interpretation the filter study says it needs
+is available from quantities it already computes; only the reading was missing.
+
+**Finally, `alpha` is the contraction operator of §13.** The generalized gate is
+`q <- alpha q + beta a_k`, and §13a shows that a contraction converts the
+unbounded `M^2 Var[log Z]` error growth into a bounded steady state. `alpha` is
+that contraction. This reframes the single most-replicated negative result in the
+agency line — `alpha = 0` beating `alpha = 1` in three separate studies, with
+measured CBS saturation as the mechanism — as **the theory's own prediction**
+rather than a refutation of it. Error accumulates as `M^2` when nothing contracts
+it; discarding the prior sets the error to zero by discarding the belief. The
+theory then predicts an **interior optimum** as soon as retention is actually
+required, and predicts *where*: the optimal `alpha` should fall as the masking
+rate `rho` rises, because more masked steps means more accumulation between
+corrections.
+
+`agency_filter.md` §1 already built `tb-raw-alpha0` to ask exactly whether the
+`alpha = 0` result reverses once retention is required. It just was not connected
+to the error law, and it does not yet contain the gauge-fixed arm.
+
+### 6.3 Ranked opportunities, continued
+
+Numbering continues from §3.3. A companion document,
+[`heisenberg_application_candidates.md`](heisenberg_application_candidates.md),
+holds longer write-ups of two candidates produced before the `tb-agency` sweep:
+**clinical event streams in MIMIC-IV**, which is a regime-(b) case and still
+stands, and **self-initiated measurement in RL**, which ⑧ below supersedes now
+that a closed-form-posterior environment is known to exist in-house.
+
+**⑦ The Memory Maze filter grid already contains the Heisenberg experiment.**
+This is the highest value-per-effort item anywhere in this document, and it is
+in-house. `agency_filter.md` describes a nine-condition offline filter study over
+a fixed 9.4 GB Memory Maze corpus: every architecture replays byte-identical
+data, observations are masked at `rho in {0, 0.5, 0.9}`, probes are closed-form
+ridge against ground truth the model never saw, and the diagnostics logged are
+index entropy, drift norm `||A p||`, saturated fraction, **Monte-Carlo
+`Var[log Z]`** and state norm. Implemented, 40 tests in its module, 256 in the
+suite, run end to end on a small corpus. **No result has been produced.**
+
+Every ingredient the evolution-operator theory needs is therefore already built,
+and §13 is the largest hole in the thesis: absent from chapter 3, deferred in
+chapter 4, and present in no experiment. What §6.2 adds is that the study can be
+turned into a test of that theory by **one new condition and one config field**:
+
+- add `tb-gauge`, the fixed-`c` write `q <- q + a_k - c` with `c` estimated once
+  from the prior, which is the arm that won at every `M` on COCO and the only one
+  that keeps exact order invariance;
+- log `alpha` against `rho`, which the grid already sweeps.
+
+Three predictions, all pre-registerable and all falsifiable by quantities the
+harness computes:
+
+1. **The optimum in `alpha` becomes interior**, and moves *down* as `rho` rises.
+   `alpha = 0` should stop winning as soon as retention is required. If `alpha = 0`
+   still wins at `rho = 0.9`, the contraction reading is wrong and §13 needs
+   rewriting — which is itself the most informative outcome available.
+2. **`tb-gauge` should rescue `alpha = 1`.** The saturation mechanism is a
+   systematic translation of `q` along `A p`; §6.2 identifies that direction as
+   the linear part of `log Z`; removing it is what the gauge fix does. So
+   `tb-gauge` at `alpha = 1` should show saturated fraction near `tb-raw`'s
+   `alpha = 0` level while retaining the prior. This is the sharpest prediction
+   in the package, because it says a *free reparameterisation* should undo a
+   failure that three studies attributed to the architecture.
+3. **`Var[log Z]` should rank the conditions.** Across the grid, downstream probe
+   `R^2` degradation from `rho = 0` to `rho = 0.9` should track measured
+   `Var[log Z]`, which is the error law meeting real data for the first time.
+
+The memory-horizon curve is what makes this more than a repeat of COCO: it
+resolves error growth **against the number of steps since the last observation**,
+which is a direct read of the `M^2`-versus-bounded-steady-state question that no
+static dataset can ask.
+
+*Cost:* one condition, one config field, plus the corpus render (~10 min across
+16 array tasks) and the grid (one 4 h Slurm stage). *Risk:* the study is a
+single-seed screening pass by design, so the `alpha`-versus-`rho` prediction will
+be suggestive rather than significant without a seed follow-up on the 3–4
+surviving cells.
+
+**⑧ Enforce the likelihood, then ask the RL question.** `agency_bayes.md` reports
+that both of its predictions were falsified, and its Finding 8 is the reason:
+"the measurement update has the algebraic *shape* of log-odds accumulation, but
+nothing constrains the injected `a_k` to be a calibrated log-likelihood ratio,
+and a policy gradient does not induce that." **This invalidates every RL result
+in the line as evidence about the Heisenberg update**, in both directions — the
+negatives do not count against it either, because the object under test was never
+built. Any RL chapter has to clear this first.
+
+The environment already clears it. `experiments/agency/noisy.py` exposes
+`exact_posterior()`, a closed-form Bayes posterior over which object is cued,
+accumulated as log-likelihood *ratios*. That makes the noisy foraging task the
+**only setting in the repository where `KL(exact || Heisenberg)` is directly
+computable in a sequential decision problem** — the RL analogue of COCO's
+enumerable 4096 states. Its own follow-up list already names the experiment
+("supervise `sigma(q)` against the exact posterior"); what was not noticed is
+that this is the Heisenberg experiment.
+
+Two arms:
+
+- **Calibrated-write arm.** Add an auxiliary loss pulling `sigma(q)` toward
+  `exact_posterior()`. Then re-run E1 and E2. This answers the question E1 could
+  not: is the additive form a useful inductive bias *when it is actually
+  enforced*? It also breaks Finding 9's confound, since supervising the belief
+  decouples `alpha` from its second role as an inverse temperature.
+- **Self-initiated-measurement arm.** Give observation a per-step cost and let
+  the agent choose when to look. Cross `{always observe, agent-gated,
+  Z-proportional gate}` against `{additive, gauge-fixed, exact}`. The theory's
+  prediction is specific and strange enough to be worth stating: an agent that
+  gates its own observations in proportion to `Z` **makes its own cheap inference
+  exact**, so the additive rule should lose to exact Bayes under forced
+  observation and tie with it under self-gating. That is a normative account of
+  why an agent would choose to look when it does, and it is the empirical content
+  of the unwritten "self-initiated measurements" chapter.
+
+*Cost:* moderate — the environment, the exact reference and the conditions
+machinery exist; the auxiliary loss and the observation-cost wrapper do not.
+*Risk:* the highest in this list. Outcomes in this environment were bimodal on
+escape, cells are conditioned on escaped seeds, and the recurrent controls mostly
+failed to escape at all; ~6 seeds per cell is the floor and the architecture
+comparison may again be undecidable. Read it as a *mechanism* study against the
+exact posterior, not as a benchmark comparison.
+
+**⑨ Programmatic weak supervision with abstaining labelling functions.** The
+cleanest external instance of regime (a) I can find, and it passes all three
+filters of the selection rule. In weak supervision a set of labelling functions
+vote on each example and **abstain** when they do not match; a label model then
+infers the true label. The number of votes therefore varies with how strongly the
+example matches the labelling vocabulary, which is a score-mass-dependent count,
+and the gate depends on the **latent** label rather than on observables. The
+incumbent does exactly what the theory says is unnecessary: Snorkel's label model
+and its Dawid–Skene ancestors estimate class-conditional accuracies *and* the
+abstention structure, and the matrix-completion and triplet estimators exist
+specifically to avoid a partition function.
+
+The decisive test is a within-dataset paired contrast on identical data, which is
+the design pattern that made COCO work:
+
+- **variable-count arm** — use every labelling function that fired (regime a);
+- **fixed-count arm** — subsample to exactly `m` firing functions per example
+  (regime c), which is Trap 1 induced deliberately.
+
+*Prediction:* additive log-odds accumulation should sit close to the exact label
+posterior in the variable-count arm and drift from it in the fixed-count arm,
+with the gap growing in `m` as `(m^2/2) Var[log Z]`. Same data, same functions,
+same model — only the conditioning changes. **WRENCH** (Zhang et al., NeurIPS
+2021 Datasets & Benchmarks) supplies ~22 datasets with published labelling
+functions, so nothing has to be authored.
+
+It is also the natural home for a calibration comparison against **majority
+vote**, which is the fixed-count degenerate case of the same family: every voter
+counted once, no abstention modelled, no normalizer. If the additive rule is
+better calibrated than majority vote at matched accuracy, that is the cheapest
+possible demonstration of the whole argument. No such measurement exists in this
+repository yet; it would be produced by this experiment, not cited into it.
+
+*Cost:* low — CPU only, no training, public benchmark. *Risk:* real labelling
+functions abstain for reasons unrelated to `Z` (coverage rules, regex misses), so
+the gate is only approximately `Z`-proportional; report the estimated `tau` per
+dataset rather than assuming `tau = 1`, which turns the weakness into the
+measurement.
+
+**⑩ Sparse autoencoder dictionaries: JumpReLU against TopK.** The most current
+venue in the list, and a ready-made instantiation of ③'s tight-frame criterion. An
+SAE decodes an activation as `x_hat = sum_i f_i d_i + b` — a **sum of dictionary
+columns over the features that fired**, which is `q <- q + a_k` with `a_k` the
+decoder column. The two dominant architectures differ in exactly the way the
+taxonomy cares about:
+
+- **TopK** SAEs (Gao et al. 2024; Llama Scope) fire exactly `k` features on every
+  input — a constant count, regime (c);
+- **JumpReLU** SAEs (Gemma Scope) fire whichever features exceed a learned
+  threshold — a count that varies with score mass, regime (a)/(b).
+
+So the field has independently built both arms of the paired contrast, at scale,
+and published them. The mapping is looser than COCO's because the SAE objective
+is Gaussian reconstruction rather than categorical emission — which is precisely
+why it lands on the **tight-frame** branch (③) rather than the `log Z` branch, and
+makes `||D D^T - c I||_F` over the decoder the diagnostic that predicts where
+additive accumulation is exact.
+
+*Test:* train two small SAEs, one TopK and one JumpReLU, on the **same**
+activations from one layer of one small model at matched sparsity and matched
+reconstruction loss. Comparing the published suites directly would confound the
+gate with the base model and the training recipe, so do not; the point of
+training both is to remove that confound cheaply. Then probe a known binary
+attribute from the summed decoder columns and compare calibration.
+
+*Cost:* low-to-moderate, one GPU, inference plus two small SAE fits. *Risk:*
+moderate and honest — this is the most speculative mapping in the section, and it
+should be scoped as a diagnostic note rather than a chapter until the tight-frame
+metric is shown to predict anything on real dictionaries.
+
+**⑪ Threshold retrieval against fixed top-k.** Ranked last, and included for a
+defensive reason rather than an offensive one. §3.4's Trap 1 asserts that fixed-k
+retrieval is the counter-example and threshold retrieval the application. That
+assertion is currently unmeasured, and it is the claim a reviewer is most likely
+to probe, because RAG is the first application anyone will propose. One small
+experiment on a public retrieval benchmark — same corpus, same encoder, same
+queries, retrieval by fixed `k` versus by score threshold, evidence fused
+additively, scored against an exact posterior over a small topic latent —
+converts an assertion into a measurement.
+
+*Cost:* low. *Value:* almost entirely defensive; it protects §3.4 rather than
+opening anything. Do it only if the retrieval framing survives into the written
+chapter.
+
+### 6.4 A third trap, and one more thing to drop
+
+**Trap 3 — active learning is an *anti*-gate, and it makes things worse.**
+Uncertainty sampling, the most-cited selection rule in machine learning, queries
+the points the model is *least* certain about. But `Z(x)` is the total drive to
+the index layer, so large `Z` means the state matches the vocabulary strongly —
+`Z` is a **confidence** measure, and uncertainty sampling selects **low**-`Z`
+points. In the `tau` family that is `tau < 0`, where the residual correction
+`(1 - tau) M log Z(x)` is *larger* than in the ungated case. An uncertainty-
+sampled pool is therefore a setting where the additive rule is worse than it
+would have been on unselected data.
+
+Say this explicitly, because "isn't this just active learning?" is a question
+that will be asked, and the correct answer is the opposite of the expected one:
+active learning is the one selection regime the theory says to avoid. It also
+predicts something checkable — a model fitted on uncertainty-sampled data should
+show *higher* `Var[log Z]` than the same model fitted on a random sample of the
+same size.
+
+**Drop: asynchronous and federated belief aggregation.** Exact order invariance
+and `O(n)` cost do look like real systems advantages when many clients report
+asynchronously and no synchronisation barrier is wanted. But there is no
+benchmark whose metric would move, the comparison would be against engineering
+practice rather than against a method, and Trap 2 applies with extra force. It is
+a remark for a discussion section, not an experiment.
+
+### 6.5 Merged priority
+
+All eleven candidates, ordered by value per unit of effort given that the
+submission deadline is **03.09.2026**. The last column is the honest split:
+`now` means it can plausibly land in the thesis; `paper` means post-submission
+material the thesis should merely point at.
+
+| # | candidate | cost | novelty | risk | when |
+|---|---|---|---|---|---|
+| ⑦ | Memory Maze filter grid + `tb-gauge` | very low (built) | high — §13 meets data | low | **now** |
+| — | COCO instance channel (C4, §5) | low (built) | high — the gated claim on real data | low | **now** |
+| ⑧ | noisy foraging, calibrated write | moderate | high — unblocks the whole RL line | **high** | now/paper |
+| ① | delta rule as the categorical branch | low | high | low | paper |
+| ⑨ | weak supervision with abstention | low | high | moderate | paper |
+| ③ | tight frame ⟺ neural collapse | low | moderate–high | low | paper |
+| ② | mechanistic overconfidence (LogitNorm) | low | moderate–high | low | paper |
+| ④ | selection-gated recommenders (OBD) | moderate | high | moderate | paper |
+| ⑩ | SAE JumpReLU vs TopK | low–moderate | high | moderate | paper |
+| ⑤ | LLM agent memory | moderate | moderate | high (closed ontology) | paper |
+| ⑪ | threshold vs top-k retrieval | low | low (defensive) | low | optional |
+| ⑥ | diffusion parallel decoding | — | — | — | **closed**, §4.4 |
+
+**What this second pass changes about §0.** Task 1 is still COCO and task 2 is
+still a structural argument. But ⑦ now sits alongside C4 as a *second* thing that
+is already built, and it addresses the part of the theory with no empirical
+support at all. Two arms, both cheap, both in-house:
+
+- **C4**, the instance channel, tests the *measurement-process* claim — does the
+  ranking flip when only the provenance of the evidence changes?
+- **⑦**, the filter grid, tests the *temporal* claim — does contraction bound the
+  error, and does the free gauge fix rescue prior retention?
+
+Together they cover the two claims a reader is most likely to doubt, at a
+combined cost of one new condition, one config field and two Slurm stages. If
+only one can be run, run C4, because it is closer to the written chapters. If
+both fit, ⑦ is the one that turns an unwritten chapter into a measured one.
+
+**Two more things to fold back**, in addition to the two recorded at the end of
+§5: the three-regime taxonomy of §6.1 belongs in the "when is the additive update
+exactly Bayesian?" chapter as its organising frame, and the identity
+`grad log Z = A p` of §6.2 belongs in the correction-hierarchy chapter, because it
+is what makes the prediction-error correction and the gauge fix the same object
+seen at two different orders.
