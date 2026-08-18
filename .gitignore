@@ -230,3 +230,10 @@ papers/
 pvsg-audit/
 tmp/
 runs/
+# COCO annotations and derived corpora (large, re-derivable)
+data/coco/
+data/gsm8k/
+data/models/
+
+# Stage-0 fit checkpoint: large, re-derivable from the model and questions
+output/diffusion_heisenberg/fit.pt
