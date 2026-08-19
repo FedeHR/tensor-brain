@@ -1,0 +1,62 @@
+{
+  "pool": "hkust-nlp/dart-math-pool-math",
+  "results": [
+    {
+      "corpus": "VRT (= the pool itself; definitional)",
+      "n_queries": 7457,
+      "mean_count": 216.60413034732466,
+      "tau": 1.0,
+      "tau_robust_se": 9.50675436624106e-18,
+      "overdispersion": 3.0882166989496965e-15,
+      "definitional": true
+    },
+    {
+      "corpus": "DART-Math-Uniform",
+      "n_queries": 7457,
+      "mean_count": 39.19605739573555,
+      "tau": 0.2237216528520505,
+      "tau_robust_se": 0.008178571143955019,
+      "overdispersion": 2.0753743278991346,
+      "definitional": false
+    },
+    {
+      "corpus": "DART-Math-Hard (Prop2Diff)",
+      "n_queries": 7457,
+      "mean_count": 69.9906128469894,
+      "tau": 0.6790646558409767,
+      "tau_robust_se": 0.02649335984906195,
+      "overdispersion": 5.884981525577459,
+      "definitional": false
+    }
+  ],
+  "by_level": {
+    "VRT (= the pool itself; definitional)": [
+      208.21061946902654,
+      219.57079318013342,
+      229.21558768070395,
+      232.38621509209744,
+      196.3812252093433
+    ],
+    "DART-Math-Uniform": [
+      40.0,
+      40.0,
+      39.8240100565682,
+      39.702317290552585,
+      37.70207139709123
+    ],
+    "DART-Math-Hard (Prop2Diff)": [
+      14.28495575221239,
+      33.51964418087472,
+      54.978629792583284,
+      79.91859774212715,
+      108.70736007051565
+    ]
+  },
+  "levels": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ]
+}

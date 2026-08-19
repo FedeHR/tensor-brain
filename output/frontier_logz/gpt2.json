@@ -1,0 +1,86 @@
+{
+  "model": "gpt2",
+  "vocab": 50257,
+  "dim": 768,
+  "n_states": 20000,
+  "logz_mean": -89.67539978027344,
+  "logz_var": 4403.08935546875,
+  "logz_sd": 66.35578155517578,
+  "logz_range": [
+    -253.7823944091797,
+    195.79733276367188
+  ],
+  "affine_fraction_heldout": 0.9986612364662673,
+  "quadratic_extra": -6.547450268664294e-05,
+  "residual_var": 5.958595275878906,
+  "state_norm_cv": 0.31699374318122864,
+  "logit_sd": 67.83037361840755,
+  "k_eff_median": 7.065067291259766,
+  "grad_norm_mean": 2.289557695388794,
+  "corr_entropy_logz": -0.09412859380245209,
+  "corr_statenorm_logz": -0.7458271384239197,
+  "gauges": {
+    "least_squares": {
+      "residual_var": 1.0523280663049601,
+      "removed_fraction": 0.9997635653498921,
+      "norm": 52.322571630111305,
+      "cos_to_least_squares": 0.9999999999999992,
+      "effective_rank": 767
+    },
+    "uniform_mean_embedding": {
+      "residual_var": 11.783184645696787,
+      "removed_fraction": 0.9973525811692496,
+      "norm": 2.0521309572923454,
+      "cos_to_least_squares": -0.012797404497116052
+    },
+    "model_marginal_weighted": {
+      "residual_var": 8.450423811771199,
+      "removed_fraction": 0.9981013782097292,
+      "norm": 1.6054016306644676,
+      "cos_to_least_squares": 0.022795551850995906
+    },
+    "corpus_freq_weighted": {
+      "residual_var": 8.394847138282763,
+      "removed_fraction": 0.99811386504893,
+      "norm": 1.6094204485770187,
+      "cos_to_least_squares": 0.023045759643684244
+    },
+    "mean_grad_log_Z": {
+      "residual_var": 8.43514896748968,
+      "removed_fraction": 0.9981048101266179,
+      "norm": 1.6052539633383,
+      "cos_to_least_squares": 0.02279701843856493
+    }
+  },
+  "state_nulls": {
+    "gaussian_matched_mean_cov": {
+      "logz_var": 4389.31689453125,
+      "affine_fraction": 0.9996885531554938,
+      "residual_var": 1.3480128093461645
+    },
+    "sphere_matched_norm": {
+      "logz_var": 2471.921142578125,
+      "affine_fraction": 0.13451344961523992,
+      "residual_var": 2158.030915363462
+    },
+    "coordinate_shuffled": {
+      "logz_var": 1023.4270629882812,
+      "affine_fraction": 0.9999174059839184,
+      "residual_var": 0.0852656481815628
+    }
+  },
+  "kl_error_law": {
+    "M=1": {
+      "raw": 2225.4099934684787,
+      "gauge_fixed": 0.5261640331524801
+    },
+    "M=2": {
+      "raw": 8901.639973873915,
+      "gauge_fixed": 2.1046561326099202
+    },
+    "M=4": {
+      "raw": 35606.55989549566,
+      "gauge_fixed": 8.418624530439681
+    }
+  }
+}

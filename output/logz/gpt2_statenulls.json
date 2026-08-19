@@ -1,0 +1,66 @@
+{
+  "results": [
+    {
+      "model": "gpt2",
+      "readout": "trained",
+      "n_states": 20000,
+      "dim": 768,
+      "vocab": 50257,
+      "logz_var": 4450.8193359375,
+      "logz_sd": 66.71446122046929,
+      "affine_fraction": 0.9986612388906295,
+      "residual_var": 5.958583831787109,
+      "residual_sd": 2.441021063364081,
+      "quadratic_fraction": -6.533373488444345e-05,
+      "norm_cv": 0.31699371337890625,
+      "logit_sd": 67.83036836947073,
+      "k_eff_median": 7.065035343170166,
+      "grad_norm_mean": 2.289557695388794,
+      "gauge_vs_mean_embed_cos": -0.07067839801311493,
+      "gauge_norm": 2.193624973297119
+    },
+    {
+      "model": "gpt2",
+      "readout": "states_gaussian_matched_cov",
+      "n_states": 20000,
+      "dim": 768,
+      "vocab": 50257,
+      "logz_var": 4514.39111328125,
+      "logz_sd": 67.18921872801656,
+      "affine_fraction": 0.9993555099103468,
+      "residual_var": 2.909480333328247,
+      "residual_sd": 1.705719887123395,
+      "quadratic_fraction": -0.003062570787599915,
+      "norm_cv": 0.44195616245269775,
+      "logit_sd": 68.07009054038593,
+      "k_eff_median": 32.30302047729492,
+      "grad_norm_mean": 1.850083351135254,
+      "gauge_vs_mean_embed_cos": 0.05201239883899689,
+      "gauge_norm": 1.9025472402572632
+    },
+    {
+      "model": "gpt2",
+      "readout": "states_dim_shuffled",
+      "n_states": 20000,
+      "dim": 768,
+      "vocab": 50257,
+      "logz_var": 1034.364990234375,
+      "logz_sd": 32.161545209059454,
+      "affine_fraction": 0.9952984532959038,
+      "residual_var": 4.863115310668945,
+      "residual_sd": 2.2052472221202195,
+      "quadratic_fraction": -0.00020028437789947458,
+      "norm_cv": 0.20529398322105408,
+      "logit_sd": 32.61776990888832,
+      "k_eff_median": 86.08865356445312,
+      "grad_norm_mean": 1.6515867710113525,
+      "gauge_vs_mean_embed_cos": 0.40092524886131287,
+      "gauge_norm": 0.7909733653068542
+    }
+  ],
+  "gauge_check": {
+    "softmax_delta": 2.5451183319091797e-05,
+    "shift_err": 0.00048828125,
+    "var_ratio": 0.003701780689880252
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "model": "gpt2",
+  "logz_var_heldout": 4450.8193359375,
+  "gauges": [
+    {
+      "gauge": "least_squares_slope",
+      "residual_var": 1.055590271949768,
+      "removed_fraction": 0.9997628323703399,
+      "norm": 304584.625,
+      "cos_to_least_squares": 1.0000001192092896
+    },
+    {
+      "gauge": "uniform_mean_row (all-but-the-top)",
+      "residual_var": 11.783184051513672,
+      "removed_fraction": 0.9973525809155245,
+      "norm": 2.052131175994873,
+      "cos_to_least_squares": 0.2618078887462616
+    },
+    {
+      "gauge": "marginal_weighted_row (Stein / Zipfian)",
+      "residual_var": 8.435153007507324,
+      "removed_fraction": 0.9981048089417157,
+      "norm": 1.6052541732788086,
+      "cos_to_least_squares": -0.14835698902606964
+    },
+    {
+      "gauge": "none (c=0)",
+      "residual_var": 4450.8193359375,
+      "removed_fraction": 0.0,
+      "norm": 0.0,
+      "cos_to_least_squares": 0.0
+    }
+  ]
+}

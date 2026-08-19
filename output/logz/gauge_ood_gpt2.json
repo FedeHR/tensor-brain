@@ -1,0 +1,41 @@
+{
+  "model": "gpt2",
+  "results": [
+    {
+      "gauge": "baseline (c=0)",
+      "auroc_energy_ood": 0.15305825,
+      "max_softmax_change": 0.0,
+      "logz_var_id": 3204.20458984375
+    },
+    {
+      "gauge": "flat gauge (LS slope, no OOD labels)",
+      "auroc_energy_ood": 0.439381,
+      "max_softmax_change": 3.345310688018799e-05,
+      "logz_var_id": 5.655709743499756
+    },
+    {
+      "gauge": "chosen gauge, alpha=-30",
+      "auroc_energy_ood": 0.0544475,
+      "max_softmax_change": 4.023313522338867e-05,
+      "logz_var_id": 4004.585693359375
+    },
+    {
+      "gauge": "chosen gauge, alpha=-10",
+      "auroc_energy_ood": 0.10118775,
+      "max_softmax_change": 3.737211227416992e-05,
+      "logz_var_id": 3389.318115234375
+    },
+    {
+      "gauge": "chosen gauge, alpha=+10",
+      "auroc_energy_ood": 0.28459275,
+      "max_softmax_change": 3.349781036376953e-05,
+      "logz_var_id": 3100.770263671875
+    },
+    {
+      "gauge": "chosen gauge, alpha=+30",
+      "auroc_energy_ood": 0.7836795,
+      "max_softmax_change": 3.820657730102539e-05,
+      "logz_var_id": 3138.94140625
+    }
+  ]
+}
