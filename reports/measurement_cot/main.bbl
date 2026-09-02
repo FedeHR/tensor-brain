@@ -1,0 +1,168 @@
+\begin{thebibliography}{23}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Bengio et~al.(2013)Bengio, L{\'e}onard, and
+  Courville]{bengio2013estimating}
+Yoshua Bengio, Nicholas L{\'e}onard, and Aaron Courville.
+\newblock Estimating or propagating gradients through stochastic neurons for
+  conditional computation.
+\newblock \emph{arXiv preprint arXiv:1308.3432}, 2013.
+
+\bibitem[Busemeyer and Bruza(2012)]{busemeyer2012quantum}
+Jerome~R. Busemeyer and Peter~D. Bruza.
+\newblock \emph{Quantum Models of Cognition and Decision}.
+\newblock Cambridge University Press, 2012.
+
+\bibitem[Butt et~al.(2025)Butt, Kwiatkowski, Labiad, Kempe, and
+  Ollivier]{butt2025softtokens}
+Natasha Butt, Ariel Kwiatkowski, Ismail Labiad, Julia Kempe, and Yann Ollivier.
+\newblock Soft tokens, hard truths.
+\newblock \emph{arXiv preprint arXiv:2509.19170}, 2025.
+
+\bibitem[Cheng and Van~Durme(2024)]{cheng2024compressed}
+Jeffrey Cheng and Benjamin Van~Durme.
+\newblock Compressed chain of thought: Efficient reasoning through dense
+  representations.
+\newblock \emph{arXiv preprint arXiv:2412.13171}, 2024.
+
+\bibitem[Dehghani et~al.(2018)Dehghani, Gouws, Vinyals, Uszkoreit, and
+  Kaiser]{dehghani2018universal}
+Mostafa Dehghani, Stephan Gouws, Oriol Vinyals, Jakob Uszkoreit, and {\L}ukasz
+  Kaiser.
+\newblock Universal transformers.
+\newblock \emph{arXiv preprint arXiv:1807.03819}, 2018.
+\newblock ICLR 2019.
+
+\bibitem[Deng et~al.(2023)Deng, Prasad, Fernandez, Smolensky, Chaudhary, and
+  Shieber]{deng2023implicit}
+Yuntian Deng, Kiran Prasad, Roland Fernandez, Paul Smolensky, Vishrav
+  Chaudhary, and Stuart Shieber.
+\newblock Implicit chain of thought reasoning via knowledge distillation.
+\newblock \emph{arXiv preprint arXiv:2311.01460}, 2023.
+
+\bibitem[Geiping et~al.(2025)Geiping, McLeish, Jain, Kirchenbauer, Singh,
+  Bartoldson, Kailkhura, Bhatele, and Goldstein]{geiping2025recurrent}
+Jonas Geiping, Sean McLeish, Neel Jain, John Kirchenbauer, Siddharth Singh,
+  Brian~R. Bartoldson, Bhavya Kailkhura, Abhinav Bhatele, and Tom Goldstein.
+\newblock Scaling up test-time compute with latent reasoning: A recurrent depth
+  approach.
+\newblock \emph{arXiv preprint arXiv:2502.05171}, 2025.
+
+\bibitem[Goyal et~al.(2023)Goyal, Ji, Rawat, Menon, Kumar, and
+  Nagarajan]{goyal2023pause}
+Sachin Goyal, Ziwei Ji, Ankit~Singh Rawat, Aditya~Krishna Menon, Sanjiv Kumar,
+  and Vaishnavh Nagarajan.
+\newblock Think before you speak: Training language models with pause tokens.
+\newblock \emph{arXiv preprint arXiv:2310.02226}, 2023.
+\newblock ICLR 2024.
+
+\bibitem[Gozeten et~al.(2025)Gozeten, Ildiz, Zhang, Harutyunyan, Rawat, and
+  Oymak]{gozeten2025cot2}
+Halil~Alperen Gozeten, M.~Emrullah Ildiz, Xuechen Zhang, Hrayr Harutyunyan,
+  Ankit~Singh Rawat, and Samet Oymak.
+\newblock Continuous chain of thought enables parallel exploration and
+  reasoning.
+\newblock \emph{arXiv preprint arXiv:2505.23648}, 2025.
+
+\bibitem[Hao et~al.(2024)Hao, Sukhbaatar, Su, Li, Hu, Weston, and
+  Tian]{hao2024coconut}
+Shibo Hao, Sainbayar Sukhbaatar, DiJia Su, Xian Li, Zhiting Hu, Jason Weston,
+  and Yuandong Tian.
+\newblock Training large language models to reason in a continuous latent
+  space.
+\newblock \emph{arXiv preprint arXiv:2412.06769}, 2024.
+\newblock COLM 2025.
+
+\bibitem[Jang et~al.(2017)Jang, Gu, and Poole]{jang2017gumbel}
+Eric Jang, Shixiang Gu, and Ben Poole.
+\newblock Categorical reparameterization with gumbel-softmax.
+\newblock In \emph{International Conference on Learning Representations}, 2017.
+
+\bibitem[Misra and Sudarshan(1977)]{misra1977zeno}
+Baidyanath Misra and E.~C.~G. Sudarshan.
+\newblock The zeno's paradox in quantum theory.
+\newblock \emph{Journal of Mathematical Physics}, 18\penalty0 (4):\penalty0
+  756--763, 1977.
+
+\bibitem[Nielsen and Chuang(2010)]{nielsen2010quantum}
+Michael~A. Nielsen and Isaac~L. Chuang.
+\newblock \emph{Quantum Computation and Quantum Information}.
+\newblock Cambridge University Press, 10th anniversary edition, 2010.
+
+\bibitem[Pfau et~al.(2024)Pfau, Merrill, and Bowman]{pfau2024dots}
+Jacob Pfau, William Merrill, and Samuel~R. Bowman.
+\newblock Let's think dot by dot: Hidden computation in transformer language
+  models.
+\newblock \emph{arXiv preprint arXiv:2404.15758}, 2024.
+\newblock COLM 2024.
+
+\bibitem[Rizvi-Martel et~al.(2026)Rizvi-Martel, Rabusseau, and
+  Mosbach]{rizvimartel2026illusion}
+Michael Rizvi-Martel, Guillaume Rabusseau, and Marius Mosbach.
+\newblock The illusion of superposition? a principled analysis of latent
+  thinking in language models.
+\newblock \emph{arXiv preprint arXiv:2604.06374}, 2026.
+
+\bibitem[Tresp and Li(2025)]{tresp2025bayes}
+Volker Tresp and Hang Li.
+\newblock Bayes or heisenberg: Who(se) rules?
+\newblock \emph{arXiv preprint arXiv:2510.13894}, 2025.
+
+\bibitem[Tresp et~al.(2021)Tresp, Sharifzadeh, Li, Konopatzki, and
+  Ma]{tresp2021tensorbrain}
+Volker Tresp, Sahand Sharifzadeh, Hang Li, Dario Konopatzki, and Yunpu Ma.
+\newblock The tensor brain: A unified theory of perception, memory and semantic
+  decoding.
+\newblock \emph{arXiv preprint arXiv:2109.13392}, 2021.
+
+\bibitem[Wang et~al.(2022)Wang, Wei, Schuurmans, Le, Chi, Narang, Chowdhery,
+  and Zhou]{wang2022selfconsistency}
+Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed~Chi, Sharan Narang,
+  Aakanksha Chowdhery, and Denny Zhou.
+\newblock Self-consistency improves chain of thought reasoning in language
+  models.
+\newblock \emph{arXiv preprint arXiv:2203.11171}, 2022.
+\newblock ICLR 2023.
+
+\bibitem[Wei et~al.(2022)Wei, Wang, Schuurmans, Bosma, Ichter, Xia, Chi, Le,
+  and Zhou]{wei2022cot}
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia,
+  Ed~Chi, Quoc Le, and Denny Zhou.
+\newblock Chain-of-thought prompting elicits reasoning in large language
+  models.
+\newblock \emph{Advances in Neural Information Processing Systems}, 2022.
+
+\bibitem[Zhang et~al.(2025)Zhang, He, Yan, Shen, Zhao, Wang, Shen, and
+  Wang]{zhang2025softthinking}
+Zhen Zhang, Xuehai He, Weixiang Yan, Ao~Shen, Chenyang Zhao, Shuohang Wang,
+  Yelong Shen, and Xin~Eric Wang.
+\newblock Soft thinking: Unlocking the reasoning potential of {LLM}s in
+  continuous concept space.
+\newblock \emph{arXiv preprint arXiv:2505.15778}, 2025.
+
+\bibitem[Zhu et~al.(2025{\natexlab{a}})Zhu, Hao, Hu, Jiao, Russell, and
+  Tian]{zhu2025emergence}
+Hanlin Zhu, Shibo Hao, Zhiting Hu, Jiantao Jiao, Stuart Russell, and Yuandong
+  Tian.
+\newblock Emergence of superposition: Unveiling the training dynamics of chain
+  of continuous thought.
+\newblock \emph{arXiv preprint arXiv:2509.23365}, 2025{\natexlab{a}}.
+
+\bibitem[Zhu et~al.(2025{\natexlab{b}})Zhu, Hao, Hu, Jiao, Russell, and
+  Tian]{zhu2025superposition}
+Hanlin Zhu, Shibo Hao, Zhiting Hu, Jiantao Jiao, Stuart Russell, and Yuandong
+  Tian.
+\newblock Reasoning by superposition: A theoretical perspective on chain of
+  continuous thought.
+\newblock \emph{arXiv preprint arXiv:2505.12514}, 2025{\natexlab{b}}.
+
+\bibitem[Zou et~al.(2026)Zou, Xiong, and Liu]{zou2026limits}
+Jiaxuan Zou, Yaozhong Xiong, and Yong Liu.
+\newblock Capabilities and fundamental limits of latent chain-of-thought.
+\newblock \emph{arXiv preprint arXiv:2602.01148}, 2026.
+
+\end{thebibliography}

@@ -1,0 +1,178 @@
+{
+  "task": {
+    "num_queries": 10860.0,
+    "num_pairs": 5430.0,
+    "train_queries": 7602.0,
+    "test_queries": 3258.0,
+    "reachable_fraction": 0.21210937201976776,
+    "shortcut_terminal_only": 0.4478207528591156,
+    "shortcut_slot_only": 0.505831778049469
+  },
+  "records": [
+    {
+      "schedule": "all-continuous",
+      "steps": [
+        "expected(t=1)",
+        "expected(t=1)",
+        "expected(t=1)"
+      ],
+      "seed": 0,
+      "test_accuracy": 0.9834254384040833,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "all-continuous",
+      "steps": [
+        "expected(t=1)",
+        "expected(t=1)",
+        "expected(t=1)"
+      ],
+      "seed": 1,
+      "test_accuracy": 0.9726826548576355,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "all-continuous",
+      "steps": [
+        "expected(t=1)",
+        "expected(t=1)",
+        "expected(t=1)"
+      ],
+      "seed": 2,
+      "test_accuracy": 0.985880970954895,
+      "test_accuracy_std": 5.960464477539063e-08
+    },
+    {
+      "schedule": "all-discrete",
+      "steps": [
+        "argmax",
+        "argmax",
+        "argmax"
+      ],
+      "seed": 0,
+      "test_accuracy": 0.7059545516967773,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "all-discrete",
+      "steps": [
+        "argmax",
+        "argmax",
+        "argmax"
+      ],
+      "seed": 1,
+      "test_accuracy": 0.7145488262176514,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "all-discrete",
+      "steps": [
+        "argmax",
+        "argmax",
+        "argmax"
+      ],
+      "seed": 2,
+      "test_accuracy": 0.7191528677940369,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "anneal-to-discrete",
+      "steps": [
+        "expected(t=1)",
+        "expected(t=1)",
+        "argmax"
+      ],
+      "seed": 0,
+      "test_accuracy": 0.6660528182983398,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "anneal-to-discrete",
+      "steps": [
+        "expected(t=1)",
+        "expected(t=1)",
+        "argmax"
+      ],
+      "seed": 1,
+      "test_accuracy": 0.6648250222206116,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "anneal-to-discrete",
+      "steps": [
+        "expected(t=1)",
+        "expected(t=1)",
+        "argmax"
+      ],
+      "seed": 2,
+      "test_accuracy": 0.6764886379241943,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "anneal-to-continuous",
+      "steps": [
+        "argmax",
+        "expected(t=1)",
+        "expected(t=1)"
+      ],
+      "seed": 0,
+      "test_accuracy": 0.8115407824516296,
+      "test_accuracy_std": 5.960464477539063e-08
+    },
+    {
+      "schedule": "anneal-to-continuous",
+      "steps": [
+        "argmax",
+        "expected(t=1)",
+        "expected(t=1)"
+      ],
+      "seed": 1,
+      "test_accuracy": 0.7872928380966187,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "anneal-to-continuous",
+      "steps": [
+        "argmax",
+        "expected(t=1)",
+        "expected(t=1)"
+      ],
+      "seed": 2,
+      "test_accuracy": 0.7774708271026611,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "alternating",
+      "steps": [
+        "expected(t=1)",
+        "argmax",
+        "expected(t=1)"
+      ],
+      "seed": 0,
+      "test_accuracy": 0.7538366913795471,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "alternating",
+      "steps": [
+        "expected(t=1)",
+        "argmax",
+        "expected(t=1)"
+      ],
+      "seed": 1,
+      "test_accuracy": 0.7473910450935364,
+      "test_accuracy_std": 0.0
+    },
+    {
+      "schedule": "alternating",
+      "steps": [
+        "expected(t=1)",
+        "argmax",
+        "expected(t=1)"
+      ],
+      "seed": 2,
+      "test_accuracy": 0.7642725706100464,
+      "test_accuracy_std": 0.0
+    }
+  ]
+}

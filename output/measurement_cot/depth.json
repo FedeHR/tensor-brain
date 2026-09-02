@@ -1,0 +1,814 @@
+{
+  "records": [
+    {
+      "hops": 2,
+      "condition": "expected",
+      "seed": 0,
+      "test_accuracy": 0.9692144393920898,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "expected",
+      "seed": 1,
+      "test_accuracy": 0.9745222926139832,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "expected",
+      "seed": 2,
+      "test_accuracy": 0.9660297632217407,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "argmax",
+      "seed": 0,
+      "test_accuracy": 0.8290870785713196,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "argmax",
+      "seed": 1,
+      "test_accuracy": 0.8195329904556274,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "argmax",
+      "seed": 2,
+      "test_accuracy": 0.8322717547416687,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "sample-M1",
+      "seed": 0,
+      "test_accuracy": 0.6422505378723145,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "sample-M1",
+      "seed": 1,
+      "test_accuracy": 0.6309978365898132,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "sample-M1",
+      "seed": 2,
+      "test_accuracy": 0.6520169973373413,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "sample-M8",
+      "seed": 0,
+      "test_accuracy": 0.8564755320549011,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "sample-M8",
+      "seed": 1,
+      "test_accuracy": 0.8526538610458374,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "sample-M8",
+      "seed": 2,
+      "test_accuracy": 0.8598726391792297,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "none",
+      "seed": 0,
+      "test_accuracy": 0.42038217186927795,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "none",
+      "seed": 1,
+      "test_accuracy": 0.439490407705307,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 2,
+      "condition": "none",
+      "seed": 2,
+      "test_accuracy": 0.42250531911849976,
+      "frontier_sizes": [
+        1,
+        2,
+        4
+      ],
+      "num_queries": 3140.0
+    },
+    {
+      "hops": 3,
+      "condition": "expected",
+      "seed": 0,
+      "test_accuracy": 0.9473392367362976,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "expected",
+      "seed": 1,
+      "test_accuracy": 0.9473392367362976,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "expected",
+      "seed": 2,
+      "test_accuracy": 0.9451219439506531,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "argmax",
+      "seed": 0,
+      "test_accuracy": 0.7433481216430664,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "argmax",
+      "seed": 1,
+      "test_accuracy": 0.7350332736968994,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "argmax",
+      "seed": 2,
+      "test_accuracy": 0.7245011329650879,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "sample-M1",
+      "seed": 0,
+      "test_accuracy": 0.4722837805747986,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "sample-M1",
+      "seed": 1,
+      "test_accuracy": 0.4722837805747986,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "sample-M1",
+      "seed": 2,
+      "test_accuracy": 0.4473392367362976,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "sample-M8",
+      "seed": 0,
+      "test_accuracy": 0.7354767322540283,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "sample-M8",
+      "seed": 1,
+      "test_accuracy": 0.7269401550292969,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "sample-M8",
+      "seed": 2,
+      "test_accuracy": 0.7236142158508301,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "none",
+      "seed": 0,
+      "test_accuracy": 0.46674054861068726,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "none",
+      "seed": 1,
+      "test_accuracy": 0.4706208109855652,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 3,
+      "condition": "none",
+      "seed": 2,
+      "test_accuracy": 0.4440132975578308,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "num_queries": 6016.0
+    },
+    {
+      "hops": 4,
+      "condition": "expected",
+      "seed": 0,
+      "test_accuracy": 0.9834254384040833,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "expected",
+      "seed": 1,
+      "test_accuracy": 0.9726826548576355,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "expected",
+      "seed": 2,
+      "test_accuracy": 0.985880970954895,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "argmax",
+      "seed": 0,
+      "test_accuracy": 0.7059545516967773,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "argmax",
+      "seed": 1,
+      "test_accuracy": 0.7145488262176514,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "argmax",
+      "seed": 2,
+      "test_accuracy": 0.7191528677940369,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "sample-M1",
+      "seed": 0,
+      "test_accuracy": 0.488090842962265,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "sample-M1",
+      "seed": 1,
+      "test_accuracy": 0.4734806418418884,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "sample-M1",
+      "seed": 2,
+      "test_accuracy": 0.4740331172943115,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "sample-M8",
+      "seed": 0,
+      "test_accuracy": 0.6792510747909546,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "sample-M8",
+      "seed": 1,
+      "test_accuracy": 0.6717004776000977,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "sample-M8",
+      "seed": 2,
+      "test_accuracy": 0.6718845963478088,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "none",
+      "seed": 0,
+      "test_accuracy": 0.45887047052383423,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "none",
+      "seed": 1,
+      "test_accuracy": 0.4637814462184906,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 4,
+      "condition": "none",
+      "seed": 2,
+      "test_accuracy": 0.460405170917511,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13
+      ],
+      "num_queries": 10860.0
+    },
+    {
+      "hops": 5,
+      "condition": "expected",
+      "seed": 0,
+      "test_accuracy": 0.9766252636909485,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "expected",
+      "seed": 1,
+      "test_accuracy": 0.972425103187561,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "expected",
+      "seed": 2,
+      "test_accuracy": 0.9757121801376343,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "argmax",
+      "seed": 0,
+      "test_accuracy": 0.5887508988380432,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "argmax",
+      "seed": 1,
+      "test_accuracy": 0.6055514812469482,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "argmax",
+      "seed": 2,
+      "test_accuracy": 0.5726807713508606,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "sample-M1",
+      "seed": 0,
+      "test_accuracy": 0.5036522746086121,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "sample-M1",
+      "seed": 1,
+      "test_accuracy": 0.5066472291946411,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "sample-M1",
+      "seed": 2,
+      "test_accuracy": 0.5038714408874512,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "sample-M8",
+      "seed": 0,
+      "test_accuracy": 0.5378013253211975,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "sample-M8",
+      "seed": 1,
+      "test_accuracy": 0.5398831367492676,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "sample-M8",
+      "seed": 2,
+      "test_accuracy": 0.5387144088745117,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "none",
+      "seed": 0,
+      "test_accuracy": 0.5098612308502197,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "none",
+      "seed": 1,
+      "test_accuracy": 0.5036522746086121,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    },
+    {
+      "hops": 5,
+      "condition": "none",
+      "seed": 2,
+      "test_accuracy": 0.5058436989784241,
+      "frontier_sizes": [
+        1,
+        2,
+        4,
+        8,
+        13,
+        21
+      ],
+      "num_queries": 18256.0
+    }
+  ]
+}

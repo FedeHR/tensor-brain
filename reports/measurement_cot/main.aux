@@ -1,0 +1,138 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\bibstyle{plainnat}
+\citation{hao2024coconut}
+\citation{tresp2025bayes}
+\citation{wei2022cot}
+\citation{hao2024coconut}
+\citation{tresp2021tensorbrain,tresp2025bayes}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{2}{section.1}\protected@file@percent }
+\newlabel{eq:measure}{{1}{2}{Introduction}{equation.1}{}}
+\newlabel{eq:attend}{{2}{2}{Introduction}{equation.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{Contributions.}{2}{section*.1}\protected@file@percent }
+\citation{zhu2025superposition}
+\citation{hao2024coconut}
+\citation{zhu2025superposition,zhu2025emergence}
+\citation{zhang2025softthinking}
+\citation{gozeten2025cot2}
+\citation{butt2025softtokens}
+\citation{goyal2023pause,pfau2024dots}
+\citation{dehghani2018universal,geiping2025recurrent}
+\citation{deng2023implicit}
+\citation{cheng2024compressed}
+\@writefile{toc}{\contentsline {paragraph}{What we do not claim.}{3}{section*.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Background and related work}{3}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Tensor Brain operations.}{3}{section*.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Latent chain of thought.}{3}{section*.4}\protected@file@percent }
+\citation{zou2026limits}
+\citation{busemeyer2012quantum}
+\citation{rizvimartel2026illusion}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces The two knobs of one Tensor Brain step update. The horizontal axis is measurement sharpness, which selects the feedback weights $w$ and interpolates token CoT, self-consistency and continuous thought. The vertical axis is the retain gate $\alpha $, which decides how much of the latent state survives the step and therefore whether the index layer is a bottleneck at all. In the shaded band the sharpness axis has no effect, because nothing is forced through the index layer.}}{4}{figure.caption.6}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:dial}{{1}{4}{The two knobs of one Tensor Brain step update. The horizontal axis is measurement sharpness, which selects the feedback weights $w$ and interpolates token CoT, self-consistency and continuous thought. The vertical axis is the retain gate $\alpha $, which decides how much of the latent state survives the step and therefore whether the index layer is a bottleneck at all. In the shaded band the sharpness axis has no effect, because nothing is forced through the index layer}{figure.caption.6}{}}
+\@writefile{toc}{\contentsline {paragraph}{Positioning.}{4}{section*.5}\protected@file@percent }
+\citation{nielsen2010quantum}
+\@writefile{toc}{\contentsline {section}{\numberline {3}The collapse dial}{5}{section.3}\protected@file@percent }
+\newlabel{sec:dial}{{3}{5}{The collapse dial}{section.3}{}}
+\newlabel{eq:dial}{{3}{5}{The collapse dial}{equation.3}{}}
+\newlabel{rem:schedule}{{1}{5}{What the unification does and does not assert}{remark.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}The step boundary as a channel}{5}{subsection.3.1}\protected@file@percent }
+\newlabel{sec:bottleneck}{{3.1}{5}{The step boundary as a channel}{subsection.3.1}{}}
+\citation{wang2022selfconsistency}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Deferred measurement and the Jensen gap}{6}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:jensen}{{3.2}{6}{Deferred measurement and the Jensen gap}{subsection.3.2}{}}
+\newlabel{prop:defer}{{1}{6}{When measurement may be deferred}{proposition.1}{}}
+\newlabel{prop:second-order}{{2}{6}{Second-order gap}{proposition.2}{}}
+\newlabel{eq:gap}{{4}{6}{Second-order gap}{equation.4}{}}
+\newlabel{cor:confidence}{{1}{6}{Confidence is free, hedging is not}{corollary.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Averaging inside a step is not self-consistency}{6}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:mc}{{3.3}{6}{Averaging inside a step is not self-consistency}{subsection.3.3}{}}
+\citation{misra1977zeno}
+\newlabel{eq:mc}{{5}{7}{Averaging inside a step is not self-consistency}{equation.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Repeated measurement of one window}{7}{subsection.3.4}\protected@file@percent }
+\newlabel{sec:zeno}{{3.4}{7}{Repeated measurement of one window}{subsection.3.4}{}}
+\newlabel{eq:zeno}{{6}{7}{Repeated measurement of one window}{equation.6}{}}
+\newlabel{prop:zeno}{{3}{7}{Commitment threshold, small-signal regime}{proposition.3}{}}
+\newlabel{rem:zeno-fails}{{2}{7}{This threshold does not survive contact with the trained model}{remark.2}{}}
+\citation{zou2026limits}
+\citation{bengio2013estimating,jang2017gumbel}
+\citation{goyal2023pause}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Task and setup}{8}{section.4}\protected@file@percent }
+\newlabel{sec:setup}{{4}{8}{Task and setup}{section.4}{}}
+\@writefile{toc}{\contentsline {paragraph}{Task.}{8}{section*.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Removing the shortcuts.}{8}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Supervision and curriculum.}{8}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Model and controls.}{8}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{A confound worth naming.}{8}{section*.11}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Test accuracy over the collapse dial, 3\xspace  \ seeds, 3258\xspace  \ held-out queries. \textbf  {Left:} the full grid of retain gate against collapse mode. Only the $\alpha = 0$ column varies; everywhere else the choice of collapse is worth less than a percentage point. \textbf  {Right:} the spread across all eleven modes as a function of $\alpha $, on a log axis. The dependence is steep rather than gradual --- retaining a quarter of the state already removes most of the effect.}}{9}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:plane}{{2}{9}{Test accuracy over the collapse dial, \NumSeeds \ seeds, \NumTestQueries \^^Mheld-out queries. \textbf {Left:} the full grid of retain gate against collapse mode. Only the $\alpha = 0$ column varies; everywhere else the choice of collapse is worth less than a percentage point. \textbf {Right:} the spread across all eleven modes as a function of $\alpha $, on a log axis. The dependence is steep rather than gradual --- retaining a quarter of the state already removes most of the effect}{figure.caption.12}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Results}{9}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Sharpness matters only at the bottleneck}{9}{subsection.5.1}\protected@file@percent }
+\newlabel{sec:results-plane}{{5.1}{9}{Sharpness matters only at the bottleneck}{subsection.5.1}{}}
+\@writefile{toc}{\contentsline {paragraph}{The transition is abrupt, not gradual.}{9}{section*.13}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Holding $\alpha = 1$ and narrowing the pre-CBS that crosses the step. \textbf  {Left:} the three headline conditions against state width. \textbf  {Right:} the continuous minus discrete accuracy gap. If the $\alpha = 1$ null were about the retain gate as such it should persist at every width; if it is about how much information the boundary can carry, the conditions should separate again once the state is too narrow to hold the frontier.}}{10}{figure.caption.15}\protected@file@percent }
+\newlabel{fig:capacity}{{3}{10}{Holding $\alpha = 1$ and narrowing the pre-CBS that crosses the step. \textbf {Left:} the three headline conditions against state width. \textbf {Right:} the continuous minus discrete accuracy gap. If the $\alpha = 1$ null were about the retain gate as such it should persist at every width; if it is about how much information the boundary can carry, the conditions should separate again once the state is too narrow to hold the frontier}{figure.caption.15}{}}
+\@writefile{toc}{\contentsline {paragraph}{Feedback can be worse than none.}{10}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Is it the gate, or the capacity?}{10}{subsection.5.2}\protected@file@percent }
+\newlabel{sec:results-capacity}{{5.2}{10}{Is it the gate, or the capacity?}{subsection.5.2}{}}
+\citation{wang2022selfconsistency}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Averaging measurements inside a step. (b) confirms the $M^{-1/2}$ rate of \eqref  {eq:mc} with the expectation computed exactly over the candidate set.}}{11}{figure.caption.16}\protected@file@percent }
+\newlabel{fig:channel}{{4}{11}{Averaging measurements inside a step. (b) confirms the $M^{-1/2}$ rate of \eqref {eq:mc} with the expectation computed exactly over the candidate set}{figure.caption.16}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Widening the channel}{11}{subsection.5.3}\protected@file@percent }
+\newlabel{sec:results-mc}{{5.3}{11}{Widening the channel}{subsection.5.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Measurement does not commute with evolution}{11}{subsection.5.4}\protected@file@percent }
+\newlabel{sec:results-jensen}{{5.4}{11}{Measurement does not commute with evolution}{subsection.5.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces The Jensen gap between evolving the averaged state and averaging the evolved states, computed exactly over the candidate set. \textbf  {(a)} the predicted $\beta ^{2}$ law of Proposition~\ref {prop:second-order}. \textbf  {(b)} tempering the chain's own scores sweeps the candidate spread across its full range; the gap falls steeply towards zero as $p$ sharpens, in the direction Corollary~\ref {cor:confidence} requires, and the shaded band marks where the trained chain's own steps actually sit. \textbf  {(c)} bucketing those steps by entropy instead gives a flat line --- not a refutation, but a range problem, since the spread is saturated everywhere in (b)'s shaded band.}}{12}{figure.caption.17}\protected@file@percent }
+\newlabel{fig:jensen}{{5}{12}{The Jensen gap between evolving the averaged state and averaging the evolved states, computed exactly over the candidate set. \textbf {(a)} the predicted $\beta ^{2}$ law of Proposition~\ref {prop:second-order}. \textbf {(b)} tempering the chain's own scores sweeps the candidate spread across its full range; the gap falls steeply towards zero as $p$ sharpens, in the direction Corollary~\ref {cor:confidence} requires, and the shaded band marks where the trained chain's own steps actually sit. \textbf {(c)} bucketing those steps by entropy instead gives a flat line --- not a refutation, but a range problem, since the spread is saturated everywhere in (b)'s shaded band}{figure.caption.17}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Reading the superposition off the index layer}{12}{subsection.5.5}\protected@file@percent }
+\newlabel{sec:results-frontier}{{5.5}{12}{Reading the superposition off the index layer}{subsection.5.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces \textbf  {Left:} probability mass on the true breadth-first frontier at each step, for a continuous and a discrete chain. \textbf  {Right:} effective number of alternatives $e^{H}$ kept open, against the true frontier size.}}{13}{figure.caption.18}\protected@file@percent }
+\newlabel{fig:frontier}{{6}{13}{\textbf {Left:} probability mass on the true breadth-first frontier at each step, for a continuous and a discrete chain. \textbf {Right:} effective number of alternatives $e^{H}$ kept open, against the true frontier size}{figure.caption.18}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.6}Search depth}{13}{subsection.5.6}\protected@file@percent }
+\newlabel{sec:results-depth}{{5.6}{13}{Search depth}{subsection.5.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Search depth at $\alpha = 0$, three seeds. \textbf  {Left:} continuous feedback is flat in depth while every discrete condition decays. \textbf  {Right:} the gap against the size of the terminal frontier the chain has to represent.}}{14}{figure.caption.19}\protected@file@percent }
+\newlabel{fig:depth}{{7}{14}{Search depth at $\alpha = 0$, three seeds. \textbf {Left:} continuous feedback is flat in depth while every discrete condition decays. \textbf {Right:} the gap against the size of the terminal frontier the chain has to represent}{figure.caption.19}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.7}Where in the chain to collapse}{14}{subsection.5.7}\protected@file@percent }
+\newlabel{sec:results-schedule}{{5.7}{14}{Where in the chain to collapse}{subsection.5.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.8}Repeated measurement of one window}{14}{subsection.5.8}\protected@file@percent }
+\newlabel{sec:results-zeno}{{5.8}{14}{Repeated measurement of one window}{subsection.5.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Where a chain collapses, at $\alpha = 0$. The three middle bars each collapse exactly once, at the first, second and third reasoning step respectively; the frontier widens with depth, so the same single collapse costs more the later it lands. Collapsing at every step beats collapsing only at the last.}}{15}{figure.caption.20}\protected@file@percent }
+\newlabel{fig:schedule}{{8}{15}{Where a chain collapses, at $\alpha = 0$. The three middle bars each collapse exactly once, at the first, second and third reasoning step respectively; the frontier widens with depth, so the same single collapse costs more the later it lands. Collapsing at every step beats collapsing only at the last}{figure.caption.20}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Discussion}{15}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{The question is about the channel, not the representation.}{15}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Two knobs, not one.}{15}{section*.23}\protected@file@percent }
+\citation{rizvimartel2026illusion}
+\citation{zhu2025superposition}
+\citation{butt2025softtokens}
+\bibdata{refs}
+\bibcite{bengio2013estimating}{{1}{2013}{{Bengio et~al.}}{{Bengio, L{\'e}onard, and Courville}}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Repeated measurement of a single concept window, with no evolution and no new input in between, across nine $(\alpha ,\beta )$ settings. \textbf  {(a)} the index distribution sharpens in every setting, including ones Proposition~\ref {prop:zeno} calls stable. \textbf  {(b)} in eight of nine settings the sharpening moves \emph  {towards} the true frontier; the exception is weak feedback into a decaying state, where the evidence washes out faster than it accumulates. \textbf  {(c)} agreement with the window's own first outcome falls to about $0.57$ and stays there, so this is revision rather than self-reinforcement.}}{16}{figure.caption.21}\protected@file@percent }
+\newlabel{fig:zeno}{{9}{16}{Repeated measurement of a single concept window, with no evolution and no new input in between, across nine $(\alpha ,\beta )$ settings. \textbf {(a)} the index distribution sharpens in every setting, including ones Proposition~\ref {prop:zeno} calls stable. \textbf {(b)} in eight of nine settings the sharpening moves \emph {towards} the true frontier; the exception is weak feedback into a decaying state, where the evidence washes out faster than it accumulates. \textbf {(c)} agreement with the window's own first outcome falls to about $0.57$ and stays there, so this is revision rather than self-reinforcement}{figure.caption.21}{}}
+\@writefile{toc}{\contentsline {paragraph}{Deferred measurement as a design principle.}{16}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Limitations.}{16}{section*.25}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{What would need a cluster.}{16}{section*.26}\protected@file@percent }
+\bibcite{busemeyer2012quantum}{{2}{2012}{{Busemeyer and Bruza}}{{}}}
+\bibcite{butt2025softtokens}{{3}{2025}{{Butt et~al.}}{{Butt, Kwiatkowski, Labiad, Kempe, and Ollivier}}}
+\bibcite{cheng2024compressed}{{4}{2024}{{Cheng and Van~Durme}}{{}}}
+\bibcite{dehghani2018universal}{{5}{2018}{{Dehghani et~al.}}{{Dehghani, Gouws, Vinyals, Uszkoreit, and Kaiser}}}
+\bibcite{deng2023implicit}{{6}{2023}{{Deng et~al.}}{{Deng, Prasad, Fernandez, Smolensky, Chaudhary, and Shieber}}}
+\bibcite{geiping2025recurrent}{{7}{2025}{{Geiping et~al.}}{{Geiping, McLeish, Jain, Kirchenbauer, Singh, Bartoldson, Kailkhura, Bhatele, and Goldstein}}}
+\bibcite{goyal2023pause}{{8}{2023}{{Goyal et~al.}}{{Goyal, Ji, Rawat, Menon, Kumar, and Nagarajan}}}
+\bibcite{gozeten2025cot2}{{9}{2025}{{Gozeten et~al.}}{{Gozeten, Ildiz, Zhang, Harutyunyan, Rawat, and Oymak}}}
+\bibcite{hao2024coconut}{{10}{2024}{{Hao et~al.}}{{Hao, Sukhbaatar, Su, Li, Hu, Weston, and Tian}}}
+\bibcite{jang2017gumbel}{{11}{2017}{{Jang et~al.}}{{Jang, Gu, and Poole}}}
+\bibcite{misra1977zeno}{{12}{1977}{{Misra and Sudarshan}}{{}}}
+\bibcite{nielsen2010quantum}{{13}{2010}{{Nielsen and Chuang}}{{}}}
+\bibcite{pfau2024dots}{{14}{2024}{{Pfau et~al.}}{{Pfau, Merrill, and Bowman}}}
+\bibcite{rizvimartel2026illusion}{{15}{2026}{{Rizvi-Martel et~al.}}{{Rizvi-Martel, Rabusseau, and Mosbach}}}
+\bibcite{tresp2025bayes}{{16}{2025}{{Tresp and Li}}{{}}}
+\bibcite{tresp2021tensorbrain}{{17}{2021}{{Tresp et~al.}}{{Tresp, Sharifzadeh, Li, Konopatzki, and Ma}}}
+\bibcite{wang2022selfconsistency}{{18}{2022}{{Wang et~al.}}{{Wang, Wei, Schuurmans, Le, Chi, Narang, Chowdhery, and Zhou}}}
+\bibcite{wei2022cot}{{19}{2022}{{Wei et~al.}}{{Wei, Wang, Schuurmans, Bosma, Ichter, Xia, Chi, Le, and Zhou}}}
+\bibcite{zhang2025softthinking}{{20}{2025}{{Zhang et~al.}}{{Zhang, He, Yan, Shen, Zhao, Wang, Shen, and Wang}}}
+\bibcite{zhu2025emergence}{{21}{2025{a}}{{Zhu et~al.}}{{Zhu, Hao, Hu, Jiao, Russell, and Tian}}}
+\bibcite{zhu2025superposition}{{22}{2025{b}}{{Zhu et~al.}}{{Zhu, Hao, Hu, Jiao, Russell, and Tian}}}
+\bibcite{zou2026limits}{{23}{2026}{{Zou et~al.}}{{Zou, Xiong, and Liu}}}
+\gdef \@abspage@last{18}

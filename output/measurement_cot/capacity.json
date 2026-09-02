@@ -1,0 +1,223 @@
+{
+  "task": {
+    "num_queries": 10860.0,
+    "num_pairs": 5430.0,
+    "train_queries": 7602.0,
+    "test_queries": 3258.0,
+    "reachable_fraction": 0.21210937201976776,
+    "shortcut_terminal_only": 0.4478207528591156,
+    "shortcut_slot_only": 0.505831778049469
+  },
+  "records": [
+    {
+      "state_dim": 16,
+      "retain_gate": 1.0,
+      "condition": "none",
+      "seed": 0,
+      "test_accuracy": 0.4843462109565735
+    },
+    {
+      "state_dim": 16,
+      "retain_gate": 1.0,
+      "condition": "none",
+      "seed": 1,
+      "test_accuracy": 0.46746474504470825
+    },
+    {
+      "state_dim": 16,
+      "retain_gate": 1.0,
+      "condition": "argmax",
+      "seed": 0,
+      "test_accuracy": 0.48035603761672974
+    },
+    {
+      "state_dim": 16,
+      "retain_gate": 1.0,
+      "condition": "argmax",
+      "seed": 1,
+      "test_accuracy": 0.48311847448349
+    },
+    {
+      "state_dim": 16,
+      "retain_gate": 1.0,
+      "condition": "expected",
+      "seed": 0,
+      "test_accuracy": 0.4852670729160309
+    },
+    {
+      "state_dim": 16,
+      "retain_gate": 1.0,
+      "condition": "expected",
+      "seed": 1,
+      "test_accuracy": 0.469613254070282
+    },
+    {
+      "state_dim": 32,
+      "retain_gate": 1.0,
+      "condition": "none",
+      "seed": 0,
+      "test_accuracy": 0.5131982564926147
+    },
+    {
+      "state_dim": 32,
+      "retain_gate": 1.0,
+      "condition": "none",
+      "seed": 1,
+      "test_accuracy": 0.5214855670928955
+    },
+    {
+      "state_dim": 32,
+      "retain_gate": 1.0,
+      "condition": "argmax",
+      "seed": 0,
+      "test_accuracy": 0.5015347003936768
+    },
+    {
+      "state_dim": 32,
+      "retain_gate": 1.0,
+      "condition": "argmax",
+      "seed": 1,
+      "test_accuracy": 0.5162676572799683
+    },
+    {
+      "state_dim": 32,
+      "retain_gate": 1.0,
+      "condition": "expected",
+      "seed": 0,
+      "test_accuracy": 0.5319214463233948
+    },
+    {
+      "state_dim": 32,
+      "retain_gate": 1.0,
+      "condition": "expected",
+      "seed": 1,
+      "test_accuracy": 0.5233271718025208
+    },
+    {
+      "state_dim": 64,
+      "retain_gate": 1.0,
+      "condition": "none",
+      "seed": 0,
+      "test_accuracy": 0.6626765131950378
+    },
+    {
+      "state_dim": 64,
+      "retain_gate": 1.0,
+      "condition": "none",
+      "seed": 1,
+      "test_accuracy": 0.6933701634407043
+    },
+    {
+      "state_dim": 64,
+      "retain_gate": 1.0,
+      "condition": "argmax",
+      "seed": 0,
+      "test_accuracy": 0.6301411986351013
+    },
+    {
+      "state_dim": 64,
+      "retain_gate": 1.0,
+      "condition": "argmax",
+      "seed": 1,
+      "test_accuracy": 0.6497851610183716
+    },
+    {
+      "state_dim": 64,
+      "retain_gate": 1.0,
+      "condition": "expected",
+      "seed": 0,
+      "test_accuracy": 0.7001227736473083
+    },
+    {
+      "state_dim": 64,
+      "retain_gate": 1.0,
+      "condition": "expected",
+      "seed": 1,
+      "test_accuracy": 0.7154695987701416
+    },
+    {
+      "state_dim": 128,
+      "retain_gate": 1.0,
+      "condition": "none",
+      "seed": 0,
+      "test_accuracy": 0.8468385934829712
+    },
+    {
+      "state_dim": 128,
+      "retain_gate": 1.0,
+      "condition": "none",
+      "seed": 1,
+      "test_accuracy": 0.8523634076118469
+    },
+    {
+      "state_dim": 128,
+      "retain_gate": 1.0,
+      "condition": "argmax",
+      "seed": 0,
+      "test_accuracy": 0.8394719958305359
+    },
+    {
+      "state_dim": 128,
+      "retain_gate": 1.0,
+      "condition": "argmax",
+      "seed": 1,
+      "test_accuracy": 0.8290362358093262
+    },
+    {
+      "state_dim": 128,
+      "retain_gate": 1.0,
+      "condition": "expected",
+      "seed": 0,
+      "test_accuracy": 0.8575813174247742
+    },
+    {
+      "state_dim": 128,
+      "retain_gate": 1.0,
+      "condition": "expected",
+      "seed": 1,
+      "test_accuracy": 0.8523634076118469
+    },
+    {
+      "state_dim": 384,
+      "retain_gate": 1.0,
+      "condition": "none",
+      "seed": 0,
+      "test_accuracy": 0.9736034274101257
+    },
+    {
+      "state_dim": 384,
+      "retain_gate": 1.0,
+      "condition": "none",
+      "seed": 1,
+      "test_accuracy": 0.9702271223068237
+    },
+    {
+      "state_dim": 384,
+      "retain_gate": 1.0,
+      "condition": "argmax",
+      "seed": 0,
+      "test_accuracy": 0.9717618227005005
+    },
+    {
+      "state_dim": 384,
+      "retain_gate": 1.0,
+      "condition": "argmax",
+      "seed": 1,
+      "test_accuracy": 0.9683855175971985
+    },
+    {
+      "state_dim": 384,
+      "retain_gate": 1.0,
+      "condition": "expected",
+      "seed": 0,
+      "test_accuracy": 0.9739104509353638
+    },
+    {
+      "state_dim": 384,
+      "retain_gate": 1.0,
+      "condition": "expected",
+      "seed": 1,
+      "test_accuracy": 0.9720686674118042
+    }
+  ]
+}

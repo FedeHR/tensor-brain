@@ -1,0 +1,2491 @@
+{
+  "task": {
+    "num_queries": 10860.0,
+    "num_pairs": 5430.0,
+    "train_queries": 7602.0,
+    "test_queries": 3258.0,
+    "reachable_fraction": 0.21210937201976776,
+    "shortcut_terminal_only": 0.4478207528591156,
+    "shortcut_slot_only": 0.505831778049469
+  },
+  "steps[alpha=0]": [
+    {
+      "hop": 1,
+      "frontier_mass": 0.23565693199634552,
+      "frontier_chance": 0.03125,
+      "entropy": 3.7766454219818115,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 43.86830139160156,
+      "frontier_size": 2.0,
+      "top1_in_frontier": 1.0
+    },
+    {
+      "hop": 2,
+      "frontier_mass": 0.5139608979225159,
+      "frontier_chance": 0.06161755695939064,
+      "entropy": 3.330913543701172,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 28.199129104614258,
+      "frontier_size": 3.943523645401001,
+      "top1_in_frontier": 1.0
+    },
+    {
+      "hop": 3,
+      "frontier_mass": 0.5931439399719238,
+      "frontier_chance": 0.11854473501443863,
+      "entropy": 3.4623072147369385,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 32.056705474853516,
+      "frontier_size": 7.586863040924072,
+      "top1_in_frontier": 1.0
+    }
+  ],
+  "monte_carlo[alpha=0]": [
+    {
+      "samples": 1.0,
+      "distance": 0.9624309539794922,
+      "distance_std": 0.07421739399433136,
+      "relative": 3.4898438453674316
+    },
+    {
+      "samples": 2.0,
+      "distance": 0.676332414150238,
+      "distance_std": 0.0947602316737175,
+      "relative": 2.452430009841919
+    },
+    {
+      "samples": 4.0,
+      "distance": 0.4775654673576355,
+      "distance_std": 0.0785333663225174,
+      "relative": 1.7316867113113403
+    },
+    {
+      "samples": 8.0,
+      "distance": 0.33552998304367065,
+      "distance_std": 0.05825677141547203,
+      "relative": 1.2166558504104614
+    },
+    {
+      "samples": 16.0,
+      "distance": 0.23721574246883392,
+      "distance_std": 0.04232718050479889,
+      "relative": 0.860161304473877
+    },
+    {
+      "samples": 32.0,
+      "distance": 0.1679849475622177,
+      "distance_std": 0.030339406803250313,
+      "relative": 0.6091254949569702
+    },
+    {
+      "samples": 64.0,
+      "distance": 0.1186017170548439,
+      "distance_std": 0.021695569157600403,
+      "relative": 0.4300583302974701
+    },
+    {
+      "samples": 128.0,
+      "distance": 0.08400273323059082,
+      "distance_std": 0.015105384401977062,
+      "relative": 0.30459994077682495
+    }
+  ],
+  "jensen[alpha=0]": [
+    {
+      "feedback_gate": 0.25,
+      "gap": 0.0023644643370062113,
+      "gap_std": 9.217389742843807e-05,
+      "relative_gap": 2.5083372747758403e-05,
+      "entropy": 3.344827890396118,
+      "spread": 0.9307236075401306,
+      "predicted_scale": 0.05817022547125816
+    },
+    {
+      "feedback_gate": 0.5,
+      "gap": 0.009409721940755844,
+      "gap_std": 0.0003677096392493695,
+      "relative_gap": 9.981052426155657e-05,
+      "entropy": 3.344827890396118,
+      "spread": 0.9307236075401306,
+      "predicted_scale": 0.23268090188503265
+    },
+    {
+      "feedback_gate": 1.0,
+      "gap": 0.037261057645082474,
+      "gap_std": 0.0015067029744386673,
+      "relative_gap": 0.00039509765338152647,
+      "entropy": 3.344827890396118,
+      "spread": 0.9307236075401306,
+      "predicted_scale": 0.9307236075401306
+    },
+    {
+      "feedback_gate": 2.0,
+      "gap": 0.14634975790977478,
+      "gap_std": 0.006792230065912008,
+      "relative_gap": 0.0015501328743994236,
+      "entropy": 3.344827890396118,
+      "spread": 0.9307236075401306,
+      "predicted_scale": 3.7228944301605225
+    }
+  ],
+  "jensen_by_entropy[alpha=0]": [
+    {
+      "entropy": 3.1295714378356934,
+      "gap": 0.03770654648542404,
+      "gap_std": 0.0015801150584593415,
+      "spread": 0.9125354290008545,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.230093240737915,
+      "gap": 0.03764777258038521,
+      "gap_std": 0.0016976662445813417,
+      "spread": 0.9199066758155823,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.2834112644195557,
+      "gap": 0.037508003413677216,
+      "gap_std": 0.0013730431674048305,
+      "spread": 0.9236142635345459,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.318922996520996,
+      "gap": 0.03728940710425377,
+      "gap_std": 0.0015254170866683125,
+      "spread": 0.9331448078155518,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.3637475967407227,
+      "gap": 0.037623800337314606,
+      "gap_std": 0.001356606837362051,
+      "spread": 0.9343791604042053,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.4097745418548584,
+      "gap": 0.0367395356297493,
+      "gap_std": 0.0015247856499627233,
+      "spread": 0.9353380799293518,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.4661130905151367,
+      "gap": 0.036763329058885574,
+      "gap_std": 0.0011109872721135616,
+      "spread": 0.9394084215164185,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.55698823928833,
+      "gap": 0.036810070276260376,
+      "gap_std": 0.0014622875023633242,
+      "spread": 0.947462260723114,
+      "count": 64.0
+    }
+  ],
+  "jensen_by_temperature[alpha=0]": [
+    {
+      "temperature": 0.05,
+      "gap": 0.013548070564866066,
+      "gap_std": 0.010733567178249359,
+      "spread": 0.2794950604438782,
+      "entropy": 0.48685628175735474,
+      "max_probability": 0.8029811382293701
+    },
+    {
+      "temperature": 0.1,
+      "gap": 0.02162942662835121,
+      "gap_std": 0.00975019671022892,
+      "spread": 0.46014612913131714,
+      "entropy": 0.8209598660469055,
+      "max_probability": 0.6588420271873474
+    },
+    {
+      "temperature": 0.2,
+      "gap": 0.02827621065080166,
+      "gap_std": 0.006730183959007263,
+      "spread": 0.6214362382888794,
+      "entropy": 1.1239638328552246,
+      "max_probability": 0.5026034116744995
+    },
+    {
+      "temperature": 0.35,
+      "gap": 0.03136653080582619,
+      "gap_std": 0.004353905562311411,
+      "spread": 0.704846203327179,
+      "entropy": 1.3432284593582153,
+      "max_probability": 0.39956605434417725
+    },
+    {
+      "temperature": 0.5,
+      "gap": 0.03307749330997467,
+      "gap_std": 0.0033183740451931953,
+      "spread": 0.761672854423523,
+      "entropy": 1.7369216680526733,
+      "max_probability": 0.3335135281085968
+    },
+    {
+      "temperature": 0.75,
+      "gap": 0.03578711673617363,
+      "gap_std": 0.002218692097812891,
+      "spread": 0.8657864332199097,
+      "entropy": 2.6817073822021484,
+      "max_probability": 0.23024477064609528
+    },
+    {
+      "temperature": 1.0,
+      "gap": 0.037261057645082474,
+      "gap_std": 0.0015067029744386673,
+      "spread": 0.9307236075401306,
+      "entropy": 3.344827890396118,
+      "max_probability": 0.15533187985420227
+    },
+    {
+      "temperature": 1.5,
+      "gap": 0.03785387799143791,
+      "gap_std": 0.0008293854771181941,
+      "spread": 0.9725081324577332,
+      "entropy": 3.8632454872131348,
+      "max_probability": 0.08528085798025131
+    },
+    {
+      "temperature": 2.0,
+      "gap": 0.03779507800936699,
+      "gap_std": 0.000548653828445822,
+      "spread": 0.9821109771728516,
+      "entropy": 4.017107963562012,
+      "max_probability": 0.05869358032941818
+    }
+  ],
+  "accuracy[alpha=0]": 0.9834254384040833,
+  "zeno[alpha=0|a=0.5,b=0.5]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.344827890396118,
+      "effective_alternatives": 28.595298767089844,
+      "frontier_mass": 0.5096749663352966,
+      "mode_probability": 0.15533187985420227,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.4437732696533203,
+      "effective_alternatives": 31.526010513305664,
+      "frontier_mass": 0.47298192977905273,
+      "mode_probability": 0.1483651101589203,
+      "mode_agreement": 0.775390625
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 3.579368829727173,
+      "effective_alternatives": 36.03546142578125,
+      "frontier_mass": 0.41698890924453735,
+      "mode_probability": 0.13791263103485107,
+      "mode_agreement": 0.62890625
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 3.6677653789520264,
+      "effective_alternatives": 39.36810302734375,
+      "frontier_mass": 0.3729614019393921,
+      "mode_probability": 0.13484564423561096,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 3.704174041748047,
+      "effective_alternatives": 41.02005386352539,
+      "frontier_mass": 0.34209057688713074,
+      "mode_probability": 0.13772854208946228,
+      "mode_agreement": 0.564453125
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 3.6866579055786133,
+      "effective_alternatives": 40.70620346069336,
+      "frontier_mass": 0.32780301570892334,
+      "mode_probability": 0.1457965224981308,
+      "mode_agreement": 0.55078125
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 3.6251492500305176,
+      "effective_alternatives": 38.77078628540039,
+      "frontier_mass": 0.329420268535614,
+      "mode_probability": 0.1581355780363083,
+      "mode_agreement": 0.55078125
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 3.53501558303833,
+      "effective_alternatives": 35.88455581665039,
+      "frontier_mass": 0.3426820635795593,
+      "mode_probability": 0.17312338948249817,
+      "mode_agreement": 0.5390625
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 3.43272066116333,
+      "effective_alternatives": 32.73646926879883,
+      "frontier_mass": 0.36231082677841187,
+      "mode_probability": 0.18849551677703857,
+      "mode_agreement": 0.53515625
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 3.3327364921569824,
+      "effective_alternatives": 29.822616577148438,
+      "frontier_mass": 0.3835207521915436,
+      "mode_probability": 0.20225229859352112,
+      "mode_agreement": 0.53515625
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 3.243983030319214,
+      "effective_alternatives": 27.36922836303711,
+      "frontier_mass": 0.403208464384079,
+      "mode_probability": 0.21335738897323608,
+      "mode_agreement": 0.53515625
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 3.170602321624756,
+      "effective_alternatives": 25.440553665161133,
+      "frontier_mass": 0.4198188781738281,
+      "mode_probability": 0.22167611122131348,
+      "mode_agreement": 0.53515625
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 3.1135764122009277,
+      "effective_alternatives": 24.000530242919922,
+      "frontier_mass": 0.43288302421569824,
+      "mode_probability": 0.2275848090648651,
+      "mode_agreement": 0.53515625
+    }
+  ],
+  "zeno[alpha=0|a=0.5,b=1]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.344827890396118,
+      "effective_alternatives": 28.595298767089844,
+      "frontier_mass": 0.5096749663352966,
+      "mode_probability": 0.15533187985420227,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.3199214935302734,
+      "effective_alternatives": 27.902843475341797,
+      "frontier_mass": 0.5151987075805664,
+      "mode_probability": 0.16971880197525024,
+      "mode_agreement": 0.75390625
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 3.235273838043213,
+      "effective_alternatives": 25.784526824951172,
+      "frontier_mass": 0.5298027396202087,
+      "mode_probability": 0.20294183492660522,
+      "mode_agreement": 0.623046875
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 2.93550443649292,
+      "effective_alternatives": 20.048583984375,
+      "frontier_mass": 0.5831188559532166,
+      "mode_probability": 0.274170845746994,
+      "mode_agreement": 0.58984375
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 2.42979097366333,
+      "effective_alternatives": 13.271031379699707,
+      "frontier_mass": 0.6606008410453796,
+      "mode_probability": 0.358612596988678,
+      "mode_agreement": 0.580078125
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 1.8835976123809814,
+      "effective_alternatives": 8.123307228088379,
+      "frontier_mass": 0.7401871085166931,
+      "mode_probability": 0.4253614544868469,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 1.4900861978530884,
+      "effective_alternatives": 5.312639236450195,
+      "frontier_mass": 0.7961270809173584,
+      "mode_probability": 0.4600311517715454,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 1.2537024021148682,
+      "effective_alternatives": 3.9309136867523193,
+      "frontier_mass": 0.8290548324584961,
+      "mode_probability": 0.4758329689502716,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 1.1242862939834595,
+      "effective_alternatives": 3.2847609519958496,
+      "frontier_mass": 0.8468775153160095,
+      "mode_probability": 0.48365533351898193,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 1.055972933769226,
+      "effective_alternatives": 2.983308792114258,
+      "frontier_mass": 0.8561376333236694,
+      "mode_probability": 0.4876561462879181,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 1.019340991973877,
+      "effective_alternatives": 2.8369221687316895,
+      "frontier_mass": 0.8609730005264282,
+      "mode_probability": 0.4896170496940613,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 1.0003008842468262,
+      "effective_alternatives": 2.7665021419525146,
+      "frontier_mass": 0.8634507060050964,
+      "mode_probability": 0.4907418489456177,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 0.9904636144638062,
+      "effective_alternatives": 2.7329165935516357,
+      "frontier_mass": 0.8647283911705017,
+      "mode_probability": 0.49139440059661865,
+      "mode_agreement": 0.576171875
+    }
+  ],
+  "zeno[alpha=0|a=0.5,b=2]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.344827890396118,
+      "effective_alternatives": 28.595298767089844,
+      "frontier_mass": 0.5096749663352966,
+      "mode_probability": 0.15533187985420227,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.150813102722168,
+      "effective_alternatives": 23.642196655273438,
+      "frontier_mass": 0.5670003890991211,
+      "mode_probability": 0.19879503548145294,
+      "mode_agreement": 0.701171875
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 2.6996326446533203,
+      "effective_alternatives": 15.752233505249023,
+      "frontier_mass": 0.6622727513313293,
+      "mode_probability": 0.29918980598449707,
+      "mode_agreement": 0.6328125
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 1.9229620695114136,
+      "effective_alternatives": 8.260368347167969,
+      "frontier_mass": 0.7771685123443604,
+      "mode_probability": 0.42649921774864197,
+      "mode_agreement": 0.603515625
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 1.175352931022644,
+      "effective_alternatives": 4.105492115020752,
+      "frontier_mass": 0.8687658309936523,
+      "mode_probability": 0.5100010633468628,
+      "mode_agreement": 0.58203125
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 0.748905599117279,
+      "effective_alternatives": 2.4861176013946533,
+      "frontier_mass": 0.916877031326294,
+      "mode_probability": 0.5393011569976807,
+      "mode_agreement": 0.578125
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 0.5493216514587402,
+      "effective_alternatives": 1.8983031511306763,
+      "frontier_mass": 0.93792724609375,
+      "mode_probability": 0.5464894771575928,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 0.45842576026916504,
+      "effective_alternatives": 1.6591453552246094,
+      "frontier_mass": 0.9471460580825806,
+      "mode_probability": 0.5470172166824341,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 0.4149159789085388,
+      "effective_alternatives": 1.555176854133606,
+      "frontier_mass": 0.9515277147293091,
+      "mode_probability": 0.5468012094497681,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 0.39816009998321533,
+      "effective_alternatives": 1.5202150344848633,
+      "frontier_mass": 0.953262984752655,
+      "mode_probability": 0.5468503832817078,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 0.3909595012664795,
+      "effective_alternatives": 1.4965591430664062,
+      "frontier_mass": 0.9540436863899231,
+      "mode_probability": 0.5469019412994385,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 0.3862883746623993,
+      "effective_alternatives": 1.4822884798049927,
+      "frontier_mass": 0.9545547366142273,
+      "mode_probability": 0.5469720959663391,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 0.38457944989204407,
+      "effective_alternatives": 1.4781917333602905,
+      "frontier_mass": 0.9547436237335205,
+      "mode_probability": 0.5470954775810242,
+      "mode_agreement": 0.576171875
+    }
+  ],
+  "zeno[alpha=0|a=0.9,b=0.5]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.344827890396118,
+      "effective_alternatives": 28.595298767089844,
+      "frontier_mass": 0.5096749663352966,
+      "mode_probability": 0.15533187985420227,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.2860488891601562,
+      "effective_alternatives": 26.976119995117188,
+      "frontier_mass": 0.5293970108032227,
+      "mode_probability": 0.16682201623916626,
+      "mode_agreement": 0.857421875
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 3.232638359069824,
+      "effective_alternatives": 25.59096908569336,
+      "frontier_mass": 0.5456514954566956,
+      "mode_probability": 0.17885839939117432,
+      "mode_agreement": 0.765625
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 3.1797683238983154,
+      "effective_alternatives": 24.30242156982422,
+      "frontier_mass": 0.5598260164260864,
+      "mode_probability": 0.19228436052799225,
+      "mode_agreement": 0.703125
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 3.120872974395752,
+      "effective_alternatives": 22.967607498168945,
+      "frontier_mass": 0.5735673904418945,
+      "mode_probability": 0.2080329954624176,
+      "mode_agreement": 0.662109375
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 3.047008991241455,
+      "effective_alternatives": 21.43672752380371,
+      "frontier_mass": 0.5889912247657776,
+      "mode_probability": 0.22707346081733704,
+      "mode_agreement": 0.630859375
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 2.947861671447754,
+      "effective_alternatives": 19.597248077392578,
+      "frontier_mass": 0.6083356142044067,
+      "mode_probability": 0.250264048576355,
+      "mode_agreement": 0.611328125
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 2.814767599105835,
+      "effective_alternatives": 17.433883666992188,
+      "frontier_mass": 0.6330201625823975,
+      "mode_probability": 0.27805083990097046,
+      "mode_agreement": 0.599609375
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 2.6443586349487305,
+      "effective_alternatives": 15.053622245788574,
+      "frontier_mass": 0.6628729104995728,
+      "mode_probability": 0.30986109375953674,
+      "mode_agreement": 0.5859375
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 2.4408793449401855,
+      "effective_alternatives": 12.659991264343262,
+      "frontier_mass": 0.6962235569953918,
+      "mode_probability": 0.343761682510376,
+      "mode_agreement": 0.580078125
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 2.215498447418213,
+      "effective_alternatives": 10.454070091247559,
+      "frontier_mass": 0.7307623624801636,
+      "mode_probability": 0.37703412771224976,
+      "mode_agreement": 0.57421875
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 1.9820305109024048,
+      "effective_alternatives": 8.54667854309082,
+      "frontier_mass": 0.7644234895706177,
+      "mode_probability": 0.40743497014045715,
+      "mode_agreement": 0.57421875
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 1.7530338764190674,
+      "effective_alternatives": 6.9661970138549805,
+      "frontier_mass": 0.7957335710525513,
+      "mode_probability": 0.43384480476379395,
+      "mode_agreement": 0.57421875
+    }
+  ],
+  "zeno[alpha=0|a=0.9,b=1]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.344827890396118,
+      "effective_alternatives": 28.595298767089844,
+      "frontier_mass": 0.5096749663352966,
+      "mode_probability": 0.15533187985420227,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.2179925441741943,
+      "effective_alternatives": 25.223819732666016,
+      "frontier_mass": 0.5510423183441162,
+      "mode_probability": 0.17877525091171265,
+      "mode_agreement": 0.77734375
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 3.1124892234802246,
+      "effective_alternatives": 22.755874633789062,
+      "frontier_mass": 0.5795873403549194,
+      "mode_probability": 0.20295068621635437,
+      "mode_agreement": 0.689453125
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 2.9940478801727295,
+      "effective_alternatives": 20.34902572631836,
+      "frontier_mass": 0.6056071519851685,
+      "mode_probability": 0.2321036010980606,
+      "mode_agreement": 0.626953125
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 2.826237678527832,
+      "effective_alternatives": 17.49749755859375,
+      "frontier_mass": 0.6381955146789551,
+      "mode_probability": 0.2692837119102478,
+      "mode_agreement": 0.607421875
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 2.5905065536499023,
+      "effective_alternatives": 14.264287948608398,
+      "frontier_mass": 0.6801983714103699,
+      "mode_probability": 0.3145621716976166,
+      "mode_agreement": 0.5859375
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 2.3004283905029297,
+      "effective_alternatives": 11.16202163696289,
+      "frontier_mass": 0.7267777919769287,
+      "mode_probability": 0.3626033663749695,
+      "mode_agreement": 0.58203125
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 1.9899852275848389,
+      "effective_alternatives": 8.590738296508789,
+      "frontier_mass": 0.7719228863716125,
+      "mode_probability": 0.406141996383667,
+      "mode_agreement": 0.576171875
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 1.6912147998809814,
+      "effective_alternatives": 6.613171577453613,
+      "frontier_mass": 0.8119839429855347,
+      "mode_probability": 0.4412968158721924,
+      "mode_agreement": 0.560546875
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 1.4211170673370361,
+      "effective_alternatives": 5.144721031188965,
+      "frontier_mass": 0.8458486199378967,
+      "mode_probability": 0.46826013922691345,
+      "mode_agreement": 0.55859375
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 1.1881788969039917,
+      "effective_alternatives": 4.081194877624512,
+      "frontier_mass": 0.873525857925415,
+      "mode_probability": 0.4882853031158447,
+      "mode_agreement": 0.560546875
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 0.9959852695465088,
+      "effective_alternatives": 3.3234262466430664,
+      "frontier_mass": 0.895463764667511,
+      "mode_probability": 0.5025979280471802,
+      "mode_agreement": 0.560546875
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 0.8410143852233887,
+      "effective_alternatives": 2.778353691101074,
+      "frontier_mass": 0.9125863313674927,
+      "mode_probability": 0.5127835273742676,
+      "mode_agreement": 0.55859375
+    }
+  ],
+  "zeno[alpha=0|a=0.9,b=2]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.344827890396118,
+      "effective_alternatives": 28.595298767089844,
+      "frontier_mass": 0.5096749663352966,
+      "mode_probability": 0.15533187985420227,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.1233644485473633,
+      "effective_alternatives": 22.991031646728516,
+      "frontier_mass": 0.5787277817726135,
+      "mode_probability": 0.19585426151752472,
+      "mode_agreement": 0.716796875
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 2.9350500106811523,
+      "effective_alternatives": 19.22962188720703,
+      "frontier_mass": 0.621382474899292,
+      "mode_probability": 0.23992282152175903,
+      "mode_agreement": 0.6328125
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 2.6300697326660156,
+      "effective_alternatives": 14.668315887451172,
+      "frontier_mass": 0.6794267296791077,
+      "mode_probability": 0.3028036952018738,
+      "mode_agreement": 0.580078125
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 2.232099771499634,
+      "effective_alternatives": 10.47851276397705,
+      "frontier_mass": 0.7433911561965942,
+      "mode_probability": 0.37069520354270935,
+      "mode_agreement": 0.580078125
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 1.823179841041565,
+      "effective_alternatives": 7.402653694152832,
+      "frontier_mass": 0.8001214861869812,
+      "mode_probability": 0.4262616038322449,
+      "mode_agreement": 0.560546875
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 1.4596946239471436,
+      "effective_alternatives": 5.323291778564453,
+      "frontier_mass": 0.8454456329345703,
+      "mode_probability": 0.4651576280593872,
+      "mode_agreement": 0.556640625
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 1.1573439836502075,
+      "effective_alternatives": 3.93276309967041,
+      "frontier_mass": 0.8802854418754578,
+      "mode_probability": 0.49134743213653564,
+      "mode_agreement": 0.548828125
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 0.9212279319763184,
+      "effective_alternatives": 3.0276618003845215,
+      "frontier_mass": 0.9061412811279297,
+      "mode_probability": 0.507199764251709,
+      "mode_agreement": 0.548828125
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 0.7441856861114502,
+      "effective_alternatives": 2.4561715126037598,
+      "frontier_mass": 0.9248170852661133,
+      "mode_probability": 0.5156139135360718,
+      "mode_agreement": 0.546875
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 0.6165353655815125,
+      "effective_alternatives": 2.102248191833496,
+      "frontier_mass": 0.9378714561462402,
+      "mode_probability": 0.5199282169342041,
+      "mode_agreement": 0.546875
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 0.5259242057800293,
+      "effective_alternatives": 1.870247483253479,
+      "frontier_mass": 0.9469059705734253,
+      "mode_probability": 0.5223677158355713,
+      "mode_agreement": 0.546875
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 0.457984983921051,
+      "effective_alternatives": 1.7027018070220947,
+      "frontier_mass": 0.9535125494003296,
+      "mode_probability": 0.5240656137466431,
+      "mode_agreement": 0.546875
+    }
+  ],
+  "zeno[alpha=0|a=1,b=0.5]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.344827890396118,
+      "effective_alternatives": 28.595298767089844,
+      "frontier_mass": 0.5096749663352966,
+      "mode_probability": 0.15533187985420227,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.2675862312316895,
+      "effective_alternatives": 26.488296508789062,
+      "frontier_mass": 0.5356486439704895,
+      "mode_probability": 0.16879341006278992,
+      "mode_agreement": 0.865234375
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 3.2020955085754395,
+      "effective_alternatives": 24.82866096496582,
+      "frontier_mass": 0.5559950470924377,
+      "mode_probability": 0.18142381310462952,
+      "mode_agreement": 0.771484375
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 3.1437265872955322,
+      "effective_alternatives": 23.44533920288086,
+      "frontier_mass": 0.5725585222244263,
+      "mode_probability": 0.19383028149604797,
+      "mode_agreement": 0.732421875
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 3.0886831283569336,
+      "effective_alternatives": 22.22464370727539,
+      "frontier_mass": 0.5866740942001343,
+      "mode_probability": 0.2064577341079712,
+      "mode_agreement": 0.6875
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 3.0337491035461426,
+      "effective_alternatives": 21.088573455810547,
+      "frontier_mass": 0.5993630886077881,
+      "mode_probability": 0.21962663531303406,
+      "mode_agreement": 0.66796875
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 2.9764270782470703,
+      "effective_alternatives": 19.987876892089844,
+      "frontier_mass": 0.6114013195037842,
+      "mode_probability": 0.23343613743782043,
+      "mode_agreement": 0.6484375
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 2.9153244495391846,
+      "effective_alternatives": 18.90188217163086,
+      "frontier_mass": 0.6232923269271851,
+      "mode_probability": 0.24772992730140686,
+      "mode_agreement": 0.638671875
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 2.849907875061035,
+      "effective_alternatives": 17.827667236328125,
+      "frontier_mass": 0.6353384256362915,
+      "mode_probability": 0.262276291847229,
+      "mode_agreement": 0.626953125
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 2.779798984527588,
+      "effective_alternatives": 16.7634220123291,
+      "frontier_mass": 0.6477741003036499,
+      "mode_probability": 0.2769947350025177,
+      "mode_agreement": 0.607421875
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 2.7044517993927,
+      "effective_alternatives": 15.704218864440918,
+      "frontier_mass": 0.6607937812805176,
+      "mode_probability": 0.2919333577156067,
+      "mode_agreement": 0.6015625
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 2.6233069896698,
+      "effective_alternatives": 14.646038055419922,
+      "frontier_mass": 0.6745166778564453,
+      "mode_probability": 0.3070860207080841,
+      "mode_agreement": 0.59375
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 2.5363516807556152,
+      "effective_alternatives": 13.595283508300781,
+      "frontier_mass": 0.6888999938964844,
+      "mode_probability": 0.32242444157600403,
+      "mode_agreement": 0.5859375
+    }
+  ],
+  "zeno[alpha=0|a=1,b=1]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.344827890396118,
+      "effective_alternatives": 28.595298767089844,
+      "frontier_mass": 0.5096749663352966,
+      "mode_probability": 0.15533187985420227,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.206770896911621,
+      "effective_alternatives": 24.944704055786133,
+      "frontier_mass": 0.5548638105392456,
+      "mode_probability": 0.17950665950775146,
+      "mode_agreement": 0.7890625
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 3.101996421813965,
+      "effective_alternatives": 22.511821746826172,
+      "frontier_mass": 0.5840541124343872,
+      "mode_probability": 0.20165108144283295,
+      "mode_agreement": 0.697265625
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 3.0045435428619385,
+      "effective_alternatives": 20.51125717163086,
+      "frontier_mass": 0.6065436601638794,
+      "mode_probability": 0.22479867935180664,
+      "mode_agreement": 0.65234375
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 2.89703106880188,
+      "effective_alternatives": 18.57994842529297,
+      "frontier_mass": 0.627862811088562,
+      "mode_probability": 0.2499517947435379,
+      "mode_agreement": 0.63671875
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 2.771315336227417,
+      "effective_alternatives": 16.623188018798828,
+      "frontier_mass": 0.6508467793464661,
+      "mode_probability": 0.2767673134803772,
+      "mode_agreement": 0.61328125
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 2.6250433921813965,
+      "effective_alternatives": 14.64423942565918,
+      "frontier_mass": 0.6763886213302612,
+      "mode_probability": 0.3049664795398712,
+      "mode_agreement": 0.595703125
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 2.4597909450531006,
+      "effective_alternatives": 12.70921802520752,
+      "frontier_mass": 0.7038124203681946,
+      "mode_probability": 0.33418357372283936,
+      "mode_agreement": 0.572265625
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 2.2863430976867676,
+      "effective_alternatives": 10.981782913208008,
+      "frontier_mass": 0.7307751178741455,
+      "mode_probability": 0.3621007204055786,
+      "mode_agreement": 0.572265625
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 2.113636016845703,
+      "effective_alternatives": 9.506641387939453,
+      "frontier_mass": 0.7560977935791016,
+      "mode_probability": 0.38760340213775635,
+      "mode_agreement": 0.5703125
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 1.946641445159912,
+      "effective_alternatives": 8.25387954711914,
+      "frontier_mass": 0.7794966697692871,
+      "mode_probability": 0.410363107919693,
+      "mode_agreement": 0.568359375
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 1.7903203964233398,
+      "effective_alternatives": 7.199012756347656,
+      "frontier_mass": 0.8005663752555847,
+      "mode_probability": 0.4299551844596863,
+      "mode_agreement": 0.5703125
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 1.6485216617584229,
+      "effective_alternatives": 6.324767589569092,
+      "frontier_mass": 0.819007158279419,
+      "mode_probability": 0.44653749465942383,
+      "mode_agreement": 0.572265625
+    }
+  ],
+  "zeno[alpha=0|a=1,b=2]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.344827890396118,
+      "effective_alternatives": 28.595298767089844,
+      "frontier_mass": 0.5096749663352966,
+      "mode_probability": 0.15533187985420227,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.120392084121704,
+      "effective_alternatives": 22.919734954833984,
+      "frontier_mass": 0.5800953507423401,
+      "mode_probability": 0.19515956938266754,
+      "mode_agreement": 0.7109375
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 2.9584550857543945,
+      "effective_alternatives": 19.63521385192871,
+      "frontier_mass": 0.6175124645233154,
+      "mode_probability": 0.23278243839740753,
+      "mode_agreement": 0.64453125
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 2.74539852142334,
+      "effective_alternatives": 16.208332061767578,
+      "frontier_mass": 0.6586024761199951,
+      "mode_probability": 0.2787456214427948,
+      "mode_agreement": 0.59765625
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 2.4725258350372314,
+      "effective_alternatives": 12.801743507385254,
+      "frontier_mass": 0.7059037685394287,
+      "mode_probability": 0.3301481604576111,
+      "mode_agreement": 0.583984375
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 2.1795504093170166,
+      "effective_alternatives": 10.008905410766602,
+      "frontier_mass": 0.7507061958312988,
+      "mode_probability": 0.377072274684906,
+      "mode_agreement": 0.57421875
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 1.900839924812317,
+      "effective_alternatives": 7.892642974853516,
+      "frontier_mass": 0.7895530462265015,
+      "mode_probability": 0.4152027666568756,
+      "mode_agreement": 0.564453125
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 1.6560615301132202,
+      "effective_alternatives": 6.349112510681152,
+      "frontier_mass": 0.8211827278137207,
+      "mode_probability": 0.4443467855453491,
+      "mode_agreement": 0.564453125
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 1.444195032119751,
+      "effective_alternatives": 5.1821208000183105,
+      "frontier_mass": 0.8471750020980835,
+      "mode_probability": 0.466041624546051,
+      "mode_agreement": 0.5625
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 1.262758493423462,
+      "effective_alternatives": 4.315522193908691,
+      "frontier_mass": 0.8684503436088562,
+      "mode_probability": 0.4836076498031616,
+      "mode_agreement": 0.5625
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 1.1103416681289673,
+      "effective_alternatives": 3.679490327835083,
+      "frontier_mass": 0.8856273293495178,
+      "mode_probability": 0.4970005750656128,
+      "mode_agreement": 0.5625
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 0.983923077583313,
+      "effective_alternatives": 3.204462766647339,
+      "frontier_mass": 0.899469792842865,
+      "mode_probability": 0.5071836709976196,
+      "mode_agreement": 0.5625
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 0.8802357316017151,
+      "effective_alternatives": 2.8443961143493652,
+      "frontier_mass": 0.9105587005615234,
+      "mode_probability": 0.5147414207458496,
+      "mode_agreement": 0.5625
+    }
+  ],
+  "steps-discrete[alpha=0]": [
+    {
+      "hop": 1,
+      "frontier_mass": 0.2389904409646988,
+      "frontier_chance": 0.03125,
+      "entropy": 3.7253661155700684,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 42.191680908203125,
+      "frontier_size": 2.0,
+      "top1_in_frontier": 0.9766728281974792
+    },
+    {
+      "hop": 2,
+      "frontier_mass": 0.4919322431087494,
+      "frontier_chance": 0.06161755695939064,
+      "entropy": 3.0991814136505127,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 22.560327529907227,
+      "frontier_size": 3.943523645401001,
+      "top1_in_frontier": 0.9785144329071045
+    },
+    {
+      "hop": 3,
+      "frontier_mass": 0.44560015201568604,
+      "frontier_chance": 0.11854473501443863,
+      "entropy": 3.464024782180786,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 32.104820251464844,
+      "frontier_size": 7.586863040924072,
+      "top1_in_frontier": 0.9785144329071045
+    }
+  ],
+  "accuracy-discrete[alpha=0]": 0.7059545516967773,
+  "steps[alpha=1]": [
+    {
+      "hop": 1,
+      "frontier_mass": 0.3549620807170868,
+      "frontier_chance": 0.03125,
+      "entropy": 3.4723377227783203,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 32.658512115478516,
+      "frontier_size": 2.0,
+      "top1_in_frontier": 1.0
+    },
+    {
+      "hop": 2,
+      "frontier_mass": 0.5758418440818787,
+      "frontier_chance": 0.06161755695939064,
+      "entropy": 3.1509337425231934,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 23.596080780029297,
+      "frontier_size": 3.943523645401001,
+      "top1_in_frontier": 1.0
+    },
+    {
+      "hop": 3,
+      "frontier_mass": 0.6436232328414917,
+      "frontier_chance": 0.11854473501443863,
+      "entropy": 3.3495640754699707,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 28.62706756591797,
+      "frontier_size": 7.586863040924072,
+      "top1_in_frontier": 1.0
+    }
+  ],
+  "monte_carlo[alpha=1]": [
+    {
+      "samples": 1.0,
+      "distance": 0.9526510238647461,
+      "distance_std": 0.08222357928752899,
+      "relative": 3.100586175918579
+    },
+    {
+      "samples": 2.0,
+      "distance": 0.6678470373153687,
+      "distance_std": 0.10523867607116699,
+      "relative": 2.1736366748809814
+    },
+    {
+      "samples": 4.0,
+      "distance": 0.47093868255615234,
+      "distance_std": 0.08712329715490341,
+      "relative": 1.5327606201171875
+    },
+    {
+      "samples": 8.0,
+      "distance": 0.3313275873661041,
+      "distance_std": 0.06462579220533371,
+      "relative": 1.078369379043579
+    },
+    {
+      "samples": 16.0,
+      "distance": 0.2344297617673874,
+      "distance_std": 0.046455398201942444,
+      "relative": 0.7629967927932739
+    },
+    {
+      "samples": 32.0,
+      "distance": 0.16561248898506165,
+      "distance_std": 0.033197805285453796,
+      "relative": 0.5390177369117737
+    },
+    {
+      "samples": 64.0,
+      "distance": 0.11690079420804977,
+      "distance_std": 0.02356330305337906,
+      "relative": 0.3804761469364166
+    },
+    {
+      "samples": 128.0,
+      "distance": 0.08303214609622955,
+      "distance_std": 0.01678045652806759,
+      "relative": 0.27024412155151367
+    }
+  ],
+  "jensen[alpha=1]": [
+    {
+      "feedback_gate": 0.25,
+      "gap": 0.0007132264436222613,
+      "gap_std": 7.933267625048757e-05,
+      "relative_gap": 5.336522008292377e-06,
+      "entropy": 3.1615400314331055,
+      "spread": 0.9134343862533569,
+      "predicted_scale": 0.05708964914083481
+    },
+    {
+      "feedback_gate": 0.5,
+      "gap": 0.002836807630956173,
+      "gap_std": 0.00032063256367109716,
+      "relative_gap": 2.1225472664809786e-05,
+      "entropy": 3.1615400314331055,
+      "spread": 0.9134343862533569,
+      "predicted_scale": 0.22835859656333923
+    },
+    {
+      "feedback_gate": 1.0,
+      "gap": 0.011325557716190815,
+      "gap_std": 0.00128140056040138,
+      "relative_gap": 8.472533954773098e-05,
+      "entropy": 3.1615400314331055,
+      "spread": 0.9134343862533569,
+      "predicted_scale": 0.9134343862533569
+    },
+    {
+      "feedback_gate": 2.0,
+      "gap": 0.04512710124254227,
+      "gap_std": 0.005099883768707514,
+      "relative_gap": 0.00033747463021427393,
+      "entropy": 3.1615400314331055,
+      "spread": 0.9134343862533569,
+      "predicted_scale": 3.6537375450134277
+    }
+  ],
+  "jensen_by_entropy[alpha=1]": [
+    {
+      "entropy": 2.9195051193237305,
+      "gap": 0.010486528277397156,
+      "gap_std": 0.001086272532120347,
+      "spread": 0.8898091316223145,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.0439722537994385,
+      "gap": 0.010728339664638042,
+      "gap_std": 0.0010923418449237943,
+      "spread": 0.9005000591278076,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.103494167327881,
+      "gap": 0.011442100629210472,
+      "gap_std": 0.0011660701129585505,
+      "spread": 0.9070162177085876,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.137941837310791,
+      "gap": 0.011520074680447578,
+      "gap_std": 0.0013798946747556329,
+      "spread": 0.9179497957229614,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.1879591941833496,
+      "gap": 0.011752142570912838,
+      "gap_std": 0.0012767226435244083,
+      "spread": 0.9227436780929565,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.2290360927581787,
+      "gap": 0.01146443746984005,
+      "gap_std": 0.0013143472606316209,
+      "spread": 0.9148648977279663,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.2824645042419434,
+      "gap": 0.011846868321299553,
+      "gap_std": 0.0011087775928899646,
+      "spread": 0.9229456186294556,
+      "count": 64.0
+    },
+    {
+      "entropy": 3.3879470825195312,
+      "gap": 0.011363968253135681,
+      "gap_std": 0.001217641751281917,
+      "spread": 0.9316459894180298,
+      "count": 64.0
+    }
+  ],
+  "jensen_by_temperature[alpha=1]": [
+    {
+      "temperature": 0.05,
+      "gap": 0.004396079573780298,
+      "gap_std": 0.0036912502255290747,
+      "spread": 0.2421479970216751,
+      "entropy": 0.4233735203742981,
+      "max_probability": 0.8323065042495728
+    },
+    {
+      "temperature": 0.1,
+      "gap": 0.007342669181525707,
+      "gap_std": 0.0032694495748728514,
+      "spread": 0.4312933683395386,
+      "entropy": 0.7702560424804688,
+      "max_probability": 0.6872537136077881
+    },
+    {
+      "temperature": 0.2,
+      "gap": 0.009794177487492561,
+      "gap_std": 0.0021862357389181852,
+      "spread": 0.6112149953842163,
+      "entropy": 1.1027194261550903,
+      "max_probability": 0.5188854932785034
+    },
+    {
+      "temperature": 0.35,
+      "gap": 0.01078446302562952,
+      "gap_std": 0.001662900671362877,
+      "spread": 0.6980385184288025,
+      "entropy": 1.301452875137329,
+      "max_probability": 0.4102931618690491
+    },
+    {
+      "temperature": 0.5,
+      "gap": 0.011086052283644676,
+      "gap_std": 0.0015287591377273202,
+      "spread": 0.7461055517196655,
+      "entropy": 1.5961097478866577,
+      "max_probability": 0.34869909286499023
+    },
+    {
+      "temperature": 0.75,
+      "gap": 0.011243350803852081,
+      "gap_std": 0.0013827328803017735,
+      "spread": 0.8407496213912964,
+      "entropy": 2.4444665908813477,
+      "max_probability": 0.25394684076309204
+    },
+    {
+      "temperature": 1.0,
+      "gap": 0.011325557716190815,
+      "gap_std": 0.00128140056040138,
+      "spread": 0.9134343862533569,
+      "entropy": 3.1615400314331055,
+      "max_probability": 0.1764901727437973
+    },
+    {
+      "temperature": 1.5,
+      "gap": 0.011443838477134705,
+      "gap_std": 0.0012059154687449336,
+      "spread": 0.9670379757881165,
+      "entropy": 3.788280487060547,
+      "max_probability": 0.09676352143287659
+    },
+    {
+      "temperature": 2.0,
+      "gap": 0.011503627523779869,
+      "gap_std": 0.001184883527457714,
+      "spread": 0.9799702763557434,
+      "entropy": 3.982229232788086,
+      "max_probability": 0.06538236141204834
+    }
+  ],
+  "accuracy[alpha=1]": 0.9720686674118042,
+  "zeno[alpha=1|a=0.5,b=0.5]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.1615400314331055,
+      "effective_alternatives": 23.83669662475586,
+      "frontier_mass": 0.5727496147155762,
+      "mode_probability": 0.1764901727437973,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.2489984035491943,
+      "effective_alternatives": 25.964828491210938,
+      "frontier_mass": 0.5420326590538025,
+      "mode_probability": 0.1802884042263031,
+      "mode_agreement": 0.88671875
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 3.398127794265747,
+      "effective_alternatives": 30.098148345947266,
+      "frontier_mass": 0.48444437980651855,
+      "mode_probability": 0.18120981752872467,
+      "mode_agreement": 0.833984375
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 3.523695945739746,
+      "effective_alternatives": 34.189247131347656,
+      "frontier_mass": 0.42570605874061584,
+      "mode_probability": 0.1857425421476364,
+      "mode_agreement": 0.787109375
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 3.5747735500335693,
+      "effective_alternatives": 36.26355743408203,
+      "frontier_mass": 0.3857526183128357,
+      "mode_probability": 0.1981816440820694,
+      "mode_agreement": 0.76953125
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 3.554975986480713,
+      "effective_alternatives": 36.0043830871582,
+      "frontier_mass": 0.36858582496643066,
+      "mode_probability": 0.2172010987997055,
+      "mode_agreement": 0.7578125
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 3.4891440868377686,
+      "effective_alternatives": 34.19279479980469,
+      "frontier_mass": 0.36900103092193604,
+      "mode_probability": 0.2388836145401001,
+      "mode_agreement": 0.75390625
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 3.404273509979248,
+      "effective_alternatives": 31.811933517456055,
+      "frontier_mass": 0.3793390691280365,
+      "mode_probability": 0.25932571291923523,
+      "mode_agreement": 0.7421875
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 3.3197083473205566,
+      "effective_alternatives": 29.471424102783203,
+      "frontier_mass": 0.3934710621833801,
+      "mode_probability": 0.27645784616470337,
+      "mode_agreement": 0.740234375
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 3.2437806129455566,
+      "effective_alternatives": 27.384122848510742,
+      "frontier_mass": 0.4081190824508667,
+      "mode_probability": 0.29012513160705566,
+      "mode_agreement": 0.736328125
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 3.1786932945251465,
+      "effective_alternatives": 25.60578727722168,
+      "frontier_mass": 0.4217846989631653,
+      "mode_probability": 0.3007761836051941,
+      "mode_agreement": 0.734375
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 3.124648094177246,
+      "effective_alternatives": 24.147926330566406,
+      "frontier_mass": 0.433735728263855,
+      "mode_probability": 0.30878210067749023,
+      "mode_agreement": 0.734375
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 3.081151008605957,
+      "effective_alternatives": 22.992176055908203,
+      "frontier_mass": 0.4436749815940857,
+      "mode_probability": 0.3145374655723572,
+      "mode_agreement": 0.734375
+    }
+  ],
+  "zeno[alpha=1|a=0.5,b=1]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.1615400314331055,
+      "effective_alternatives": 23.83669662475586,
+      "frontier_mass": 0.5727496147155762,
+      "mode_probability": 0.1764901727437973,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.1007180213928223,
+      "effective_alternatives": 22.416542053222656,
+      "frontier_mass": 0.5877755880355835,
+      "mode_probability": 0.20900361239910126,
+      "mode_agreement": 0.873046875
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 2.9972646236419678,
+      "effective_alternatives": 20.427310943603516,
+      "frontier_mass": 0.5995649099349976,
+      "mode_probability": 0.27074551582336426,
+      "mode_agreement": 0.828125
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 2.687164306640625,
+      "effective_alternatives": 15.90906047821045,
+      "frontier_mass": 0.6393451690673828,
+      "mode_probability": 0.3822292685508728,
+      "mode_agreement": 0.796875
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 2.1816623210906982,
+      "effective_alternatives": 10.539079666137695,
+      "frontier_mass": 0.7057799100875854,
+      "mode_probability": 0.5073480010032654,
+      "mode_agreement": 0.791015625
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 1.6933895349502563,
+      "effective_alternatives": 6.5910749435424805,
+      "frontier_mass": 0.7707590460777283,
+      "mode_probability": 0.5941200852394104,
+      "mode_agreement": 0.78515625
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 1.3568089008331299,
+      "effective_alternatives": 4.421412467956543,
+      "frontier_mass": 0.8159355521202087,
+      "mode_probability": 0.6382899880409241,
+      "mode_agreement": 0.783203125
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 1.1676770448684692,
+      "effective_alternatives": 3.451829671859741,
+      "frontier_mass": 0.8412702083587646,
+      "mode_probability": 0.6569803953170776,
+      "mode_agreement": 0.78125
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 1.0745580196380615,
+      "effective_alternatives": 3.053420305252075,
+      "frontier_mass": 0.8536983728408813,
+      "mode_probability": 0.6645199060440063,
+      "mode_agreement": 0.779296875
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 1.0301882028579712,
+      "effective_alternatives": 2.8801960945129395,
+      "frontier_mass": 0.8596010208129883,
+      "mode_probability": 0.6677650213241577,
+      "mode_agreement": 0.779296875
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 1.0073784589767456,
+      "effective_alternatives": 2.791532039642334,
+      "frontier_mass": 0.8626017570495605,
+      "mode_probability": 0.6690725684165955,
+      "mode_agreement": 0.779296875
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 0.9946469664573669,
+      "effective_alternatives": 2.7410573959350586,
+      "frontier_mass": 0.8642615079879761,
+      "mode_probability": 0.6693394184112549,
+      "mode_agreement": 0.779296875
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 0.9872331619262695,
+      "effective_alternatives": 2.712411403656006,
+      "frontier_mass": 0.8652280569076538,
+      "mode_probability": 0.6693778038024902,
+      "mode_agreement": 0.779296875
+    }
+  ],
+  "zeno[alpha=1|a=0.5,b=2]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.1615400314331055,
+      "effective_alternatives": 23.83669662475586,
+      "frontier_mass": 0.5727496147155762,
+      "mode_probability": 0.1764901727437973,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 2.904060125350952,
+      "effective_alternatives": 18.479267120361328,
+      "frontier_mass": 0.6416440010070801,
+      "mode_probability": 0.2488577961921692,
+      "mode_agreement": 0.85546875
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 2.4517757892608643,
+      "effective_alternatives": 12.41977596282959,
+      "frontier_mass": 0.7165240049362183,
+      "mode_probability": 0.39446863532066345,
+      "mode_agreement": 0.802734375
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 1.6807875633239746,
+      "effective_alternatives": 6.5152587890625,
+      "frontier_mass": 0.8140419125556946,
+      "mode_probability": 0.5822783708572388,
+      "mode_agreement": 0.794921875
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 1.0019395351409912,
+      "effective_alternatives": 3.309187412261963,
+      "frontier_mass": 0.8900455236434937,
+      "mode_probability": 0.6926968097686768,
+      "mode_agreement": 0.787109375
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 0.6434095501899719,
+      "effective_alternatives": 2.131762981414795,
+      "frontier_mass": 0.9281652569770813,
+      "mode_probability": 0.7318376302719116,
+      "mode_agreement": 0.79296875
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 0.49132734537124634,
+      "effective_alternatives": 1.7132887840270996,
+      "frontier_mass": 0.9439505934715271,
+      "mode_probability": 0.7464686036109924,
+      "mode_agreement": 0.79296875
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 0.4284728765487671,
+      "effective_alternatives": 1.5683553218841553,
+      "frontier_mass": 0.9503389000892639,
+      "mode_probability": 0.7514964938163757,
+      "mode_agreement": 0.79296875
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 0.40307337045669556,
+      "effective_alternatives": 1.5162423849105835,
+      "frontier_mass": 0.9528811573982239,
+      "mode_probability": 0.7525320649147034,
+      "mode_agreement": 0.791015625
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 0.39292988181114197,
+      "effective_alternatives": 1.4961729049682617,
+      "frontier_mass": 0.9538962244987488,
+      "mode_probability": 0.7526029348373413,
+      "mode_agreement": 0.791015625
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 0.3877788782119751,
+      "effective_alternatives": 1.484636664390564,
+      "frontier_mass": 0.9544172286987305,
+      "mode_probability": 0.7525266408920288,
+      "mode_agreement": 0.791015625
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 0.3854956030845642,
+      "effective_alternatives": 1.4806033372879028,
+      "frontier_mass": 0.9546518325805664,
+      "mode_probability": 0.7526676654815674,
+      "mode_agreement": 0.791015625
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 0.3842916190624237,
+      "effective_alternatives": 1.477046251296997,
+      "frontier_mass": 0.9547692537307739,
+      "mode_probability": 0.7529915571212769,
+      "mode_agreement": 0.791015625
+    }
+  ],
+  "zeno[alpha=1|a=0.9,b=0.5]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.1615400314331055,
+      "effective_alternatives": 23.83669662475586,
+      "frontier_mass": 0.5727496147155762,
+      "mode_probability": 0.1764901727437973,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.091179609298706,
+      "effective_alternatives": 22.213485717773438,
+      "frontier_mass": 0.5943620800971985,
+      "mode_probability": 0.19316667318344116,
+      "mode_agreement": 0.951171875
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 3.0246171951293945,
+      "effective_alternatives": 20.78573226928711,
+      "frontier_mass": 0.6127424240112305,
+      "mode_probability": 0.21224260330200195,
+      "mode_agreement": 0.90625
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 2.954777479171753,
+      "effective_alternatives": 19.4036922454834,
+      "frontier_mass": 0.629657506942749,
+      "mode_probability": 0.23516620695590973,
+      "mode_agreement": 0.880859375
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 2.8743486404418945,
+      "effective_alternatives": 17.965068817138672,
+      "frontier_mass": 0.6465474367141724,
+      "mode_probability": 0.26326462626457214,
+      "mode_agreement": 0.849609375
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 2.7765145301818848,
+      "effective_alternatives": 16.41878890991211,
+      "frontier_mass": 0.6645501852035522,
+      "mode_probability": 0.2973622679710388,
+      "mode_agreement": 0.833984375
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 2.6552460193634033,
+      "effective_alternatives": 14.74671459197998,
+      "frontier_mass": 0.6845827698707581,
+      "mode_probability": 0.3377223610877991,
+      "mode_agreement": 0.814453125
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 2.505795955657959,
+      "effective_alternatives": 12.961771011352539,
+      "frontier_mass": 0.7072772979736328,
+      "mode_probability": 0.3839159309864044,
+      "mode_agreement": 0.814453125
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 2.3274142742156982,
+      "effective_alternatives": 11.13138198852539,
+      "frontier_mass": 0.73256915807724,
+      "mode_probability": 0.4342551827430725,
+      "mode_agreement": 0.806640625
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 2.12518048286438,
+      "effective_alternatives": 9.361272811889648,
+      "frontier_mass": 0.7596107721328735,
+      "mode_probability": 0.4857625961303711,
+      "mode_agreement": 0.802734375
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 1.9088926315307617,
+      "effective_alternatives": 7.747496604919434,
+      "frontier_mass": 0.787107527256012,
+      "mode_probability": 0.5350339412689209,
+      "mode_agreement": 0.796875
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 1.6899256706237793,
+      "effective_alternatives": 6.348450660705566,
+      "frontier_mass": 0.8137568831443787,
+      "mode_probability": 0.5793885588645935,
+      "mode_agreement": 0.794921875
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 1.4789135456085205,
+      "effective_alternatives": 5.190267562866211,
+      "frontier_mass": 0.8385034799575806,
+      "mode_probability": 0.6173565983772278,
+      "mode_agreement": 0.79296875
+    }
+  ],
+  "zeno[alpha=1|a=0.9,b=1]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.1615400314331055,
+      "effective_alternatives": 23.83669662475586,
+      "frontier_mass": 0.5727496147155762,
+      "mode_probability": 0.1764901727437973,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.0130274295806885,
+      "effective_alternatives": 20.549442291259766,
+      "frontier_mass": 0.6171438097953796,
+      "mode_probability": 0.2095503807067871,
+      "mode_agreement": 0.9140625
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 2.8802168369293213,
+      "effective_alternatives": 18.031612396240234,
+      "frontier_mass": 0.6496143341064453,
+      "mode_probability": 0.24869002401828766,
+      "mode_agreement": 0.865234375
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 2.7272768020629883,
+      "effective_alternatives": 15.627603530883789,
+      "frontier_mass": 0.6795094609260559,
+      "mode_probability": 0.29851385951042175,
+      "mode_agreement": 0.826171875
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 2.5338656902313232,
+      "effective_alternatives": 13.17697525024414,
+      "frontier_mass": 0.711191713809967,
+      "mode_probability": 0.35937201976776123,
+      "mode_agreement": 0.814453125
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 2.2905712127685547,
+      "effective_alternatives": 10.70297622680664,
+      "frontier_mass": 0.7464327812194824,
+      "mode_probability": 0.4288301467895508,
+      "mode_agreement": 0.806640625
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 2.0086240768432617,
+      "effective_alternatives": 8.413800239562988,
+      "frontier_mass": 0.7835507392883301,
+      "mode_probability": 0.4999520182609558,
+      "mode_agreement": 0.802734375
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 1.7160766124725342,
+      "effective_alternatives": 6.510815143585205,
+      "frontier_mass": 0.819231390953064,
+      "mode_probability": 0.5641573667526245,
+      "mode_agreement": 0.798828125
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 1.4407204389572144,
+      "effective_alternatives": 5.060985088348389,
+      "frontier_mass": 0.8508193492889404,
+      "mode_probability": 0.616551399230957,
+      "mode_agreement": 0.80078125
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 1.1998567581176758,
+      "effective_alternatives": 4.0092034339904785,
+      "frontier_mass": 0.8772255182266235,
+      "mode_probability": 0.6564208269119263,
+      "mode_agreement": 0.798828125
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 0.9997422695159912,
+      "effective_alternatives": 3.2568624019622803,
+      "frontier_mass": 0.898430585861206,
+      "mode_probability": 0.6856615543365479,
+      "mode_agreement": 0.796875
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 0.8385135531425476,
+      "effective_alternatives": 2.7231736183166504,
+      "frontier_mass": 0.9150607585906982,
+      "mode_probability": 0.7071380615234375,
+      "mode_agreement": 0.796875
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 0.711416482925415,
+      "effective_alternatives": 2.3491768836975098,
+      "frontier_mass": 0.9278934597969055,
+      "mode_probability": 0.7228355407714844,
+      "mode_agreement": 0.796875
+    }
+  ],
+  "zeno[alpha=1|a=0.9,b=2]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.1615400314331055,
+      "effective_alternatives": 23.83669662475586,
+      "frontier_mass": 0.5727496147155762,
+      "mode_probability": 0.1764901727437973,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 2.8996665477752686,
+      "effective_alternatives": 18.366411209106445,
+      "frontier_mass": 0.6474521160125732,
+      "mode_probability": 0.2349092960357666,
+      "mode_agreement": 0.87109375
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 2.664254665374756,
+      "effective_alternatives": 14.712262153625488,
+      "frontier_mass": 0.6945734024047852,
+      "mode_probability": 0.30799731612205505,
+      "mode_agreement": 0.83203125
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 2.3526697158813477,
+      "effective_alternatives": 11.228679656982422,
+      "frontier_mass": 0.7428562641143799,
+      "mode_probability": 0.4007030427455902,
+      "mode_agreement": 0.8046875
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 1.9701005220413208,
+      "effective_alternatives": 8.118586540222168,
+      "frontier_mass": 0.7933897972106934,
+      "mode_probability": 0.499359667301178,
+      "mode_agreement": 0.796875
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 1.5855159759521484,
+      "effective_alternatives": 5.7982177734375,
+      "frontier_mass": 0.8386213183403015,
+      "mode_probability": 0.5821565389633179,
+      "mode_agreement": 0.796875
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 1.2537117004394531,
+      "effective_alternatives": 4.264756202697754,
+      "frontier_mass": 0.8747116327285767,
+      "mode_probability": 0.6400637626647949,
+      "mode_agreement": 0.794921875
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 0.9973998069763184,
+      "effective_alternatives": 3.299582004547119,
+      "frontier_mass": 0.9013509154319763,
+      "mode_probability": 0.6774550676345825,
+      "mode_agreement": 0.7890625
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 0.8069562315940857,
+      "effective_alternatives": 2.671746253967285,
+      "frontier_mass": 0.9205101132392883,
+      "mode_probability": 0.7027629613876343,
+      "mode_agreement": 0.78515625
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 0.6638360023498535,
+      "effective_alternatives": 2.246736526489258,
+      "frontier_mass": 0.9344817399978638,
+      "mode_probability": 0.720335841178894,
+      "mode_agreement": 0.783203125
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 0.5561373233795166,
+      "effective_alternatives": 1.9566586017608643,
+      "frontier_mass": 0.9447544813156128,
+      "mode_probability": 0.73221355676651,
+      "mode_agreement": 0.783203125
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 0.47695884108543396,
+      "effective_alternatives": 1.7620916366577148,
+      "frontier_mass": 0.9521797299385071,
+      "mode_probability": 0.7402313947677612,
+      "mode_agreement": 0.783203125
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 0.4189387559890747,
+      "effective_alternatives": 1.6298311948776245,
+      "frontier_mass": 0.9575865864753723,
+      "mode_probability": 0.7457423210144043,
+      "mode_agreement": 0.783203125
+    }
+  ],
+  "zeno[alpha=1|a=1,b=0.5]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.1615400314331055,
+      "effective_alternatives": 23.83669662475586,
+      "frontier_mass": 0.5727496147155762,
+      "mode_probability": 0.1764901727437973,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.073810577392578,
+      "effective_alternatives": 21.835556030273438,
+      "frontier_mass": 0.5999221205711365,
+      "mode_probability": 0.1941664069890976,
+      "mode_agreement": 0.947265625
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 2.9990737438201904,
+      "effective_alternatives": 20.266613006591797,
+      "frontier_mass": 0.6211395859718323,
+      "mode_probability": 0.2119019329547882,
+      "mode_agreement": 0.90234375
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 2.9311046600341797,
+      "effective_alternatives": 18.945724487304688,
+      "frontier_mass": 0.6386343836784363,
+      "mode_probability": 0.23040048778057098,
+      "mode_agreement": 0.875
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 2.8649466037750244,
+      "effective_alternatives": 17.758859634399414,
+      "frontier_mass": 0.653950572013855,
+      "mode_probability": 0.25019189715385437,
+      "mode_agreement": 0.86328125
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 2.7973897457122803,
+      "effective_alternatives": 16.6500186920166,
+      "frontier_mass": 0.6680189371109009,
+      "mode_probability": 0.2714129090309143,
+      "mode_agreement": 0.849609375
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 2.7269861698150635,
+      "effective_alternatives": 15.599241256713867,
+      "frontier_mass": 0.6813408136367798,
+      "mode_probability": 0.2938168942928314,
+      "mode_agreement": 0.822265625
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 2.653381109237671,
+      "effective_alternatives": 14.598917007446289,
+      "frontier_mass": 0.6941807866096497,
+      "mode_probability": 0.31703394651412964,
+      "mode_agreement": 0.814453125
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 2.576516628265381,
+      "effective_alternatives": 13.641932487487793,
+      "frontier_mass": 0.7067083120346069,
+      "mode_probability": 0.34077775478363037,
+      "mode_agreement": 0.80078125
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 2.49613881111145,
+      "effective_alternatives": 12.72000789642334,
+      "frontier_mass": 0.7190874814987183,
+      "mode_probability": 0.3648928999900818,
+      "mode_agreement": 0.798828125
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 2.411994695663452,
+      "effective_alternatives": 11.828408241271973,
+      "frontier_mass": 0.7314624786376953,
+      "mode_probability": 0.38921648263931274,
+      "mode_agreement": 0.783203125
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 2.3243861198425293,
+      "effective_alternatives": 10.970359802246094,
+      "frontier_mass": 0.7438589334487915,
+      "mode_probability": 0.41347524523735046,
+      "mode_agreement": 0.779296875
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 2.2338550090789795,
+      "effective_alternatives": 10.15170955657959,
+      "frontier_mass": 0.7562394738197327,
+      "mode_probability": 0.437406063079834,
+      "mode_agreement": 0.78125
+    }
+  ],
+  "zeno[alpha=1|a=1,b=1]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.1615400314331055,
+      "effective_alternatives": 23.83669662475586,
+      "frontier_mass": 0.5727496147155762,
+      "mode_probability": 0.1764901727437973,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 3.0044591426849365,
+      "effective_alternatives": 20.376399993896484,
+      "frontier_mass": 0.6200273036956787,
+      "mode_probability": 0.20891064405441284,
+      "mode_agreement": 0.916015625
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 2.8805365562438965,
+      "effective_alternatives": 18.025800704956055,
+      "frontier_mass": 0.6513375043869019,
+      "mode_probability": 0.24250246584415436,
+      "mode_agreement": 0.87109375
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 2.758786201477051,
+      "effective_alternatives": 16.048559188842773,
+      "frontier_mass": 0.6766765117645264,
+      "mode_probability": 0.28025496006011963,
+      "mode_agreement": 0.8359375
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 2.6279218196868896,
+      "effective_alternatives": 14.256158828735352,
+      "frontier_mass": 0.6997855305671692,
+      "mode_probability": 0.32145267724990845,
+      "mode_agreement": 0.80859375
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 2.4860622882843018,
+      "effective_alternatives": 12.595141410827637,
+      "frontier_mass": 0.7220460176467896,
+      "mode_probability": 0.3644786477088928,
+      "mode_agreement": 0.7890625
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 2.3311591148376465,
+      "effective_alternatives": 11.027033805847168,
+      "frontier_mass": 0.7444416284561157,
+      "mode_probability": 0.40843990445137024,
+      "mode_agreement": 0.787109375
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 2.166623115539551,
+      "effective_alternatives": 9.584890365600586,
+      "frontier_mass": 0.7667210102081299,
+      "mode_probability": 0.45173943042755127,
+      "mode_agreement": 0.779296875
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 1.9989593029022217,
+      "effective_alternatives": 8.305702209472656,
+      "frontier_mass": 0.7881975173950195,
+      "mode_probability": 0.49254751205444336,
+      "mode_agreement": 0.771484375
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 1.835363507270813,
+      "effective_alternatives": 7.2103590965271,
+      "frontier_mass": 0.8082555532455444,
+      "mode_probability": 0.5293629169464111,
+      "mode_agreement": 0.771484375
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 1.682621717453003,
+      "effective_alternatives": 6.303736686706543,
+      "frontier_mass": 0.8263447880744934,
+      "mode_probability": 0.5612618327140808,
+      "mode_agreement": 0.763671875
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 1.5434587001800537,
+      "effective_alternatives": 5.563053131103516,
+      "frontier_mass": 0.8422890901565552,
+      "mode_probability": 0.5883497595787048,
+      "mode_agreement": 0.767578125
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 1.41724693775177,
+      "effective_alternatives": 4.955371379852295,
+      "frontier_mass": 0.8563072085380554,
+      "mode_probability": 0.6114121675491333,
+      "mode_agreement": 0.767578125
+    }
+  ],
+  "zeno[alpha=1|a=1,b=2]": [
+    {
+      "repeat": 0.0,
+      "entropy": 3.1615400314331055,
+      "effective_alternatives": 23.83669662475586,
+      "frontier_mass": 0.5727496147155762,
+      "mode_probability": 0.1764901727437973,
+      "mode_agreement": 1.0
+    },
+    {
+      "repeat": 1.0,
+      "entropy": 2.9019927978515625,
+      "effective_alternatives": 18.406326293945312,
+      "frontier_mass": 0.6474217176437378,
+      "mode_probability": 0.2321714460849762,
+      "mode_agreement": 0.87890625
+    },
+    {
+      "repeat": 2.0,
+      "entropy": 2.697431802749634,
+      "effective_alternatives": 15.146411895751953,
+      "frontier_mass": 0.6898605227470398,
+      "mode_probability": 0.29423993825912476,
+      "mode_agreement": 0.8203125
+    },
+    {
+      "repeat": 3.0,
+      "entropy": 2.4658145904541016,
+      "effective_alternatives": 12.347740173339844,
+      "frontier_mass": 0.727383017539978,
+      "mode_probability": 0.3648960590362549,
+      "mode_agreement": 0.78125
+    },
+    {
+      "repeat": 4.0,
+      "entropy": 2.1980488300323486,
+      "effective_alternatives": 9.835014343261719,
+      "frontier_mass": 0.7649989128112793,
+      "mode_probability": 0.4388731122016907,
+      "mode_agreement": 0.767578125
+    },
+    {
+      "repeat": 5.0,
+      "entropy": 1.91815185546875,
+      "effective_alternatives": 7.745661735534668,
+      "frontier_mass": 0.8005514144897461,
+      "mode_probability": 0.5072669386863708,
+      "mode_agreement": 0.759765625
+    },
+    {
+      "repeat": 6.0,
+      "entropy": 1.6580820083618164,
+      "effective_alternatives": 6.170316696166992,
+      "frontier_mass": 0.8311275243759155,
+      "mode_probability": 0.5631898641586304,
+      "mode_agreement": 0.759765625
+    },
+    {
+      "repeat": 7.0,
+      "entropy": 1.4351615905761719,
+      "effective_alternatives": 5.052772045135498,
+      "frontier_mass": 0.8558119535446167,
+      "mode_probability": 0.6050282120704651,
+      "mode_agreement": 0.765625
+    },
+    {
+      "repeat": 8.0,
+      "entropy": 1.248337984085083,
+      "effective_alternatives": 4.248931407928467,
+      "frontier_mass": 0.8757550716400146,
+      "mode_probability": 0.635320246219635,
+      "mode_agreement": 0.76171875
+    },
+    {
+      "repeat": 9.0,
+      "entropy": 1.0971653461456299,
+      "effective_alternatives": 3.6728010177612305,
+      "frontier_mass": 0.8915054202079773,
+      "mode_probability": 0.6569309830665588,
+      "mode_agreement": 0.763671875
+    },
+    {
+      "repeat": 10.0,
+      "entropy": 0.9753687381744385,
+      "effective_alternatives": 3.2435333728790283,
+      "frontier_mass": 0.9040020108222961,
+      "mode_probability": 0.6728103160858154,
+      "mode_agreement": 0.765625
+    },
+    {
+      "repeat": 11.0,
+      "entropy": 0.8754664063453674,
+      "effective_alternatives": 2.908736228942871,
+      "frontier_mass": 0.9141151905059814,
+      "mode_probability": 0.6846147775650024,
+      "mode_agreement": 0.765625
+    },
+    {
+      "repeat": 12.0,
+      "entropy": 0.7934568524360657,
+      "effective_alternatives": 2.644374132156372,
+      "frontier_mass": 0.9222682118415833,
+      "mode_probability": 0.6933754086494446,
+      "mode_agreement": 0.765625
+    }
+  ],
+  "steps-discrete[alpha=1]": [
+    {
+      "hop": 1,
+      "frontier_mass": 0.4063081443309784,
+      "frontier_chance": 0.03125,
+      "entropy": 3.312958240509033,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 28.19232940673828,
+      "frontier_size": 2.0,
+      "top1_in_frontier": 1.0
+    },
+    {
+      "hop": 2,
+      "frontier_mass": 0.5772143602371216,
+      "frontier_chance": 0.06161755695939064,
+      "entropy": 3.1418802738189697,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 23.383560180664062,
+      "frontier_size": 3.943523645401001,
+      "top1_in_frontier": 1.0
+    },
+    {
+      "hop": 3,
+      "frontier_mass": 0.6375289559364319,
+      "frontier_chance": 0.11854473501443863,
+      "entropy": 3.361727476119995,
+      "max_entropy": 4.158883094787598,
+      "effective_alternatives": 28.971689224243164,
+      "frontier_size": 7.586863040924072,
+      "top1_in_frontier": 1.0
+    }
+  ],
+  "accuracy-discrete[alpha=1]": 0.969613254070282
+}
